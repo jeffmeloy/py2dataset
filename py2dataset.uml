@@ -1,0 +1,47 @@
+@startuml
+: python py2dataset.py directory
+
+**Positional arguments:**
+- `directory`: The directory containing the Python files to analyze.
+
+**Optional arguments:**
+- `-h, --help`: Show the help message and exit.
+- `--use_llm`: Use large language model for answering 'purpose' questions.
+- `--quiet`: Suppress all info logging messages.
+- `--output_dir OUTPUT_DIR`: Output directory to store generated files default='./datasets'
+- `--graph`: Generate code relationship graphs.
+;
+
+:Read questions.json;
+:Obtain listing of Python files within the provided directory its subdirectories;
+fork
+    :For each Python file;
+    note right
+    Repeat the following for each Python file
+    end note
+    :Generate Abstract Syntax Tree (AST) with get_python_file_details.py;
+    :Extract code details from AST;
+    :Generate internal and external code relationship graphs;
+    fork
+        :Generate data for json files with get_python_json.py;
+        :For each question;
+        note right
+        Repeat the following for each question in questions.json
+        end note
+        if (use_llm and purpose question) then (yes)
+            :Use the language model to answer question;
+        else (no)
+            :Parse the AST obtained data to answer question;
+        endif
+        :Construct qa.json data using 'question = current question, answer = answer';
+        :Construct instruct.json data using 'instruction = current question, input = code element, output = answer';
+     endfork
+     :Save '<filename>.qa.json', '<filename>.instruct.json', and '<filename>.details.yaml';
+     if (graph is True) then (yes)
+         :Save code relationship graphs as '<filename>.internal.png' and '<filename>.external.png' files;
+     endif
+endfork
+:After looping through each python file combine all JSON files together to create 'qa.json' and 'instruct.json';
+:Create 'instruct_cleaned.json' thats replaces duiplicated code elements with an empty string;
+:End;
+@enduml
