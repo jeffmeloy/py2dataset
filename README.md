@@ -2,7 +2,7 @@
 
 py2dataset analyzes source code to generate structured datasets describing code content and behavior. It extracts information from Python files and converts it into JSON-formatted datasets. These datasets can help users understand Python software or train AI systems.
 
-First, py2dataset obtains the questions from the 'questions.json' file and Python files from the provided code directory argument. 
+First, py2dataset obtains the questions from the 'questions.json' file and from the Python files within the provided 'directory'. 
 
 Next, py2dataset parses the Python files using the **Abstract Syntax Tree (AST)** and **visitor design pattern** to build a representation of the code structure, functions, classes, methods and variables.
 
