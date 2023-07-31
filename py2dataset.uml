@@ -25,7 +25,7 @@ fork
     - Generate internal and external code relationship graphs;
     fork
         :In get_python_json.py 
-        - answer questions and format answers;
+        - Answer questions and format answers;
         note right
         Repeat the following for each question in questions.json
         end note
@@ -43,7 +43,7 @@ fork
         - input = code element
         - output = answer to current question;
      endfork
-:Save datasets and code file details
+:In py2dataset.py save datasets and code file details
 - <filename>.qa.json
 - <filename>.instruct.json
 - <filename>.details.yaml';
@@ -53,7 +53,9 @@ if (graph is True) then (yes)
    - <filename>.external.png;
 endif
 endfork
-:After looping through each python file combine all JSON files together to create 'qa.json' and 'instruct.json';
-:Create 'instruct_cleaned.json' thats replaces duiplicated code elements with an empty string;
+:After looping through each python file combine all JSON files
+- qa.json
+- instruct.json
+- instruct_cleaned.json (replaces duplicated code elements with an empty string);
 :End;
 @enduml

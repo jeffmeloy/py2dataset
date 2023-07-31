@@ -1,9 +1,5 @@
 prompt_template: "Provide a concise and comprehensive Response to the Instruction considering the given Context and include your reasoning. \n### Context:\n{context}\n### Instruction:\n{query}\n### Response:"
-
-# Uncomment desired model and comment out others
 inference_model:
-
-  # Requires 'pip install ctransformers'
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_params:
     model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
