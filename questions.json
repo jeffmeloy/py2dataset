@@ -13,7 +13,12 @@
         "id": "entire_code_graph",
         "text": "Structural graph of the relationships between the functions and classes defined and used in file: ({filename})?",
         "type": "file"
-    },       
+    },
+    {
+        "id": "file_functions",
+        "text": "Funtions in file: ({filename})?",
+        "type": "file"
+    },      
     {
         "id": "file_classes",
         "text": "Classes in file: ({filename})?",

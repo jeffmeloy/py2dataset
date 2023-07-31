@@ -8,7 +8,7 @@ Next, py2dataset parses each Python file using the **Abstract Syntax Tree (AST)*
 
 py2dataset then generates the information for the output datasets including question-answer pairs and instruction-input-output triplets using code snippets as context. The datasets answer the 'questions.json' questions about the Python file characteristics. Optionally, py2dataset invokes a **language model** to generate responses to questions about the purpose of each file, function, class, method, and variable.
 
-For each Python code file analyzed, py2dataset outputs a `<filename>.qa.json`, `<filename>.instruct.json`, and a `<filename>.details.yaml` containing the AST analysis to the local `'./dataset'` directory or a specified output directory. The software then consolidates all of the datasets together to produce a final `'qa.json'` and `'instruct.json'` that contains the entire dataset contents. Optionally, py2dataset also creates **relationship graphs** between functions and classes as image files.
+For each Python code file analyzed, py2dataset outputs a `<filename>.qa.json`, `<filename>.instruct.json`, and a `<filename>.details.yaml` containing the AST analysis to the local `'./dataset'` directory or a specified output directory. The software then consolidates all of the datasets together to produce a final `'qa.json'` and `'instruct.json'` that contains the entire dataset contents. Optionally, py2dataset creates images of the **relationship graphs** between the functions and classes and saves as image files in the same output directory.
 
 With its AST parser, visitor pattern and configurable questions, py2dataset flexibly and extensibly analyzes source code to generate descriptive datasets. Its modular architecture and multiple formats support diverse use cases for understanding and learning Python code.
 
@@ -110,7 +110,7 @@ The following questions are answered using a language model if --use_llm:
         threads: 30
         max_new_tokens: 2048
     ```
-    
+
 ## Output
 
 The script generates the following output:

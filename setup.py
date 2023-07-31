@@ -12,11 +12,10 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     install_requires=[
-        'ast', 
         'networkx', 
-        'ctransformers', 
-        'yaml',
-        # add more dependencies here
+        'matplotlib',
+        'pyyaml', 
+        'ctransformers'
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
