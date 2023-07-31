@@ -98,6 +98,7 @@ The following questions are answered using a language model if --use_llm:
 - `questions.json` - Standard questions for Python files, functions, classes
 - `py2dataset_model_config.yaml` - Configuration for language model
     
+    ```yaml
     prompt_template: "Provide a concise and comprehensive Response to the Instruction considering the given Context and include your reasoning. \n### Context:\n{context}\n### Instruction:\n{query}\n### Response:"
     inference_model:
       model_import_path: "ctransformers.AutoModelForCausalLM"
@@ -108,7 +109,8 @@ The following questions are answered using a language model if --use_llm:
         lib: "avx2"
         threads: 30
         max_new_tokens: 2048
-
+    ```
+    
 ## Output
 
 The script generates the following output:
