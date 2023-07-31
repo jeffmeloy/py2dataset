@@ -22,7 +22,19 @@ The main script is `py2dataset.py`. It analyzes Python source code files in a gi
 
 You can install py2dataset using pip:
 
+### PyPI
+
+    ```bash
     pip install py2dataset
+    ```
+
+### From Source
+
+Alternatively, you can clone the repository and install from source:
+
+    ```bash
+    git clone https://github.com/jeffmeloy/py2dataset.git
+    ```
 
 **Imported Libraries:** os, argparse, logging, pathlib, yaml
 
@@ -31,9 +43,10 @@ You can install py2dataset using pip:
 ### Command Line Interface
 
 **Example usage:**
-
-    python -m py2dataset ../my_python_code --use_llm --output_dir ./dataset --graph --model_config ./model_config.yaml
     
+    ```bash
+    python -m py2dataset ../my_python_code --use_llm --output_dir ./dataset --graph --model_config ./model_config.yaml
+    ```
 **Positional arguments:**
 - `directory`: The directory containing the Python files to analyze.
 

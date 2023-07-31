@@ -4,6 +4,9 @@ setup(
     name='py2dataset',
     version='0.1',
     packages=find_packages(),
+    package_data={
+        '': ['*.json', '*.yaml'],  # The patterns to match for included data files
+    },
     url='https://github.com/jeffmeloy/py2dataset',
     license='MIT',
     author='Jeff Meloy',
