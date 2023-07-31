@@ -96,7 +96,18 @@ The following questions are answered using a language model if --use_llm:
 - `get_python_file_details.py` - Extracts details from Python files using AST
 - `get_python_json.py` - Generates question-answer pairs and instructions
 - `questions.json` - Standard questions for Python files, functions, classes
-- `model_config.yaml` - Configuration for large language model
+- `py2dataset_model_config.yaml` - Configuration for language model
+    
+    prompt_template: "Provide a concise and comprehensive Response to the Instruction considering the given Context and include your reasoning. \n### Context:\n{context}\n### Instruction:\n{query}\n### Response:"
+    inference_model:
+      model_import_path: "ctransformers.AutoModelForCausalLM"
+      model_params:
+        model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
+        model_type: "starcoder"
+        local_files_only: false
+        lib: "avx2"
+        threads: 30
+        max_new_tokens: 2048
 
 ## Output
 
