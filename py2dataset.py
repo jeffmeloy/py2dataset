@@ -173,7 +173,7 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
         plt.close()  # Close the figure
 
 
-def process_python_directories(start_path: str, questions: Dict[str, Union[str, Dict]], use_llm: bool=False, graph: bool=False, output_dir: str=None) -> None:
+def process_python_directories(start_path: str, questions: Dict[str, Union[str, Dict]], use_llm: bool=False, graph: bool=False, output_dir: str=None, model_config: dict = None) -> None:
     """
     Processes all Python files in a given directory and its subdirectories.
     Args:
@@ -198,7 +198,8 @@ def process_python_directories(start_path: str, questions: Dict[str, Union[str, 
             continue
 
         # get lists for qa.json and intruct.json for python file
-        qa_list, instruct_list = get_python_json(file_path, file_details, base_name, questions, use_llm)
+        
+        qa_list, instruct_list = get_python_json(file_path, file_details, base_name, questions, use_llm, model_config)
         if not qa_list:
             continue
 
@@ -222,29 +223,21 @@ def process_python_directories(start_path: str, questions: Dict[str, Union[str, 
     combine_json_files(output_dir)
 
 
-def py2dataset(start_path: str, use_llm: bool=False, graph: bool=False, output_dir: str=None) -> None:
-    """
-    Loads the questions from a JSON file and calls process_python_directories.
-    Args:
-        start_path (str): The directory to start the search for Python files.
-        use_llm (bool): Whether to use the LLM model to generate answers for
-            json. Defaults to False.
-        output_dir (str): The directory where the output files should be
-            written. If not provided, files are written to the
-            'python_json_and_yaml' directory in the current working directory.
-    """
-    sys.setrecursionlimit(3000) # Increase the recursion limit for AST
+def py2dataset(start_path: str, use_llm: bool=False, graph: bool=False, output_dir: str=None, model_config_path: str=None) -> None:
+    sys.setrecursionlimit(3000)  # Increase the recursion limit for AST
     questions = read_file(Path('questions.json'))
-    process_python_directories(start_path, questions, use_llm, graph, output_dir)
+    model_config = None
+    if model_config_path:
+        model_config = read_file(Path(model_config_path))
+    process_python_directories(start_path, questions, use_llm, graph, output_dir, model_config)
 
-# parse the command line arguments if run form commandlibe
 if __name__ == "__main__":
     arg_string = ' '.join(sys.argv[1:])
     use_llm = False
     quiet = False
     graph = False
     output_dir = None
-    # Check for flags in the argument string
+    model_config_path = None
     if '--use_llm' in arg_string:
         use_llm = True
         arg_string = arg_string.replace('--use_llm', '')
@@ -257,6 +250,9 @@ if __name__ == "__main__":
     if '--output_dir' in arg_string:
         output_dir = arg_string.split('--output_dir ')[1].split(' ')[0]
         arg_string = arg_string.replace(f'--output_dir {output_dir}', '')
+    if '--model_config' in arg_string:
+        model_config_path = arg_string.split('--model_config ')[1].split(' ')[0]
+        arg_string = arg_string.replace(f'--model_config {model_config_path}', '')
 
     directory = arg_string.strip()
     if directory.endswith('"'):
@@ -269,4 +265,4 @@ if __name__ == "__main__":
     else:
         logging.getLogger().setLevel(logging.INFO)
 
-    py2dataset(directory, use_llm, graph, output_dir)
+    py2dataset(directory, use_llm, graph, output_dir, model_config_path)

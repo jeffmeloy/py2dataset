@@ -1,5 +1,5 @@
 @startuml
-: python py2dataset.py directory
+: python py2dataset.py directory 
 
 **Positional arguments:**
 - `directory`: The directory containing the Python files to analyze.
@@ -8,23 +8,24 @@
 - `-h, --help`: Show the help message and exit.
 - `--use_llm`: Use large language model for answering 'purpose' questions.
 - `--quiet`: Suppress all info logging messages.
-- `--output_dir OUTPUT_DIR`: Output directory to store generated files default='./datasets'
+- `--output_dir OUTPUT_DIR`: Output directory to save generated files; default='./datasets'
 - `--graph`: Generate code relationship graphs.
-;
-
-:Read questions.json;
-:Obtain listing of Python files within the provided directory its subdirectories;
+- `--model_config MODEL_CONFIG_PATH`: Path to the model configuration file; defualt='./py2dataset_model_config.yaml';
+:In py2dataset.py
+- Parse command line arguments
+- Read questions.json
+- Obtain Python File listing within provided <directory>;
+:For each Python file;
+note right
+Repeat the following for each Python file
+end note
 fork
-    :For each Python file;
-    note right
-    Repeat the following for each Python file
-    end note
-    :Generate Abstract Syntax Tree (AST) with get_python_file_details.py;
-    :Extract code details from AST;
-    :Generate internal and external code relationship graphs;
+    :In get_python_file_details.py
+    - Extract code details from AST
+    - Generate internal and external code relationship graphs;
     fork
-        :Generate data for json files with get_python_json.py;
-        :For each question;
+        :In get_python_json.py 
+        - answer questions and format answers;
         note right
         Repeat the following for each question in questions.json
         end note
@@ -33,13 +34,24 @@ fork
         else (no)
             :Parse the AST obtained data to answer question;
         endif
-        :Construct qa.json data using 'question = current question, answer = answer';
-        :Construct instruct.json data using 'instruction = current question, input = code element, output = answer';
+        :Construct qa.json data
+        - question = current question
+        - answer = answer to current question
+        
+        Construct instruct.json data
+        - instruction = current question
+        - input = code element
+        - output = answer to current question;
      endfork
-     :Save '<filename>.qa.json', '<filename>.instruct.json', and '<filename>.details.yaml';
-     if (graph is True) then (yes)
-         :Save code relationship graphs as '<filename>.internal.png' and '<filename>.external.png' files;
-     endif
+:Save datasets and code file details
+- <filename>.qa.json
+- <filename>.instruct.json
+- <filename>.details.yaml';
+if (graph is True) then (yes)
+   :Save code graphs
+   - <filename>.internal.png
+   - <filename>.external.png;
+endif
 endfork
 :After looping through each python file combine all JSON files together to create 'qa.json' and 'instruct.json';
 :Create 'instruct_cleaned.json' thats replaces duiplicated code elements with an empty string;

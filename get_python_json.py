@@ -46,17 +46,24 @@ logging.basicConfig(
     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def get_model(model_config: dict) -> object:
+def get_model(model_config: dict, user_config: dict = None) -> object:
     """
     Imports and instantiates a model based on the provided configuration.
     Args:
         model_config (dict): A dictionary containing the configuration for the
             model. It should include the import path for the model class and
             parameters for instantiation.
+        user_config (dict): A dictionary containing user-provided configurations.
+            If provided, these configurations will override the defaults.
     Returns:
         object: An instance of the specified model class, or None if there was
             an error.
     """
+    # If a user configuration is provided, override the defaults
+    if user_config is not None:
+        model_config.update(user_config)
+
+    # The rest of the function remains the same
     model = None
     try:
         module_name, class_name = model_config['model_import_path'].rsplit('.', 1)
@@ -132,7 +139,6 @@ class PythonJsonGenerator:
         }
         self.use_llm = use_llm
         self.config = config
-
         if self.use_llm:
             try:
                 self.llm_config = config['inference_model']
@@ -227,8 +233,7 @@ class PythonJsonGenerator:
                 self.process_func_class_question(question_type, question_id, question_text)
         return self.qa_list, self.instruct_list
 
-
-def get_python_json(file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_llm: bool) -> tuple[List[Dict], List[Dict]]:
+def get_python_json(file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_llm: bool, model_config: dict = None) -> tuple[List[Dict], List[Dict]]:
     """
     Extract information from a Python file and return it in JSON format.
     Args:
@@ -237,11 +242,17 @@ def get_python_json(file_path: str, file_details: Dict, base_name: str, question
         base_name (str): The base name.
         questions (List[Dict]): The list of questions.
         use_llm (bool): Whether to use the language model.
+        user_config (dict): User-provided model configurations.
     Returns:
         Tuple[List[Dict], List[Dict]]: Extracted information in JSON format.
     """
-    # Load the configuration from the YAML file
-    with open('model_config.yaml', 'r') as config_file:
+    # Load default configuration from the YAML file
+    with open('py2dataset_model_config.yaml', 'r') as config_file:
         config = yaml.safe_load(config_file)
+
+    # If user-provided configurations are given, update the defaults
+    if model_config is not None:
+        config.update(model_config)
+
     generator = PythonJsonGenerator(file_path, file_details, base_name, questions, use_llm, config)
     return generator.generate()
