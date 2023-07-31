@@ -1,0 +1,170 @@
+[
+    {
+        "question": "Dependencies of file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "typing, json, re, importlib, logging, os, yaml"
+    },
+    {
+        "question": "Structural graph of the relationships between the functions and classes defined in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "{'nodes': ['get_model', 'get_python_json', 'PythonJsonGenerator', 'PythonJsonGenerator.__init__', 'PythonJsonGenerator.clean_and_get_unique_elements', 'PythonJsonGenerator.add_to_list', 'PythonJsonGenerator.get_response_from_llm', 'PythonJsonGenerator.process_items', 'PythonJsonGenerator.process_question', 'PythonJsonGenerator.process_file_question', 'PythonJsonGenerator.process_func_class_question', 'PythonJsonGenerator.generate'], 'edges': [{'source': 'get_python_json', 'target': 'PythonJsonGenerator'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.__init__'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.clean_and_get_unique_elements'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.add_to_list'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.get_response_from_llm'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_items'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_question'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_file_question'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_func_class_question'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.generate'}, {'source': 'PythonJsonGenerator.__init__', 'target': 'get_model', 'target_input': ['model_config', 'user_config'], 'target_returns': ['model', 'model', 'model', 'model']}]}"
+    },
+    {
+        "question": "Structural graph of the relationships between the functions and classes defined and used in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "{'nodes': ['get_model', 'get_python_json', 'PythonJsonGenerator', 'PythonJsonGenerator.__init__', 'PythonJsonGenerator.clean_and_get_unique_elements', 'PythonJsonGenerator.add_to_list', 'PythonJsonGenerator.get_response_from_llm', 'PythonJsonGenerator.process_items', 'PythonJsonGenerator.process_question', 'PythonJsonGenerator.process_file_question', 'PythonJsonGenerator.process_func_class_question', 'PythonJsonGenerator.generate', 'model_config.update', 'ModelClass.from_pretrained', 'model_params.pop', 'getattr', 'print', \"model_config['model_import_path'].rsplit\", 'importlib.import_module', 'config.update', 'open', 'yaml.safe_load', 'generator.generate', 'logger.error', \"re.sub('\\\\\\\\s+', ' ', input_str).split\", 'element.strip', \"', '.join\", 're.sub', 'set', 'list_to_update.append', 'response.strip', 'self.llm', \"self.config['prompt_template'].format\", 'logging.info', 'question_text.format', 'item.strip', 'str', 'self.process_question', 'self.clean_and_get_unique_elements(str(info[item_type])).split', 'self.clean_and_get_unique_elements', 'item_type.split', 'info.get', 'self.get_response_from_llm', 'self.qa_list.append', 'response_str.strip', 'self.instruct_list.append', 'question_id.endswith', 'self.process_items', \"self.file_details['classes'].items\", 'class_info.items', 'self.file_details[self.question_mapping[question_type]].items', 'len', 'key.startswith', 'self.process_file_question', 'self.process_func_class_question'], 'edges': [{'source': 'get_model', 'target': 'model_config.update'}, {'source': 'get_model', 'target': 'ModelClass.from_pretrained'}, {'source': 'get_model', 'target': 'model_params.pop'}, {'source': 'get_model', 'target': 'getattr'}, {'source': 'get_model', 'target': 'print'}, {'source': 'get_model', 'target': \"model_config['model_import_path'].rsplit\"}, {'source': 'get_model', 'target': 'importlib.import_module'}, {'source': 'get_python_json', 'target': 'config.update'}, {'source': 'get_python_json', 'target': 'open'}, {'source': 'get_python_json', 'target': 'yaml.safe_load'}, {'source': 'get_python_json', 'target': 'PythonJsonGenerator'}, {'source': 'get_python_json', 'target': 'generator.generate'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.__init__'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.clean_and_get_unique_elements'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.add_to_list'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.get_response_from_llm'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_items'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_question'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_file_question'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.process_func_class_question'}, {'source': 'PythonJsonGenerator', 'target': 'PythonJsonGenerator.generate'}, {'source': 'PythonJsonGenerator.__init__', 'target': 'logger.error'}, {'source': 'PythonJsonGenerator.__init__', 'target': 'get_model', 'target_input': ['model_config', 'user_config'], 'target_returns': ['model', 'model', 'model', 'model']}, {'source': 'PythonJsonGenerator.clean_and_get_unique_elements', 'target': \"re.sub('\\\\\\\\s+', ' ', input_str).split\"}, {'source': 'PythonJsonGenerator.clean_and_get_unique_elements', 'target': 'element.strip'}, {'source': 'PythonJsonGenerator.clean_and_get_unique_elements', 'target': \"', '.join\"}, {'source': 'PythonJsonGenerator.clean_and_get_unique_elements', 'target': 're.sub'}, {'source': 'PythonJsonGenerator.clean_and_get_unique_elements', 'target': 'set'}, {'source': 'PythonJsonGenerator.add_to_list', 'target': 'list_to_update.append'}, {'source': 'PythonJsonGenerator.add_to_list', 'target': 'response.strip'}, {'source': 'PythonJsonGenerator.get_response_from_llm', 'target': 'logger.error'}, {'source': 'PythonJsonGenerator.get_response_from_llm', 'target': 'self.llm'}, {'source': 'PythonJsonGenerator.get_response_from_llm', 'target': \"self.config['prompt_template'].format\"}, {'source': 'PythonJsonGenerator.get_response_from_llm', 'target': 'logging.info'}, {'source': 'PythonJsonGenerator.process_items', 'target': 'question_text.format'}, {'source': 'PythonJsonGenerator.process_items', 'target': 'item.strip'}, {'source': 'PythonJsonGenerator.process_items', 'target': 'str'}, {'source': 'PythonJsonGenerator.process_items', 'target': 'self.process_question'}, {'source': 'PythonJsonGenerator.process_items', 'target': 'self.clean_and_get_unique_elements(str(info[item_type])).split'}, {'source': 'PythonJsonGenerator.process_items', 'target': 'self.clean_and_get_unique_elements'}, {'source': 'PythonJsonGenerator.process_items', 'target': 'item_type.split'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'info.get'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'self.get_response_from_llm'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'str'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'self.qa_list.append'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'response_str.strip'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'self.instruct_list.append'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'self.clean_and_get_unique_elements'}, {'source': 'PythonJsonGenerator.process_question', 'target': 'question_id.endswith'}, {'source': 'PythonJsonGenerator.process_file_question', 'target': 'question_text.format'}, {'source': 'PythonJsonGenerator.process_file_question', 'target': 'self.process_question'}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': 'question_text.format'}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': 'self.process_items'}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': \"self.file_details['classes'].items\"}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': 'class_info.items'}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': 'self.file_details[self.question_mapping[question_type]].items'}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': 'self.process_question'}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': 'len'}, {'source': 'PythonJsonGenerator.process_func_class_question', 'target': 'key.startswith'}, {'source': 'PythonJsonGenerator.generate', 'target': 'self.process_file_question'}, {'source': 'PythonJsonGenerator.generate', 'target': 'self.process_func_class_question'}]}"
+    },
+    {
+        "question": "Funtions in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "get_model, get_python_json"
+    },
+    {
+        "question": "Classes in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "PythonJsonGenerator"
+    },
+    {
+        "question": "Control Flow in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "module -> def get_model -> if -> try -> except -> try -> except -> try -> except -> class -> def __init__ -> if -> try -> except -> def clean_and_get_unique_elements -> def add_to_list -> if -> def get_response_from_llm -> if -> def process_items -> if -> for -> def process_question -> if -> if -> if -> def process_file_question -> def process_func_class_question -> if -> for -> for -> if -> for -> if -> if -> def generate -> for -> if -> if -> def get_python_json -> with -> if"
+    },
+    {
+        "question": "Inputs to function: (get_model) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "model_config, user_config"
+    },
+    {
+        "question": "Inputs to function: (get_python_json) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "file_path, model_config, use_llm, file_details, base_name, questions"
+    },
+    {
+        "question": "Docstring of function: (get_model) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "these configurations will override the defaults. Returns: object: An instance of the specified model class, Imports and instantiates a model based on the provided configuration. Args: model_config dict: A dictionary containing the configuration for the model. It should include the import path for the model class and parameters for instantiation. user_config dict: A dictionary containing user-provided configurations. If provided, or None if there was an error."
+    },
+    {
+        "question": "Docstring of function: (get_python_json) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "Extract information from a Python file and return it in JSON format. Args: file_path str: The path to the Python file. file_details Dict: The details of the file. base_name str: The base name. questions ListDict: The list of questions. use_llm bool: Whether to use the language model. user_config dict: User-provided model configurations. Returns: TupleListDict, ListDict: Extracted information in JSON format."
+    },
+    {
+        "question": "Calls in function: (get_model) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "model_config.update, model_configmodel_import_path.rsplit, ModelClass.from_pretrained, model_params.pop, getattr, print, importlib.import_module"
+    },
+    {
+        "question": "Calls in function: (get_python_json) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "config.update, open, yaml.safe_load, PythonJsonGenerator, generator.generate"
+    },
+    {
+        "question": "Variables in function: (get_model) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "model_params, module, ModelClass, model"
+    },
+    {
+        "question": "Variables in function: (get_python_json) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "generator, config"
+    },
+    {
+        "question": "Returns from function: (get_model) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "model"
+    },
+    {
+        "question": "Returns from function: (get_python_json) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "generator.generate"
+    },
+    {
+        "question": "Methods in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "clean_and_get_unique_elements, process_func_class_question, add_to_list, get_response_from_llm, process_file_question, process_question, process_items, generate"
+    },
+    {
+        "question": "Docstring of class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "question_text: str, info -> None: Processes a question and adds the generated response to the qa_list and instruct_list. process_file_questionquestion_id: str, query: str, variable_type: str -> None: Processes questions related to the purpose of a variable. process_questionquestion_id: str, ListDict: Generates responses for all the questions and returns the qa_list and instruct_list., question_text: str -> None: Processes questions related to a file. process_func_class_questionquestion_type: str, additional_fieldNone -> ListDict: Adds a response to a list. get_response_from_llmquery: str, context: str -> str: Gets a response from the language model. get_variable_purposequestion_id: str, A class used to generate JSON formatted dictionary outputs for a Python file. Attributes: file_path str: The path to the Python file. file_details Dict: A dictionary containing details of the Python file. base_name str: The base name of the Python file. questions List: A list of questions for which responses are to be generated. qa_list List: A list to store the generated question-answer pairs. instruct_list List: A list to store the generated instructions. question_mapping Dict: A dictionary mapping question types to their corresponding keys in the file details. use_llm bool: A flag indicating whether to use a language model for generating responses. llm AutoModelForCausalLM: The language model to be used for generating responses. Methods: clean_and_get_unique_elementsinput_str: str -> str: Cleans an input string and returns a string of unique elements. add_to_listlist_to_update: ListDict, name: str, context: str, info: Dict, question_text: str -> None: Processes questions related to a function or class. generate -> TupleListDict, response: str, base_name: str, question_id: str"
+    },
+    {
+        "question": "Attributes of class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "file_path, llm_config, config, instruct_list, question_mapping, llm, use_llm, file_details, qa_list, base_name, questions"
+    },
+    {
+        "question": "Variables in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "info, question_id, question_type, method_name, question_text, query, response, prompt, cleaned_elements, items, mapping, context, response_str"
+    },
+    {
+        "question": "Inputs to method: (__init__) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "file_path, config, use_llm, file_details, self, base_name, questions"
+    },
+    {
+        "question": "Inputs to method: (clean_and_get_unique_elements) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "input_str"
+    },
+    {
+        "question": "Inputs to method: (add_to_list) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "response, additional_field, query, list_to_update"
+    },
+    {
+        "question": "Inputs to method: (get_response_from_llm) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "context, self, query"
+    },
+    {
+        "question": "Inputs to method: (process_items) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "info, question_id, question_text, name, item_type, context, self, base_name"
+    },
+    {
+        "question": "Inputs to method: (process_question) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "info, question_id, query, context, self"
+    },
+    {
+        "question": "Inputs to method: (process_file_question) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "question_id, self, question_text"
+    },
+    {
+        "question": "Inputs to method: (process_func_class_question) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "question_id, self, question_type, question_text"
+    },
+    {
+        "question": "Inputs to method: (generate) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "self"
+    },
+    {
+        "question": "Calls in method: (__init__) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "logger.error, get_model"
+    },
+    {
+        "question": "Calls in method: (clean_and_get_unique_elements) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": ", element.strip, re.subs, re.sub, set, .join,  , input_str.split"
+    },
+    {
+        "question": "Calls in method: (add_to_list) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "list_to_update.append, response.strip"
+    },
+    {
+        "question": "Calls in method: (get_response_from_llm) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "logger.error, self.llm, self.configprompt_template.format, logging.info"
+    },
+    {
+        "question": "Calls in method: (process_items) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "question_text.format, self.clean_and_get_unique_elementsstrinfoitem_type.split, item.strip, str, self.process_question, self.clean_and_get_unique_elements, item_type.split"
+    },
+    {
+        "question": "Calls in method: (process_question) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "info.get, question_id.endswith, self.get_response_from_llm, str, self.qa_list.append, response_str.strip, self.clean_and_get_unique_elements, self.instruct_list.append"
+    },
+    {
+        "question": "Calls in method: (process_file_question) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "question_text.format, self.process_question"
+    },
+    {
+        "question": "Calls in method: (process_func_class_question) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "question_text.format, self.file_detailsself.question_mappingquestion_type.items, self.file_detailsclasses.items, self.process_items, class_info.items, self.process_question, len, key.startswith"
+    },
+    {
+        "question": "Calls in method: (generate) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "self.process_file_question, self.process_func_class_question"
+    },
+    {
+        "question": "Returns from method: (clean_and_get_unique_elements) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": ", .joincleaned_elements"
+    },
+    {
+        "question": "Returns from method: (add_to_list) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "list_to_update"
+    },
+    {
+        "question": "Returns from method: (get_response_from_llm) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": ", response"
+    },
+    {
+        "question": "Returns from method: (generate) in class: (PythonJsonGenerator) in file: (py2dataset.py2dataset.get_python_json.py)?",
+        "answer": "self.qa_list, self.instruct_list"
+    }
+]

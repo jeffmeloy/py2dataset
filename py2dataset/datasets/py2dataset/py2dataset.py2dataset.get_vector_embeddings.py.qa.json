@@ -1,0 +1,122 @@
+[
+    {
+        "question": "Dependencies of file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "typing, json, numpy, importlib, logging"
+    },
+    {
+        "question": "Structural graph of the relationships between the functions and classes defined in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "{'nodes': ['get_ast_embeddings', 'simplify_ast', 'get_vector_embeddings', 'EmbeddingGenerator', 'EmbeddingGenerator.__init__', 'EmbeddingGenerator.get_embeddings'], 'edges': [{'source': 'get_ast_embeddings', 'target': 'get_ast_embeddings', 'target_input': ['ast', 'generator'], 'target_returns': ['embeddings']}, {'source': 'simplify_ast', 'target': 'simplify_ast', 'target_input': ['node'], 'target_returns': ['(node_type, fields)', 'node_type']}, {'source': 'get_vector_embeddings', 'target': 'EmbeddingGenerator'}, {'source': 'get_vector_embeddings', 'target': 'get_ast_embeddings', 'target_input': ['ast', 'generator'], 'target_returns': ['embeddings']}, {'source': 'get_vector_embeddings', 'target': 'simplify_ast', 'target_input': ['node'], 'target_returns': ['(node_type, fields)', 'node_type']}, {'source': 'EmbeddingGenerator', 'target': 'EmbeddingGenerator.__init__'}, {'source': 'EmbeddingGenerator', 'target': 'EmbeddingGenerator.get_embeddings'}]}"
+    },
+    {
+        "question": "Structural graph of the relationships between the functions and classes defined and used in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "{'nodes': ['get_ast_embeddings', 'simplify_ast', 'get_vector_embeddings', 'EmbeddingGenerator', 'EmbeddingGenerator.__init__', 'EmbeddingGenerator.get_embeddings', 'embeddings.append', 'generator.get_embeddings', 'embeddings.extend', 'isinstance', 'fields.append', 'getattr', 'type', 'qa_list_embeddings.append', 'instruct_list_embeddings.append', 'file_detail_embeddings.append', 'json.dumps', \"self.config['tokenizer_import_path'].rsplit\", \"self.config['model_import_path'].rsplit\", 'json.load', 'ModelClass.from_pretrained', 'logger.error', 'open', 'TokenizerClass.from_pretrained', 'importlib.import_module', 'self.tokenizer.convert_tokens_to_string', 'self.tokenizer', 'outputs.last_hidden_state.mean(dim=1).detach().numpy', 'range', 'outputs.last_hidden_state.mean(dim=1).detach', 'outputs.last_hidden_state.mean(dim=1).detach().numpy().tolist', 'self.model', 'self.tokenizer.tokenize', 'outputs.last_hidden_state.mean', 'len'], 'edges': [{'source': 'get_ast_embeddings', 'target': 'embeddings.append'}, {'source': 'get_ast_embeddings', 'target': 'get_ast_embeddings', 'target_input': ['ast', 'generator'], 'target_returns': ['embeddings']}, {'source': 'get_ast_embeddings', 'target': 'generator.get_embeddings'}, {'source': 'get_ast_embeddings', 'target': 'embeddings.extend'}, {'source': 'simplify_ast', 'target': 'isinstance'}, {'source': 'simplify_ast', 'target': 'fields.append'}, {'source': 'simplify_ast', 'target': 'getattr'}, {'source': 'simplify_ast', 'target': 'type'}, {'source': 'simplify_ast', 'target': 'simplify_ast', 'target_input': ['node'], 'target_returns': ['(node_type, fields)', 'node_type']}, {'source': 'get_vector_embeddings', 'target': 'EmbeddingGenerator'}, {'source': 'get_vector_embeddings', 'target': 'qa_list_embeddings.append'}, {'source': 'get_vector_embeddings', 'target': 'instruct_list_embeddings.append'}, {'source': 'get_vector_embeddings', 'target': 'get_ast_embeddings', 'target_input': ['ast', 'generator'], 'target_returns': ['embeddings']}, {'source': 'get_vector_embeddings', 'target': 'file_detail_embeddings.append'}, {'source': 'get_vector_embeddings', 'target': 'json.dumps'}, {'source': 'get_vector_embeddings', 'target': 'simplify_ast', 'target_input': ['node'], 'target_returns': ['(node_type, fields)', 'node_type']}, {'source': 'get_vector_embeddings', 'target': 'generator.get_embeddings'}, {'source': 'EmbeddingGenerator', 'target': 'EmbeddingGenerator.__init__'}, {'source': 'EmbeddingGenerator', 'target': 'EmbeddingGenerator.get_embeddings'}, {'source': 'EmbeddingGenerator.__init__', 'target': \"self.config['tokenizer_import_path'].rsplit\"}, {'source': 'EmbeddingGenerator.__init__', 'target': \"self.config['model_import_path'].rsplit\"}, {'source': 'EmbeddingGenerator.__init__', 'target': 'json.load'}, {'source': 'EmbeddingGenerator.__init__', 'target': 'ModelClass.from_pretrained'}, {'source': 'EmbeddingGenerator.__init__', 'target': 'logger.error'}, {'source': 'EmbeddingGenerator.__init__', 'target': 'getattr'}, {'source': 'EmbeddingGenerator.__init__', 'target': 'open'}, {'source': 'EmbeddingGenerator.__init__', 'target': 'TokenizerClass.from_pretrained'}, {'source': 'EmbeddingGenerator.__init__', 'target': 'importlib.import_module'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'self.tokenizer.convert_tokens_to_string'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'self.tokenizer'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'outputs.last_hidden_state.mean(dim=1).detach().numpy'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'range'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'logger.error'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'outputs.last_hidden_state.mean(dim=1).detach'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'outputs.last_hidden_state.mean(dim=1).detach().numpy().tolist'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'embeddings.append'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'self.model'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'self.tokenizer.tokenize'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'outputs.last_hidden_state.mean'}, {'source': 'EmbeddingGenerator.get_embeddings', 'target': 'len'}]}"
+    },
+    {
+        "question": "Funtions in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "simplify_ast, get_ast_embeddings, get_vector_embeddings"
+    },
+    {
+        "question": "Classes in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "EmbeddingGenerator"
+    },
+    {
+        "question": "Control Flow in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "module -> class -> def __init__ -> try -> with -> except -> def get_embeddings -> if -> for -> def get_ast_embeddings -> if -> if -> for -> def simplify_ast -> if -> for -> if -> for -> if -> if -> def get_vector_embeddings"
+    },
+    {
+        "question": "Inputs to function: (get_ast_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "ast, generator"
+    },
+    {
+        "question": "Inputs to function: (simplify_ast) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "node"
+    },
+    {
+        "question": "Inputs to function: (get_vector_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "file_details, qa_list, base_name, instruct_list"
+    },
+    {
+        "question": "Docstring of function: (get_ast_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "Generates embeddings for an abstract syntax tree AST. Args: ast Dict: The AST to generate embeddings for. generator EmbeddingGenerator: The generator used to create the embeddings. Returns: ListListfloat: The embeddings for the AST."
+    },
+    {
+        "question": "Docstring of function: (get_vector_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "and instructions into vector embeddings. Args: base_name str: The base name of the file. file_details Dict: A dictionary containing details of the Python file. qa_list ListDict: A list of question-answer pairs. instruct_list ListDict: A list of instructions. Returns: TupleListListfloat, one for each input., Converts file details, QA pairs, ListListfloat: Three lists of vector embeddings, ListListfloat"
+    },
+    {
+        "question": "Calls in function: (get_ast_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "embeddings.append, get_ast_embeddings, generator.get_embeddings, embeddings.extend"
+    },
+    {
+        "question": "Calls in function: (simplify_ast) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "isinstance, fields.append, getattr, type, simplify_ast"
+    },
+    {
+        "question": "Calls in function: (get_vector_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "EmbeddingGenerator, qa_list_embeddings.append, instruct_list_embeddings.append, get_ast_embeddings, file_detail_embeddings.append, json.dumps, simplify_ast, generator.get_embeddings"
+    },
+    {
+        "question": "Variables in function: (get_ast_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "embeddings"
+    },
+    {
+        "question": "Variables in function: (simplify_ast) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "node_type, value, fields"
+    },
+    {
+        "question": "Variables in function: (get_vector_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "instruct_list_embeddings, qa_embeddings, generator, ast_heirarchy_embeddings, instruct_embeddings, ast_embeddings, qa_list_embeddings, file_detail_embeddings"
+    },
+    {
+        "question": "Returns from function: (get_ast_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "embeddings"
+    },
+    {
+        "question": "Returns from function: (simplify_ast) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "node_type, fields"
+    },
+    {
+        "question": "Returns from function: (get_vector_embeddings) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "instruct_list_embeddings, qa_list_embeddings, file_detail_embeddings"
+    },
+    {
+        "question": "Methods in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "get_embeddings"
+    },
+    {
+        "question": "Docstring of class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "A class used to generate vector embeddings for Python code and generated questions and instructions. Attributes: tokenizer AutoTokenizer: The tokenizer of the pretrained model used to tokenize the text. model AutoModel: The pretrained model used to generate the embeddings. Methods: get_embeddingstext: str -> Listfloat: Generates a vector embedding for a given piece of text."
+    },
+    {
+        "question": "Attributes of class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "tokenizer, config, model"
+    },
+    {
+        "question": "Variables in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "tokenizer_module, chunk_text, TokenizerClass, chunk_embeddings, outputs, chunks, tokens, inputs, model_module, ModelClass, embeddings"
+    },
+    {
+        "question": "Inputs to method: (__init__) in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "self"
+    },
+    {
+        "question": "Inputs to method: (get_embeddings) in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "text, self"
+    },
+    {
+        "question": "Docstring of method: (get_embeddings) in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "Generates a vector embedding for a given piece of text. Args: text str: The text to generate an embedding for. Returns: ListListfloat: The generated vector embeddings."
+    },
+    {
+        "question": "Calls in method: (__init__) in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "self.configmodel_import_path.rsplit, json.load, ModelClass.from_pretrained, logger.error, self.configtokenizer_import_path.rsplit, getattr, open, TokenizerClass.from_pretrained, importlib.import_module"
+    },
+    {
+        "question": "Calls in method: (get_embeddings) in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": "self.tokenizer.convert_tokens_to_string, self.tokenizer, outputs.last_hidden_state.meandim1.detach, range, logger.error, outputs.last_hidden_state.meandim1.detach.numpy, embeddings.append, self.model, self.tokenizer.tokenize, outputs.last_hidden_state.meandim1.detach.numpy.tolist, outputs.last_hidden_state.mean, len"
+    },
+    {
+        "question": "Returns from method: (get_embeddings) in class: (EmbeddingGenerator) in file: (py2dataset.py2dataset.get_vector_embeddings.py)?",
+        "answer": ", embeddings"
+    }
+]

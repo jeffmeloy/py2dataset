@@ -1,0 +1,46 @@
+file_info:
+  file_code: "from setuptools import setup, find_packages\n\nsetup(\n    name='py2dataset',\n\
+    \    version='0.1',\n    packages=find_packages(),\n    package_data={\n     \
+    \   '': ['*.json', '*.yaml'],  # The patterns to match for included data files\n\
+    \    },\n    url='https://github.com/jeffmeloy/py2dataset',\n    license='MIT',\n\
+    \    author='Jeff Meloy',\n    author_email='jeffmeloy@gmail.com',\n    description='A\
+    \ tool to convert Python code into structured datasets',\n    long_description=open('README.md').read(),\n\
+    \    long_description_content_type=\"text/markdown\",\n    install_requires=[\n\
+    \        'networkx', \n        'matplotlib',\n        'pyyaml', \n        'ctransformers'\n\
+    \    ],\n    classifiers=[\n        'Development Status :: 3 - Alpha',\n     \
+    \   'Intended Audience :: Developers',\n        'License :: OSI Approved :: MIT\
+    \ License',\n        'Programming Language :: Python :: 3.8',\n    ],\n    python_requires='>=3.8',\n\
+    )"
+  file_ast: 'Module(body=[ImportFrom(module=''setuptools'', names=[alias(name=''setup''),
+    alias(name=''find_packages'')], level=0), Expr(value=Call(func=Name(id=''setup'',
+    ctx=Load()), args=[], keywords=[keyword(arg=''name'', value=Constant(value=''py2dataset'')),
+    keyword(arg=''version'', value=Constant(value=''0.1'')), keyword(arg=''packages'',
+    value=Call(func=Name(id=''find_packages'', ctx=Load()), args=[], keywords=[])),
+    keyword(arg=''package_data'', value=Dict(keys=[Constant(value='''')], values=[List(elts=[Constant(value=''*.json''),
+    Constant(value=''*.yaml'')], ctx=Load())])), keyword(arg=''url'', value=Constant(value=''https://github.com/jeffmeloy/py2dataset'')),
+    keyword(arg=''license'', value=Constant(value=''MIT'')), keyword(arg=''author'',
+    value=Constant(value=''Jeff Meloy'')), keyword(arg=''author_email'', value=Constant(value=''jeffmeloy@gmail.com'')),
+    keyword(arg=''description'', value=Constant(value=''A tool to convert Python code
+    into structured datasets'')), keyword(arg=''long_description'', value=Call(func=Attribute(value=Call(func=Name(id=''open'',
+    ctx=Load()), args=[Constant(value=''README.md'')], keywords=[]), attr=''read'',
+    ctx=Load()), args=[], keywords=[])), keyword(arg=''long_description_content_type'',
+    value=Constant(value=''text/markdown'')), keyword(arg=''install_requires'', value=List(elts=[Constant(value=''networkx''),
+    Constant(value=''matplotlib''), Constant(value=''pyyaml''), Constant(value=''ctransformers'')],
+    ctx=Load())), keyword(arg=''classifiers'', value=List(elts=[Constant(value=''Development
+    Status :: 3 - Alpha''), Constant(value=''Intended Audience :: Developers''), Constant(value=''License
+    :: OSI Approved :: MIT License''), Constant(value=''Programming Language :: Python
+    :: 3.8'')], ctx=Load())), keyword(arg=''python_requires'', value=Constant(value=''>=3.8''))]))],
+    type_ignores=[])'
+  file_dependencies:
+  - setuptools
+  file_functions: []
+  file_classes: []
+  file_control_flow: module
+  internal_code_graph:
+    nodes: []
+    edges: []
+  entire_code_graph:
+    nodes: []
+    edges: []
+functions: {}
+classes: {}
