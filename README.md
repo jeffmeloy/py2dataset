@@ -128,7 +128,7 @@ The script generates the following output:
 ## Requirements
 
 - Python >= 3.8
-- **networkx** module (optional for graphs)
+- **networkx** (optional for graphs)
 - **ctransformers** library for large language model support
 - **yaml** library for configuration and output files
-- **matplotlib** libary for code graphs
+- **matplotlib** (optional for graphs)
