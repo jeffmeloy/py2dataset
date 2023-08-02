@@ -34,13 +34,6 @@ Then run install dependencies to use the command line interface:
     pip install -r requirements.txt 
     ```
 
-### PyPI
-
-Alternatively, you can install using pip to use the Python API
-
-    ```bash
-    pip install py2dataset
-    ```
 
 ## Usage
 
@@ -49,7 +42,7 @@ Alternatively, you can install using pip to use the Python API
 **Example usage:**
     
     ```bash
-    python py2dataset.py ../my_python_code --use_llm --output_dir ./dataset --graph --model_config ./model_config.yaml
+    python py2dataset.py ../my_python_code 
     ```
 **Positional arguments:**
 - `directory`: The directory containing the Python files to analyze.
@@ -63,17 +56,6 @@ Without any arguments, the script will prompt for a directory and write output t
 - `--output_dir OUTPUT_DIR`: Output directory to store generated files, default is .\datasets in the current working directory
 - `--graph`: Generate code relationship graphs.
 - `--model_config` - Specify a model configuration file, default is model_config.yaml
-
-### Python API
-
-You can also use py2dataset directly in your Python code:
-
-    ```python
-    from py2dataset import py2dataset
-    # Create datasets for python code at "../my_python_code_directory"
-    py2dataset("../my_python_code_directory", use_llm=True, graph=True, output_dir="./dataset")
-    ```
-This will have the same effect as the command line example above.
  
 ## Questions for datasets
 
@@ -112,9 +94,13 @@ The following questions are answered using a language model if --use_llm:
 - `py2dataset.py` - Main script
 - `get_python_file_details.py` - Extracts details from Python files using AST
 - `get_python_json.py` - Generates question-answer pairs and instructions
-- `questions.json` - Standard questions for Python files, functions, classes
+- `py2dataset_questions.json` - Standard questions for Python files, functions, classes
 - `py2dataset_model_config.yaml` - Configuration for language model
     
+## Language Model 
+
+Currently configured to use ctransformers with the default configuration below defined in py2dataset_model_config.yaml
+
     ```yaml
     prompt_template: "Provide a concise and comprehensive Response to the Instruction considering the given Context and include your reasoning. \n### Context:\n{context}\n### Instruction:\n{query}\n### Response:"
     inference_model:
@@ -137,7 +123,9 @@ The script generates the following output:
 - `<filename>.instruct.json` - Instructions JSON file
 - `qa.json` - Combined question-answer JSON file
 - `instruct.json` - Combined instructions JSON file
-- Code relationship graphs (optional)
+- `instruct.json` - Replaces duplicated code elements by an empty string
+- `<filename>.internal_code_graph.png` - Code relationship graph (optional)
+- `<filename>.entire_code_graph.png` - Code relationship graph (optional)
 
 ## Requirements
 
@@ -145,3 +133,4 @@ The script generates the following output:
 - **networkx** module (optional for graphs)
 - **ctransformers** library for large language model support
 - **yaml** library for configuration and output files
+- **matplotlib** libary for code graphs
