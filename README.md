@@ -6,7 +6,7 @@ First, py2dataset obtains the questions from the 'questions.json' file and ident
 
 Next, py2dataset parses each Python file using the **Abstract Syntax Tree (AST)** and **visitor design pattern** to build a representation of the code structure, functions, classes, methods and variables.
 
-py2dataset then generates the information for the output datasets including question-answer pairs and instruction-input-output triplets using code snippets as context. The datasets answer the 'questions.json' questions about the Python file characteristics. Optionally, py2dataset invokes a **language model** to generate responses to questions about the purpose of each file, function, class, method, and variable.
+py2dataset then generates the information for the output datasets including question-answer pairs and instruction-input-output triplets using code snippets as context. The datasets answer the questions in `py2dataset_questions.json` about the Python file characteristics. Optionally, py2dataset invokes a **language model** to generate responses to questions about the purpose of each file, function, class, method, and variable.
 
 For each Python code file analyzed, py2dataset outputs a `<filename>.qa.json`, `<filename>.instruct.json`, and a `<filename>.details.yaml` containing the AST analysis to the local `'./dataset'` directory or a specified output directory. The software then consolidates all of the datasets together to produce a final `'qa.json'` and `'instruct.json'` that contains the entire dataset contents. Optionally, py2dataset creates images of the **relationship graphs** between the functions and classes and saves as image files in the same output directory.
 
@@ -50,7 +50,6 @@ Then run install dependencies to use the command line interface:
 Without any arguments, the script will prompt for a directory and write output to `./datasets`.
 
 **Optional arguments:**
-- `-h, --help`: Show the help message and exit.
 - `--use_llm`: Use large language model for question answering.
 - `--quiet`: Suppress all info logging messages.
 - `--output_dir OUTPUT_DIR`: Output directory to store generated files, default is .\datasets in the current working directory
