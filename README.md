@@ -16,7 +16,7 @@ With its AST parser, visitor pattern and configurable questions, py2dataset flex
 
 ## Overview
 
-The main script is `py2dataset.py`. It analyzes Python source code files in a given directory using the `get_python_file_details.py` module. The `get_python_json.py` module is used to generate the question-answer pairs and instructions, using a large language model if enabled by the `--use_llm` option. The large language model is used to answer the questions related to the purpose of the file, functions, classes and variables.
+The main script is `py2dataset.py`, which analyzes Python source code files in a given directory using the `get_python_file_details.py` module. The `get_python_json.py` module is used to generate the question-answer pairs and instructions, using a language model if enabled by the `--use_llm` option. The language model is used to answer the questions related to the purpose of the file, functions, classes and variables.
 
 ## Installation 
 
@@ -28,12 +28,11 @@ Clone the repository and install from source:
     git clone https://github.com/jeffmeloy/py2dataset.git
     ```
 
-Then run install dependencies to use the command line interface:
+Then install dependencies to use the command line interface:
 
     ```bash 
     pip install -r requirements.txt 
     ```
-
 
 ## Usage
 
