@@ -1,6 +1,6 @@
 # py2dataset - Python to Dataset
 
-py2dataset analyzes source code to generate structured datasets describing code content and behavior. It extracts information from Python files and converts it into JSON-formatted datasets. These datasets can help users understand Python software or train AI systems.
+py2dataset analyzes source code to generate structured datasets describing code content and behavior. It extracts information from Python files and converts it into JSON-formatted datasets. These datasets can help you understand Python software or train AI systems.
 
 First, py2dataset obtains the questions from the 'questions.json' file and identifies all of Python files within the provided directory. 
 
@@ -44,7 +44,7 @@ Then install dependencies to use the command line interface:
     python py2dataset.py ../my_python_code 
     ```
 **Positional arguments:**
-- `directory`: The directory containing the Python files to analyze.
+- `directory`: The directory containing the Python (*.py) files to analyze.
 
 Without any arguments, the script will prompt for a directory and write output to `./datasets`.
 
@@ -97,7 +97,7 @@ The following questions are answered using a language model if --use_llm:
     
 ## Language Model 
 
-Currently configured to use ctransformers with the default configuration below defined in py2dataset_model_config.yaml
+Currently configured to use [ctransformers](https://github.com/marella/ctransformers) with the default configuration defined in py2dataset_model_config.yaml
 
     ```yaml
     prompt_template: "Provide a concise and comprehensive Response to the Instruction considering the given Context and include your reasoning. \n### Context:\n{context}\n### Instruction:\n{query}\n### Response:"
@@ -121,9 +121,11 @@ The script generates the following output:
 - `<filename>.instruct.json` - Instructions JSON file
 - `qa.json` - Combined question-answer JSON file
 - `instruct.json` - Combined instructions JSON file
-- `instruct.json` - Replaces duplicated code elements by an empty string
+- `instruct_cleaned.json` - Replaces duplicated code elements by an empty string
 - `<filename>.internal_code_graph.png` - Code relationship graph (optional)
 - `<filename>.entire_code_graph.png` - Code relationship graph (optional)
+
+If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. If this directory does not exist, it will be created.
 
 ## Requirements
 
