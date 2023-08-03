@@ -66,6 +66,7 @@ logging.basicConfig(
     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def get_model(model_config: dict, user_config: dict = None) -> object:
     """
     Imports and instantiates a model based on the provided configuration.
@@ -103,6 +104,7 @@ def get_model(model_config: dict, user_config: dict = None) -> object:
         print(f"Failed to instantiate the model with the provided parameters. Error: {e}")
         return model
     return model
+
 
 class PythonJsonGenerator:
     """
@@ -198,14 +200,14 @@ class PythonJsonGenerator:
         logging.info(f'Response: {response}')
         return response
 
-    def process_items(self, question_id: str, question_text: str, base_name: str, name: str, info: Dict, context: str, item_type: str) -> None:
+    def process_items(self, question_type: str, question_id: str, question_text: str, base_name: str, name: str, info: Dict, context: str, item_type: str) -> None:
         if info[item_type]:
             items = [item.strip() for item in self.clean_and_get_unique_elements(str(info[item_type])).split(',') if item]
             for item in items:
                 query = question_text.format(filename=base_name, **{f'{item_type.split("_")[0]}_name': name, f'{item_type.split("_")[0]}_variable': item})
-                self.process_question(question_id, query, context, info)
+                self.process_question(question_type, question_id, query, context, info)
 
-    def process_question(self, question_id: str, question_type: str, query: str, context: str, info: Dict) -> None:
+    def process_question(self, question_type: str, question_id: str, query: str, context: str, info: Dict) -> None:
         if question_id.endswith('code_graph'):
             response = info.get(question_id, {})
         else:
@@ -223,7 +225,7 @@ class PythonJsonGenerator:
         query = question_text.format(filename=self.base_name)
         context = self.file_details['file_info']['file_code']
         info = self.file_details['file_info']
-        self.process_question(question_id, question_type, query, context, info)
+        self.process_question(question_type, question_id, query, context, info)
 
     def process_func_class_question(self, question_type: str, question_id: str, question_text: str) -> None:
         if question_type == 'method':  
@@ -234,16 +236,16 @@ class PythonJsonGenerator:
                         context = method_info['method_code']
                         mapping = {'class_name': class_name, 'method_name': method_name}
                         query = question_text.format(filename=self.base_name, **mapping)
-                        self.process_question(question_id, question_type, query, context, method_info)
+                        self.process_question(question_type, question_id, query, context, method_info)
         else:
             for name, info in self.file_details[self.question_mapping[question_type]].items():
                 context = info[f'{question_type}_code']
                 mapping = {f'{question_type}_name': name}
                 if question_id == f'{question_type}_variable_purpose' and self.use_llm:
-                    self.process_items(question_id, question_text, self.base_name, name, info, context, f'{question_type}_variables')
+                    self.process_items(question_type, question_id, question_text, self.base_name, name, info, context, f'{question_type}_variables')
                 elif question_id != f'{question_type}_variable_purpose':
                     query = question_text.format(filename=self.base_name, **mapping)
-                    self.process_question(question_id, question_type, query, context, info)
+                    self.process_question(question_type, question_id, query, context, info)
 
     def generate(self) -> tuple[List[Dict], List[Dict]]:
         for question in self.questions:
@@ -255,6 +257,7 @@ class PythonJsonGenerator:
             elif question_type in ['function', 'class', 'method']:
                 self.process_func_class_question(question_type, question_id, question_text)
         return self.qa_list, self.instruct_list
+
 
 def get_python_datasets(file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_llm: bool, use_summary: bool, model_config_path: str) -> tuple[List[Dict], List[Dict]]:
     """

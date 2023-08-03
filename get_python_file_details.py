@@ -244,8 +244,8 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = 
     for function_def in file_summary['function_defs']:
         for function_name, function_details in function_def.items():
             for called_func in function_details['calls']:
+                edge_data = {}
                 if not internal_only or called_func in G.nodes:
-                    edge_data = {}
                     # Determine if the called function is a method or a standalone function
                     if '.' in called_func:  # The called function is a method
                         called_class_name, called_method_name = called_func.rsplit('.', 1)
@@ -273,8 +273,8 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = 
         for class_name, class_details in class_def.items():
             for method_name, method_details in class_details['method_defs'].items():
                 for called_func in method_details['calls']:
+                    edge_data = {}
                     if not internal_only or called_func in G.nodes:
-                        edge_data = {}
                         # Determine if the called function is a method or a standalone function
                         if '.' in called_func:  # The called function is a method
                             called_class_name, called_method_name = called_func.rsplit('.', 1)

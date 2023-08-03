@@ -13,51 +13,46 @@
 - `--graph`: Generate code relationship graphs
 - `--model_config_path MODEL_CONFIG_PATH`: Path and filename for the model configuration file; defualt='./py2dataset_model_config.yaml'
 - `--questions_path QUESTIONS_PATH`: Path and filename for the questions to create the dataset; defualt='./py2dataset_questions.json';
-:In py2dataset.py
+:py2dataset.py
 - Parse command line arguments
 - Read questions
 - Obtain Python File listing within provided <directory>;
-:For each Python file;
-note right
-Repeat the following for each Python file
-end note
-fork
-    :In get_python_file_details.py
-    - Extract code details from AST
-    - Generate internal and external code relationship graphs;
-    fork
-        :In get_python_dataset.py 
-        - Answer questions and format answers;
-        note right
-        Repeat the following for each question
-        end note
-        if (use_llm and purpose question) then (yes)
-            :Use the language model to answer question;
-        else (no)
-            :Parse the AST obtained data to answer question;
-        endif
-        :Construct qa.json data
-        - question = current question
-        - answer = answer to current question
+Repeat :For each Python file;
+:get_python_file_details.py
+- Extract code details from AST
+- Generate internal and external code relationship graphs;
+:get_python_dataset.py 
+- Answer questions and format answers;
+Repeat :For each question;
+if (use_llm and purpose question) then (yes)
+:Use the language model to answer question;
+else (no)
+:Parse the AST obtained data to answer question;
+endif
+:Construct qa.json data
+- question = current question
+- answer = answer to current question
         
-        Construct instruct.json data
-        - instruction = current question
-        - input = code element
-        - output = answer to current question;
-     endfork
-:In py2dataset.py save datasets and code file details
+Construct instruct.json data
+- instruction = current question
+- input = code element
+- output = answer to current question;
+Repeat while (More questions?) is (yes)
+->no;
+:py2dataset.py save datasets and code file details
 - <filename>.qa.json
 - <filename>.instruct.json
 - <filename>.details.yaml';
 if (graph is True) then (yes)
-   :Save code graphs
-   - <filename>.internal.png
-   - <filename>.external.png;
+:Save code graphs
+- <filename>.internal.png
+- <filename>.external.png;
 endif
-endfork
-:After looping through each python file combine all JSON files
+Repeat while (More Python Files?) is (yes)
+->no;
+:Combine all JSON files
 - qa.json
 - instruct.json
-- instruct_cleaned.json (replaces duplicated code elements with an empty string);
+- instruct_cleaned.json (replace duplicate code elements with an empty string);
 :End;
 @enduml
