@@ -24,23 +24,19 @@ py2dataset performs the following functions:
 ### From Source
 
 Clone the repository and install from source:
-
     ```bash
     git clone https://github.com/jeffmeloy/py2dataset.git
     ```
-
 Then install dependencies to use the command line interface:
 
     ```bash 
     pip install -r requirements.txt 
     ```
-
 ## Usage
 
 ### Command Line Interface
 
 **Example usage:**
-    
     ```bash
     python py2dataset.py ../my_python_code 
     ```
@@ -136,7 +132,7 @@ The ./example_datasets directory provided contains the py2dataset output generat
 ## Requirements
 
 - Python >= 3.8
-- **networkx** (optional for graphs)
+- **networkx** library for code graphs
 - **ctransformers** library for large language model support
 - **yaml** library for configuration and output files
-- **matplotlib** (optional for graphs)
+- **matplotlib** library for code graphs
