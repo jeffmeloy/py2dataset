@@ -15,7 +15,7 @@
 - `--questions_path QUESTIONS_PATH`: Path and filename for the questions to create the dataset; defualt='./py2dataset_questions.json';
 :In py2dataset.py
 - Parse command line arguments
-- Read questions.json
+- Read questions
 - Obtain Python File listing within provided <directory>;
 :For each Python file;
 note right
@@ -26,10 +26,10 @@ fork
     - Extract code details from AST
     - Generate internal and external code relationship graphs;
     fork
-        :In get_python_json.py 
+        :In get_python_dataset.py 
         - Answer questions and format answers;
         note right
-        Repeat the following for each question in questions.json
+        Repeat the following for each question
         end note
         if (use_llm and purpose question) then (yes)
             :Use the language model to answer question;

@@ -3,37 +3,37 @@ Use AST to extract details from Python a file and return as a dictionary.
 Requirements:
 [req01] The ControlFlowVisitor class shall inherit from ast.NodeVisitor and be
         used to visit nodes in the AST (Abstract Syntax Tree). It extracts 
-        control flow keywords to give a high-level understanding of the 
-        program flow.
-[req02] The CodeVisitor class shall inherit from ast.NodeVisitor and be used
-        to traverse an AST (Abstract Syntax Tree) and extract details about the
-        code.
-[req03] The CodeVisitor class shall have methods to visit FunctionDef and 
+        control flow keywords to give a high-level understanding of the program
+        flow. 
+[req02] The CodeVisitor class shall inherit from ast.NodeVisitor and be used to
+        traverse an AST (Abstract Syntax Tree) and extract details about the
+        code. 
+[req03] The CodeVisitor class shall have methods to visit FunctionDef and
         ClassDef nodes and extract details about a function or a class.
-[req04] The CodeVisitor class shall have a method to analyze a node and 
+[req04] The CodeVisitor class shall have a method to analyze a node and
         populate file_info with details about the file.
 [req05] The get_control_flow function shall accept a string of source code as
         an argument and return the control flow keywords in the code.
 [req06] The get_python_file_details function shall accept a file path as an
-        argument and return a dictionary of the details extracted from the file.
+        argument and return a dictionary of the details extracted from the
+        file.
 [req07] The CodeVisitor class shall store details about functions and classes,
         including their code, AST, docstring, inputs, defaults, returns, calls,
         variables, decorators, annotations, and properties.
-[req08] For classes, the CodeVisitor class shall also store details about class
-        attributes, methods, inheritance, and static methods.
-[req09] The analyze function in the CodeVisitor class shall also populate
-        file_info with the file's code, AST, dependencies, functions, classes,
-        and control flow.
-[req10] The code_graph function shall create a dictionary representation of 
-        file details, including nodes and edges representing the relationships
-        in the code. It shall include function nodes, class nodes, method
-        nodes, and edges for function calls, method calls, and class
-        inheritance.
-[req11] The get_python_file_details function shall also add a graph to
-        file_info in the returned file_details dictionary. It shall add an
-        internal file graph (only including function calls where both the
-        caller and called function are within the file) and an entire file
-        graph (including all function calls).
+[req08] The CodeVisitor class shall store details about class attributes,
+        methods, inheritance, and static methods.
+[req09] The analyze function in the CodeVisitor class shall populate file_info
+        with the file's code, AST, dependencies, functions, classes, and control
+        flow. 
+[req10] The code_graph function shall create a dictionary representation of file
+        details, including nodes and edges representing the relationships in the
+        code. 
+[req11] The code_graph function shall include function nodes, class nodes, method 
+        nodes, and edges for function calls, method calls, and class inheritance.
+[req12] The get_python_file_details function shall add an internal file graph 
+        (only including function calls where both the caller and called function
+        are within the file) and an entire file graph (including all function 
+        calls) file_info in the returned file_details dictionary.
 """
 import ast
 import re
@@ -333,5 +333,4 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
     file_details['file_info']['internal_code_graph'] = code_graph(file_details['file_info']['file_summary'])
     file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary'], internal_only=False)
     file_details['file_info']['file_summary'] = json.dumps(file_details['file_info']['file_summary']).replace('\"','')
-
     return file_details

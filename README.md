@@ -2,21 +2,22 @@
 
 py2dataset analyzes source code to generate structured datasets describing code content and behavior. It extracts information from Python files and converts it into JSON-formatted datasets. These datasets can help you understand Python software or train AI systems.
 
-First, py2dataset obtains the questions from the 'questions.json' file and identifies all of Python files within the provided directory. 
-
-Next, py2dataset parses each Python file using the **Abstract Syntax Tree (AST)** and **visitor design pattern** to build a representation of the code structure, functions, classes, methods and variables.
-
-py2dataset then generates the information for the output datasets including question-answer pairs and instruction-input-output triplets using code snippets as context. The datasets answer the questions in `py2dataset_questions.json` about the Python file characteristics. Optionally, py2dataset invokes a **language model** to generate responses to questions about the purpose of each file, function, class, method, and variable.
-
-For each Python code file analyzed, py2dataset outputs a `<filename>.qa.json`, `<filename>.instruct.json`, and a `<filename>.details.yaml` containing the AST analysis to the local `'./dataset'` directory or a specified output directory. The software then consolidates all of the datasets together to produce a final `'qa.json'` and `'instruct.json'` that contains the entire dataset contents. Optionally, py2dataset creates images of the **relationship graphs** between the functions and classes and saves as image files in the same output directory.
-
-With its AST parser, visitor pattern and configurable questions, py2dataset flexibly and extensibly analyzes source code to generate descriptive datasets. Its modular architecture and multiple formats support diverse use cases for understanding and learning Python code.
-
 ![py2dataset Diagram](py2dataset.png)
 
 ## Overview
 
-The main script is `py2dataset.py`, which analyzes Python source code files in a given directory using the `get_python_file_details.py` module. The `get_python_json.py` module is used to generate the question-answer pairs and instructions, using a language model if enabled by the `--use_llm` option. The language model is used to answer the questions related to the purpose of the file, functions, classes and variables.
+py2dataset flexibly and extensibly analyzes source code to generate descriptive datasets for understanding and learning Python code.
+
+py2dataset performs the following functions:
+
+- Obtain questions from the `py2dataset_questions.json` file or from the questions filename provided in the command line
+- Obtain a file listing of all of Python files within the provided directory and its subdirectories
+- Parse each Python file using the **Abstract Syntax Tree (AST)** and **visitor design pattern** to build a representation of the code structure, functions, classes, methods and variables
+- Generate information for the output datasets including question-answer pairs and instruction-input-output triplets using code snippets as context to answer the questions about the Python file characteristics
+- (Optional) Invoke a **language model** to generate responses to questions about the purpose of each file, function, class, method, and variable
+- Output `<filename>.qa.json` and `<filename>.instruct.json` datasets, and a `<filename>.details.yaml` containing the AST analysis to the local `./dataset` directory or the command line specified output directory 
+- (Optional) Create images of the **relationship graphs** between the functions and classes and save as image files in the same output directory
+- Combines the datasets for all individual Python files together to produce a final `qa.json` and `instruct.json` in the same output directory
 
 ## Installation 
 
@@ -92,7 +93,7 @@ The following questions are answered using a language model if --use_llm:
 
 - `py2dataset.py` - Main script
 - `get_python_file_details.py` - Extracts details from Python files using AST
-- `get_python_json.py` - Generates question-answer pairs and instructions
+- `get_python_datasets.py` - Generates question-answer pairs and instructions
 - `py2dataset_questions.json` - Standard questions for Python files, functions, classes
 - `py2dataset_model_config.yaml` - Configuration for language model
     
@@ -128,7 +129,7 @@ The script generates the following output:
 
 If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. If this directory does not exist, it will be created.
 
-The ./example_datasets here contains the py2dataset output generated on itself. 
+The ./example_datasets directory provided contains the py2dataset output generated on itself. 
 
 ## Requirements
 

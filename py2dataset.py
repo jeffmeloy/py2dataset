@@ -5,50 +5,33 @@ create a composite qa.json and instruct.json file that includes all of the
 data filues stored in the output_dir (./datasets by default)
 Requirements:
 [req01] The read_file function shall accept a file path as an argument and
-        return its contents as a dictionary.
+        return its contents as a dictionary. This function requires the 'json'
+        and 'yaml' libraries for reading JSON and YAML files respectively.
 [req02] The write_file function shall accept a dictionary and a file path as
         arguments, and write the dictionary to the file in JSON or YAML format.
-[req03] The combine_files function shall accept a directory path as an 
+        This function requires the 'json' and 'yaml' libraries for writing JSON
+        and YAML files respectively.
+[req03] The combine_json_files function shall accept a directory path as an 
         argument, merge all JSON files in the directory into 'qa.json' and 
         'instruct.json', remove duplicates, and replace duplicate inputs with
-        an empty string.
-[req04] The process_python_directories function shall accept a directory path,
+        an empty string. This function requires the 'json' and 'os' libraries.
+[req04] The create_code_graph function shall accept a directory path, a
+        dictionary of questions, a boolean flag indicating whether to use a
+        large language model (LLM), and an output directory path as arguments.
+        This function requires the 'matplotlib.pyplot' and 'networkx' libraries
+        to create and display graphs.
+[req05] The process_python_directories function shall accept a directory path,
         a dictionary of questions, a boolean flag indicating whether to use a
         large language model (LLM), and an output directory path as arguments.
-[req05] The process_python_directories function shall analyze all Python files
-        in the given directory and its subdirectories, generate a summary of
-        each Python file's contents, generate question-answer pairs and 
-        instructions for each Python file, and write the summaries, 
-        question-answer pairs, and instructions to JSON and YAML files in the
-        specified output directory.
-[req06] The process_python_directories function shall call the combine_files
-        function to merge all JSON files in the output directory after 
-        processing all Python files in the directory.
-[req07] The python_code_to_dataset function shall accept a directory path, a
-        boolean flag indicating whether to use a large language model (LLM),
-        and an output directory path as arguments.
-[req08] The python_code_to_dataset function shall read questions from a JSON
-        file named 'questions.json', call the process_python_directories
-        function to analyze all Python files in the given directory and its
-        subdirectories, and increase the Python recursion limit to handle 
-        large files.
-[req09] The command line interface of the script shall accept five arguments:
-        the directory of Python files to analyze, a flag to indicate the use 
-        of the large language model (LLM), a flag to suppress info logging
-        messages, the output directory for generated files, and a flag to 
-        clean input data.
-[req10] The command line interface shall prompt the user for a directory if
-        no directory argument is provided.
-[req11] The command line interface shall raise a ValueError if the provided
-        directory argument does not exist.
-[req12] The logging level shall be set to WARNING if the '--quiet' flag is set,
-        and to INFO otherwise by the command line interface.
-[req13] The python_code_to_dataset function shall be called with the directory,
-        'use_llm' flag, and output directory provided in the command line
-        arguments.
-[req14] The create_code_graph function shall accept file details, a base name,
-        an output subdirectory, and a graph type as arguments. It shall 
-        generate a graph from the file details and save
+        This function requires the 'os', 'json', 'yaml', 
+        'get_python_file_details', and 'get_python_datasets' libraries.
+[req06] The py2dataset function shall accept a directory path, a boolean flag
+        indicating whether to use a large language model (LLM), and an output
+        directory path as arguments. This function requires the 'argparse'
+        library to parse command line arguments.
+[req07] The main function shall call the py2dataset function with appropriate
+        arguments. This function requires the 'sys' library to access command
+        line arguments.
 """
 import argparse
 import sys
@@ -62,7 +45,7 @@ import networkx as nx
 from pathlib import Path
 from typing import Dict, List, Union
 from get_python_file_details import get_python_file_details
-from get_python_json import get_python_json
+from get_python_datasets import get_python_datasets
 
 
 def read_file(file_path: Path) -> Dict:
@@ -201,7 +184,7 @@ def process_python_directories(start_path: str, questions: Dict[str, Union[str, 
 
         # get lists for qa.json and intruct.json for python file
         
-        qa_list, instruct_list = get_python_json(file_path, file_details, base_name, questions, use_llm, use_summary, model_config_path)
+        qa_list, instruct_list = get_python_datasets(file_path, file_details, base_name, questions, use_llm, use_summary, model_config_path)
         if not qa_list:
             continue
 
