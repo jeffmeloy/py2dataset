@@ -128,7 +128,7 @@ The script generates the following output:
 
 If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. If this directory does not exist, it will be created.
 
-The ./example_datasets directory provided contains the py2dataset output generated on itself. 
+The ./example_datasets here contains the py2dataset output generated on itself. 
 
 ## Requirements
 
