@@ -124,7 +124,7 @@ class PythonJsonGenerator:
         generate() -> Tuple[List[Dict], List[Dict]]: Generates responses for
             all the questions and returns the qa_list and instruct_list.
     """
-    def __init__(self, file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_llm: bool, config: Dict):
+    def __init__(self, file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_llm: bool, use_summary: bool, config: Dict):
         self.file_path = file_path
         self.file_details = file_details
         self.base_name = base_name
@@ -150,6 +150,7 @@ class PythonJsonGenerator:
                 self.llm = None
         else:
             self.llm = None
+        self.use_summary = use_summary
 
     @staticmethod
     def clean_and_get_unique_elements(input_str: str) -> str:
@@ -184,7 +185,7 @@ class PythonJsonGenerator:
                 query = question_text.format(filename=base_name, **{f'{item_type.split("_")[0]}_name': name, f'{item_type.split("_")[0]}_variable': item})
                 self.process_question(question_id, query, context, info)
 
-    def process_question(self, question_id: str, query: str, context: str, info) -> None:
+    def process_question(self, question_id: str, question_type: str, query: str, context: str, info: Dict) -> None:
         if question_id.endswith('code_graph'):
             response = info.get(question_id, {})
         else:
@@ -194,13 +195,15 @@ class PythonJsonGenerator:
             response_str = response_str.strip()
             if response_str:
                 self.qa_list.append({'question': query, 'answer': response_str})
+                if question_type == 'file' and self.use_summary:
+                    context = info['file_summary']
                 self.instruct_list.append({'instruction': query, 'input': context, 'output': response_str})
 
-    def process_file_question(self, question_id: str, question_text: str) -> None:
+    def process_file_question(self, question_type: str, question_id: str, question_text: str) -> None:
         query = question_text.format(filename=self.base_name)
         context = self.file_details['file_info']['file_code']
         info = self.file_details['file_info']
-        self.process_question(question_id, query, context, info)
+        self.process_question(question_id, question_type, query, context, info)
 
     def process_func_class_question(self, question_type: str, question_id: str, question_text: str) -> None:
         if question_type == 'method':  
@@ -211,7 +214,7 @@ class PythonJsonGenerator:
                         context = method_info['method_code']
                         mapping = {'class_name': class_name, 'method_name': method_name}
                         query = question_text.format(filename=self.base_name, **mapping)
-                        self.process_question(question_id, query, context, method_info)
+                        self.process_question(question_id, question_type, query, context, method_info)
         else:
             for name, info in self.file_details[self.question_mapping[question_type]].items():
                 context = info[f'{question_type}_code']
@@ -220,7 +223,7 @@ class PythonJsonGenerator:
                     self.process_items(question_id, question_text, self.base_name, name, info, context, f'{question_type}_variables')
                 elif question_id != f'{question_type}_variable_purpose':
                     query = question_text.format(filename=self.base_name, **mapping)
-                    self.process_question(question_id, query, context, info)
+                    self.process_question(question_id, question_type, query, context, info)
 
     def generate(self) -> tuple[List[Dict], List[Dict]]:
         for question in self.questions:
@@ -228,12 +231,12 @@ class PythonJsonGenerator:
             question_text = question['text']
             question_type = question['type']
             if question_type == 'file':
-                self.process_file_question(question_id, question_text)
+                self.process_file_question(question_type, question_id, question_text)
             elif question_type in ['function', 'class', 'method']:
                 self.process_func_class_question(question_type, question_id, question_text)
         return self.qa_list, self.instruct_list
 
-def get_python_json(file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_llm: bool, model_config_path: str) -> tuple[List[Dict], List[Dict]]:
+def get_python_json(file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_llm: bool, use_summary: bool, model_config_path: str) -> tuple[List[Dict], List[Dict]]:
     """
     Extract information from a Python file and return it in JSON format.
     Args:
@@ -251,5 +254,5 @@ def get_python_json(file_path: str, file_details: Dict, base_name: str, question
     with open(model_config_path, 'r') as config_file:
         config = yaml.safe_load(config_file)
 
-    generator = PythonJsonGenerator(file_path, file_details, base_name, questions, use_llm, config)
+    generator = PythonJsonGenerator(file_path, file_details, base_name, questions, use_llm, use_summary, config)
     return generator.generate()

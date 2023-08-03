@@ -50,6 +50,7 @@ Without any arguments, the script will prompt for a directory and write output t
 
 **Optional arguments:**
 - `--use_llm`: Use large language model for question answering.
+- `--use_summary`: Use code summary (imports, function, class, method definitions) instead of code to reduce context length in instruct JSON files
 - `--quiet`: Suppress all info logging messages.
 - `--output_dir OUTPUT_DIR`: Output directory to store generated files, default is .\datasets in the current working directory
 - `--graph`: Generate code relationship graphs.
@@ -126,6 +127,8 @@ The script generates the following output:
 - `<filename>.entire_code_graph.png` - Code relationship graph (optional)
 
 If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. If this directory does not exist, it will be created.
+
+The ./example_datasets directory provided contains the py2dataset output generated on itself. 
 
 ## Requirements
 

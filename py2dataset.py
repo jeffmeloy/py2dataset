@@ -174,7 +174,7 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
         plt.close()  # Close the figure
 
 
-def process_python_directories(start_path: str, questions: Dict[str, Union[str, Dict]], use_llm: bool=False, graph: bool=False, output_dir: str=None, model_config_path: str = '') -> None:
+def process_python_directories(start_path: str, questions: Dict[str, Union[str, Dict]], use_llm: bool, use_summary: bool, graph: bool, output_dir: str, model_config_path: str) -> None:
     """
     Processes all Python files in a given directory and its subdirectories.
     Args:
@@ -201,13 +201,10 @@ def process_python_directories(start_path: str, questions: Dict[str, Union[str, 
 
         # get lists for qa.json and intruct.json for python file
         
-        qa_list, instruct_list = get_python_json(file_path, file_details, base_name, questions, use_llm, model_config_path)
+        qa_list, instruct_list = get_python_json(file_path, file_details, base_name, questions, use_llm, use_summary, model_config_path)
         if not qa_list:
             continue
 
-        # create output directory if needed
-        if output_dir is None:
-            output_dir = './datasets/'
         output_subdir = Path(output_dir) / relative_path.parts[0]
         output_subdir.mkdir(parents=True, exist_ok=True)
 
@@ -224,7 +221,14 @@ def process_python_directories(start_path: str, questions: Dict[str, Union[str, 
     # combine all of the qa.json and instruct.json files together
     combine_json_files(output_dir)
 
-def py2dataset(start_path: str, use_llm: bool=False, graph: bool=False, output_dir: str=None, model_config_path: str='', questions_path: str='') -> None:
+def py2dataset(
+    start_path: str, 
+    use_llm: bool=False, 
+    use_summary: bool=False, 
+    graph: bool=False, 
+    output_dir: str='.\\datasets\\', 
+    model_config_path: str='', 
+    questions_path: str='') -> None:
     """
     Process Python files within the specified directory and its 
     subdirectories, to generating question-answer pairs and instructions for
@@ -247,24 +251,28 @@ def py2dataset(start_path: str, use_llm: bool=False, graph: bool=False, output_d
     """
     sys.setrecursionlimit(3000)  # Increase the recursion limit for AST
     if questions_path == '':
-        questions_path = pkg_resources.resource_filename(__name__, 'py2dataset_questions.json')
+        questions_path = os.path.join(current_dir, 'py2dataset_questions.json')
     if model_config_path == '':
-        model_config_path = pkg_resources.resource_filename(__name__, 'py2dataset_model_config.yaml')
+        model_config_path = os.path.join(current_dir, 'py2dataset_model_config.yaml')
     questions = read_file(Path(questions_path))
-    process_python_directories(start_path, questions, use_llm, graph, output_dir, model_config_path)
+    process_python_directories(start_path, questions, use_llm, use_summary, graph, output_dir, model_config_path)
 
 def main():
     arg_string = ' '.join(sys.argv[1:])
     use_llm = False
+    use_summary = False
     quiet = False
     graph = False
-    output_dir = '.\\'
+    output_dir = '.\\datasets\\'
     current_dir = os.path.dirname(__file__)
     questions_path = os.path.join(current_dir, 'py2dataset_questions.json')
     model_config_path = os.path.join(current_dir, 'py2dataset_model_config.yaml')
     if '--use_llm' in arg_string:
         use_llm = True
         arg_string = arg_string.replace('--use_llm', '')
+    if '--use_summary' in arg_string:
+        use_summary = True
+        arg_string = arg_string.replace('--use_summary', '')
     if '--quiet' in arg_string:
         quiet = True
         arg_string = arg_string.replace('--quiet', '')
@@ -275,8 +283,8 @@ def main():
         output_dir = arg_string.split('--output_dir ')[1].split(' ')[0]
         arg_string = arg_string.replace(f'--output_dir {output_dir}', '')
     if '--model_config_path' in arg_string:
-        model_config_path = arg_string.split('--model_config ')[1].split(' ')[0]
-        arg_string = arg_string.replace(f'--model_config {model_config_path}', '')
+        model_config_path = arg_string.split('--model_config_path ')[1].split(' ')[0]
+        arg_string = arg_string.replace(f'--model_config_path {model_config_path}', '')
     if '--questions_path' in arg_string:
         questions_path = arg_string.split('--questions_path ')[1].split(' ')[0]
         arg_string = arg_string.replace(f'--questions_path {questions_path}', '') 
@@ -293,7 +301,7 @@ def main():
     else:
         logging.getLogger().setLevel(logging.INFO)
 
-    py2dataset(directory, use_llm, graph, output_dir, model_config_path, questions_path)
+    py2dataset(directory, use_llm, use_summary, graph, output_dir, model_config_path, questions_path)
 
 if __name__ == "__main__":
     main()

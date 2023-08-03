@@ -37,6 +37,7 @@ Requirements:
 """
 import ast
 import re
+import json
 import logging
 import networkx as nx
 from typing import Dict, List, Optional, Union
@@ -172,7 +173,7 @@ class CodeVisitor(ast.NodeVisitor):
         return details
 
     def analyze(self, node: ast.AST) -> None:
-        # travere the AST rooted at 'node', create a list of all nodes within the current file, and populate 'file_info' with file details
+        # traverse the AST rooted at 'node', create a list of all nodes within the current file, and populate 'file_info' with file details
         node_walk = list(ast.walk(node))
         self.visit(node)
         self.file_info = {
@@ -183,6 +184,19 @@ class CodeVisitor(ast.NodeVisitor):
             "file_classes": list(self.classes.keys()),
             "file_control_flow": get_control_flow(self.code),
         }
+        
+        # add file_summary to file_info
+        dependencies = self.file_info["file_dependencies"]
+        function_defs = [{func_name: {"inputs": details["function_inputs"], "calls": details["function_calls"], "returns": details["function_returns"]}} for func_name, details in self.functions.items()]
+        class_defs = []
+        for class_name, class_details in self.classes.items():
+            method_defs = {}
+            for method_name, details in class_details.items():
+                if method_name.startswith('class_method_'):
+                    method_defs[method_name[len('class_method_'):]] = {"inputs": details["method_inputs"], "calls": details["method_calls"], "returns": details["method_returns"]}
+            class_defs.append({class_name: {"method_defs": method_defs}})
+        self.file_info["file_summary"] = { 'dependencies': dependencies, 'function_defs' : function_defs, 'class_defs' : class_defs}
+
 
 def get_control_flow(code: str) -> str:
     """
@@ -198,11 +212,11 @@ def get_control_flow(code: str) -> str:
     return visitor.get_control_flow()
 
 
-def code_graph(file_details: Dict[str, Union[Dict, str]], internal_only: bool = True) -> Dict[str, Union[List[str], Dict[str, List[str]]]]:
+def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = True) -> Dict[str, Union[List[str], Dict[str, List[str]]]]:
     """
     Create a dictionary representation of file details.
     Args:
-        file_details: Dict[str, Union[Dict, str]]: The details extracted from the file.
+        file_summary: Dict[str, Union[Dict, str]]: The details extracted from the file.
         internal_only: bool: If True, only include function calls where both the caller and called function are within the file.
     Returns:
         dict: A dictionary with nodes and edges representing the relationships
@@ -211,62 +225,77 @@ def code_graph(file_details: Dict[str, Union[Dict, str]], internal_only: bool = 
     G = nx.DiGraph()
 
     # Add function nodes to graph
-    for function_name in file_details['functions'].keys():
-        G.add_node(function_name)
+    for function_def in file_summary['function_defs']:
+        for function_name in function_def.keys():
+            G.add_node(function_name)
 
     # Add class nodes and method nodes to graph
-    for class_name, class_details in file_details['classes'].items():
-        G.add_node(class_name)
-        for method_name in class_details.keys():
-            if method_name.startswith('class_method_'):
-                # Remove the 'class_method_' prefix to get the actual method name
-                actual_method_name = method_name[len('class_method_'):]
+    for class_def in file_summary['class_defs']:
+        for class_name, class_details in class_def.items():
+            G.add_node(class_name)
+            for method_name in class_details['method_defs'].keys():
                 # Use the format 'ClassName.methodName' to represent methods
-                qualified_method_name = f'{class_name}.{actual_method_name}'
+                qualified_method_name = f'{class_name}.{method_name}'
                 G.add_node(qualified_method_name)
                 # Add edge between class and its method
                 G.add_edge(class_name, qualified_method_name)
         
-        # Add edges for class inheritance
-        if 'class_inheritance' in class_details and class_details['class_inheritance']:
-            for base_class in class_details['class_inheritance']:
-                if not internal_only or base_class in G.nodes:
-                    G.add_edge(class_name, base_class.strip())
-
     # Add edges for function calls
-    for function_name, function_details in file_details['functions'].items():
-        for called_func in function_details['function_calls']:
-            if not internal_only or called_func in G.nodes:
-                edge_data = {}
-                target_input = file_details['functions'].get(called_func, {}).get('function_inputs', [])
-                target_returns = file_details['functions'].get(called_func, {}).get('function_returns', [])
-                if target_input:
-                    edge_data['target_input'] = target_input
-                if target_returns:
-                    edge_data['target_returns'] = target_returns
-                G.add_edge(function_name, called_func.strip(), **edge_data)
+    for function_def in file_summary['function_defs']:
+        for function_name, function_details in function_def.items():
+            for called_func in function_details['calls']:
+                if not internal_only or called_func in G.nodes:
+                    edge_data = {}
+                    # Determine if the called function is a method or a standalone function
+                    if '.' in called_func:  # The called function is a method
+                        called_class_name, called_method_name = called_func.rsplit('.', 1)
+                        # Retrieve the target_inputs and target_returns from the class methods in file_summary
+                        target_inputs = target_returns = None
+                        for class_def in file_summary['class_defs']:
+                            if class_def.get(called_class_name):
+                                target_inputs = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('inputs', [])
+                                target_returns = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('returns', [])
+                    else:  # The called function is a standalone function
+                        # Retrieve the target_inputs and target_returns from the functions in file_summary
+                        target_inputs = target_returns = None
+                        for function_def in file_summary['function_defs']:
+                            if function_def.get(called_func):
+                                target_inputs = function_def[called_func].get('inputs', [])
+                                target_returns = function_def[called_func].get('returns', [])
+                    if target_inputs:
+                        edge_data['target_inputs'] = target_inputs
+                    if target_returns:
+                        edge_data['target_returns'] = target_returns
+                    G.add_edge(function_name, called_func.strip(), **edge_data)
 
-    # Add edges for method calls
-    for class_name, class_details in file_details['classes'].items():
-        for method_name, method_details in class_details.items():
-            if method_name.startswith('class_method_'):
-                actual_method_name = method_name[len('class_method_'):]
-                qualified_method_name = f'{class_name}.{actual_method_name}'
-                for called_func in method_details['method_calls']:
+    # Add edges for function calls inside class methods
+    for class_def in file_summary['class_defs']:
+        for class_name, class_details in class_def.items():
+            for method_name, method_details in class_details['method_defs'].items():
+                for called_func in method_details['calls']:
                     if not internal_only or called_func in G.nodes:
                         edge_data = {}
+                        # Determine if the called function is a method or a standalone function
                         if '.' in called_func:  # The called function is a method
                             called_class_name, called_method_name = called_func.rsplit('.', 1)
-                            target_input = file_details['classes'].get(called_class_name, {}).get(f'class_method_{called_method_name}', {}).get('method_inputs', [])
-                            target_returns = file_details['classes'].get(called_class_name, {}).get(f'class_method_{called_method_name}', {}).get('method_returns', [])
+                            # Retrieve the target_inputs and target_returns from the class methods in file_summary
+                            target_inputs = target_returns = None
+                            for class_def in file_summary['class_defs']:
+                                if class_def.get(called_class_name):
+                                    target_inputs = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('inputs', [])
+                                    target_returns = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('returns', [])
                         else:  # The called function is a standalone function
-                            target_input = file_details['functions'].get(called_func, {}).get('function_inputs', [])
-                            target_returns = file_details['functions'].get(called_func, {}).get('function_returns', [])
-                        if target_input:
-                            edge_data['target_input'] = target_input
+                            # Retrieve the target_inputs and target_returns from the functions in file_summary
+                            target_inputs = target_returns = None
+                            for function_def in file_summary['function_defs']:
+                                if function_def.get(called_func):
+                                    target_inputs = function_def[called_func].get('inputs', [])
+                                    target_returns = function_def[called_func].get('returns', [])
+                        if target_inputs:
+                            edge_data['target_inputs'] = target_inputs
                         if target_returns:
                             edge_data['target_returns'] = target_returns
-                        G.add_edge(qualified_method_name, called_func.strip(), **edge_data)
+                    G.add_edge(f'{class_name}.{method_name}', called_func.strip(), **edge_data)
 
     nodes = list(G.nodes)        
     edges = [{"source": str(edge[0]), "target": str(edge[1]), **edge[2]} for edge in G.edges.data()]
@@ -301,6 +330,8 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
     file_details = {'file_info': visitor.file_info, 'functions': visitor.functions, 'classes': visitor.classes}
     
     # add graph to file_info in file_details
-    file_details['file_info']['internal_code_graph'] = code_graph(file_details)
-    file_details['file_info']['entire_code_graph'] = code_graph(file_details, internal_only=False)
+    file_details['file_info']['internal_code_graph'] = code_graph(file_details['file_info']['file_summary'])
+    file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary'], internal_only=False)
+    file_details['file_info']['file_summary'] = json.dumps(file_details['file_info']['file_summary']).replace('\"','')
+
     return file_details

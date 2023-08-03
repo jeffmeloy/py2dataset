@@ -6,10 +6,11 @@
 - `directory`: The directory containing the Python files to analyze.
 
 **Optional arguments:**
-- `--use_llm`: Use large language model for answering 'purpose' questions.
-- `--quiet`: Suppress all info logging messages.
+- `--use_llm`: Use language model for answering 'purpose' questions
+- `--use_summary`: Use code summary (imports, function, class, method definitions) to reduce instruct dataset context length
+- `--quiet`: Suppress all info logging messages
 - `--output_dir OUTPUT_DIR`: Output directory to save generated files; default='./datasets'
-- `--graph`: Generate code relationship graphs.
+- `--graph`: Generate code relationship graphs
 - `--model_config_path MODEL_CONFIG_PATH`: Path and filename for the model configuration file; defualt='./py2dataset_model_config.yaml'
 - `--questions_path QUESTIONS_PATH`: Path and filename for the questions to create the dataset; defualt='./py2dataset_questions.json';
 :In py2dataset.py
