@@ -17,7 +17,7 @@ py2dataset performs the following functions:
 - (Optional) Invoke a **language model** to generate responses to questions about the purpose of each file, function, class, method, and variable
 - Output `<filename>.qa.json` and `<filename>.instruct.json` datasets, and a `<filename>.details.yaml` containing the AST analysis to the local `./dataset` directory or the command line specified output directory 
 - (Optional) Create images of the **relationship graphs** between the functions and classes and save as image files in the same output directory
-- Combines the datasets for all individual Python files together to produce a final `qa.json` and `instruct.json` in the same output directory
+- Combine the datasets for all individual Python files together to produce a final `qa.json` and `instruct.json` in the same output directory
 
 ## Installation 
 
