@@ -129,16 +129,16 @@ class CodeVisitor(ast.NodeVisitor):
         self.file_info: Dict[str, Union[str, List[str]]] = {}
         self.current_class: str = None
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        if self.current_class: # If we're inside a class, add this function as a method of the class
+        if self.current_class: # if inside a class, add this function as a method of the class
             self.classes[self.current_class][f'class_method_{node.name}'] = self.extract_details(node, 'method')
         else: # populate function dictionary when function definition found in AST
             self.functions[node.name] = self.extract_details(node, 'function')
         self.generic_visit(node) # continue AST traversal to the next node
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.classes[node.name] = self.extract_details(node, 'class') # populate class dictionary when class definition found in AST
-        self.current_class = node.name  # Set current_class to indicate that we're inside a class
+        self.current_class = node.name  # set current_class to indicate inside a class
         self.generic_visit(node) # continue AST traversal to the next node
-        self.current_class = None  # Reset current_class after we've finished with this class
+        self.current_class = None  # reset current_class when finished with this class
     def extract_details(self, node: ast.AST, node_type: str) -> Dict[str, Union[str, List[str]]]:
         node_walk = list(ast.walk(node))
         details = {
@@ -149,19 +149,19 @@ class CodeVisitor(ast.NodeVisitor):
             f"{node_type}_inputs": [arg.arg for arg in node.args.args] if node_type in ['function', 'method'] else None,
             f"{node_type}_defaults": [ast.unparse(d) for d in node.args.defaults] if node_type in ['function', 'method'] else None,
             f"{node_type}_returns": [ast.unparse(subnode.value) if subnode.value is not None else "None" for subnode in node_walk if isinstance(subnode, ast.Return)],
-            f"{node_type}_calls": list(set([ast.unparse(n.func) for n in get_all_calls(node)])),
-            f"{node_type}_variables": list(set([ast.unparse(target) for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets if isinstance(target, ast.Name)])),
-            f"{node_type}_decorators": list(set(ast.unparse(decorator) for decorator in node.decorator_list)) if node.decorator_list else [],
-            f"{node_type}_annotations": list(set(ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation is not None)),
-            f"{node_type}_properties": list(set([ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx, ast.Store)])),
+            f"{node_type}_calls": list({ast.unparse(n.func) for n in get_all_calls(node)}),
+            f"{node_type}_variables": list({ast.unparse(target) for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets if isinstance(target, ast.Name)}),
+            f"{node_type}_decorators": list({ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list else set()),
+            f"{node_type}_annotations": list({ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation is not None}),
+            f"{node_type}_properties": list({ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx, ast.Store)}),
         }  
         if node_type == 'class' or node_type == 'method':
-            if node_type == 'method' and self.current_class: # Find attributes defined as self.attribute
+            if node_type == 'method' and self.current_class: # find attributes defined as self.attribute
                 attributes = [target.attr for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'self']
-                if attributes: # If this class already has some attributes, add to them
+                if attributes: # if this class already has some attributes, add to them
                     if "class_attributes" in self.classes[self.current_class]:
                         self.classes[self.current_class]["class_attributes"].extend(attributes)
-                    else: # Otherwise, start a new list of attributes for this class
+                    else: # otherwise, start a new list of attributes for this class
                         self.classes[self.current_class]["class_attributes"] = attributes
             if node_type == 'class':
                 details.update({
@@ -186,7 +186,6 @@ class CodeVisitor(ast.NodeVisitor):
         }
         
         # add file_summary to file_info
-        dependencies = self.file_info["file_dependencies"]
         function_defs = [{func_name: {"inputs": details["function_inputs"], "calls": details["function_calls"], "returns": details["function_returns"]}} for func_name, details in self.functions.items()]
         class_defs = []
         for class_name, class_details in self.classes.items():
@@ -195,7 +194,7 @@ class CodeVisitor(ast.NodeVisitor):
                 if method_name.startswith('class_method_'):
                     method_defs[method_name[len('class_method_'):]] = {"inputs": details["method_inputs"], "calls": details["method_calls"], "returns": details["method_returns"]}
             class_defs.append({class_name: {"method_defs": method_defs}})
-        self.file_info["file_summary"] = { 'dependencies': dependencies, 'function_defs' : function_defs, 'class_defs' : class_defs}
+        self.file_info["file_summary"] = { 'dependencies': self.file_info["file_dependencies"], 'function_defs' : function_defs, 'class_defs' : class_defs}
 
 
 def get_control_flow(code: str) -> str:
@@ -224,81 +223,81 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = 
     """
     G = nx.DiGraph()
 
-    # Add function nodes to graph
+    # Create lookup dictionaries for function and class method details
+    function_details_lookup = {}
     for function_def in file_summary['function_defs']:
-        for function_name in function_def.keys():
-            G.add_node(function_name)
-
-    # Add class nodes and method nodes to graph
+        function_details_lookup.update(function_def)
+    class_method_details_lookup = {}
     for class_def in file_summary['class_defs']:
-        for class_name, class_details in class_def.items():
-            G.add_node(class_name)
-            for method_name in class_details['method_defs'].keys():
-                # Use the format 'ClassName.methodName' to represent methods
-                qualified_method_name = f'{class_name}.{method_name}'
-                G.add_node(qualified_method_name)
-                # Add edge between class and its method
-                G.add_edge(class_name, qualified_method_name)
-        
-    # Add edges for function calls
-    for function_def in file_summary['function_defs']:
-        for function_name, function_details in function_def.items():
-            for called_func in function_details['calls']:
-                edge_data = {}
-                if not internal_only or called_func in G.nodes:
-                    # Determine if the called function is a method or a standalone function
-                    if '.' in called_func:  # The called function is a method
-                        called_class_name, called_method_name = called_func.rsplit('.', 1)
-                        # Retrieve the target_inputs and target_returns from the class methods in file_summary
-                        target_inputs = target_returns = None
-                        for class_def in file_summary['class_defs']:
-                            if class_def.get(called_class_name):
-                                target_inputs = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('inputs', [])
-                                target_returns = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('returns', [])
-                    else:  # The called function is a standalone function
-                        # Retrieve the target_inputs and target_returns from the functions in file_summary
-                        target_inputs = target_returns = None
-                        for function_def in file_summary['function_defs']:
-                            if function_def.get(called_func):
-                                target_inputs = function_def[called_func].get('inputs', [])
-                                target_returns = function_def[called_func].get('returns', [])
-                    if target_inputs:
-                        edge_data['target_inputs'] = target_inputs
-                    if target_returns:
-                        edge_data['target_returns'] = target_returns
-                    G.add_edge(function_name, called_func.strip(), **edge_data)
-
-    # Add edges for function calls inside class methods
-    for class_def in file_summary['class_defs']:
-        for class_name, class_details in class_def.items():
+        for class_name, class_details in class_def.items(): # Extract class name and details
+            G.add_node(class_name) # Add class as a graph node
             for method_name, method_details in class_details['method_defs'].items():
-                for called_func in method_details['calls']:
-                    edge_data = {}
-                    if not internal_only or called_func in G.nodes:
-                        # Determine if the called function is a method or a standalone function
-                        if '.' in called_func:  # The called function is a method
-                            called_class_name, called_method_name = called_func.rsplit('.', 1)
-                            # Retrieve the target_inputs and target_returns from the class methods in file_summary
-                            target_inputs = target_returns = None
-                            for class_def in file_summary['class_defs']:
-                                if class_def.get(called_class_name):
-                                    target_inputs = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('inputs', [])
-                                    target_returns = class_def[called_class_name]['method_defs'].get(called_method_name, {}).get('returns', [])
-                        else:  # The called function is a standalone function
-                            # Retrieve the target_inputs and target_returns from the functions in file_summary
-                            target_inputs = target_returns = None
-                            for function_def in file_summary['function_defs']:
-                                if function_def.get(called_func):
-                                    target_inputs = function_def[called_func].get('inputs', [])
-                                    target_returns = function_def[called_func].get('returns', [])
-                        if target_inputs:
-                            edge_data['target_inputs'] = target_inputs
-                        if target_returns:
-                            edge_data['target_returns'] = target_returns
-                    G.add_edge(f'{class_name}.{method_name}', called_func.strip(), **edge_data)
+                qualified_method_name = f'{class_name}.{method_name}' # Create method fully qualified name
+                G.add_node(qualified_method_name) # Add method as a graph node
+                class_method_details_lookup[qualified_method_name] = method_details  # Store method details 
+                G.add_edge(class_name, qualified_method_name) # Add edge from class to method
 
-    nodes = list(G.nodes)        
-    edges = [{"source": str(edge[0]), "target": str(edge[1]), **edge[2]} for edge in G.edges.data()]
+    # Helper function to extract edge data from target details
+    def get_edge_data_from_details(target_details: dict) -> dict:
+        edge_data = {}
+        if target_details:
+            if 'inputs' in target_details: # If the target details contain inputs, add them to the edge data.
+                edge_data['target_inputs'] = target_details['inputs']
+            if 'returns' in target_details:  # If the target details contain returns, add them to the edge data.
+                edge_data['target_returns'] = list(set(target_details['returns']))
+        return edge_data
+
+    # Helper function to add edge with data
+    def add_edge_with_data(source: str, target: str, init_method: Optional[str] = None) -> None:
+        target_details = class_method_details_lookup.get(init_method) or function_details_lookup.get(target) or class_method_details_lookup.get(target)
+        edge_data = get_edge_data_from_details(target_details)
+        G.add_edge(source, target, **edge_data)
+
+    # Helper function to add edges for function or class method calls
+    def add_edges_for_calls(source_name, calls, internal_only=True):
+        class_names = [list(class_def.keys())[0] for class_def in file_summary['class_defs']]
+        for called in calls:
+            called_class_name = called.split('.')[0]
+            if called.startswith("self."):
+                method_name = called.replace("self.", "")
+                fully_qualified_name = f"{source_name.split('.')[0]}.{method_name}"
+                if fully_qualified_name in class_method_details_lookup:
+                    add_edge_with_data(source_name, fully_qualified_name)
+                    continue
+            if (
+                called in function_details_lookup or 
+                called in class_method_details_lookup or 
+                f"{source_name.split('.')[0]}.{called}" in class_method_details_lookup
+            ):
+                add_edge_with_data(source_name, called)
+            elif called_class_name in class_names:
+                init_method = None
+                init_method_name = f"{called}.__init__"
+                if init_method_name in class_method_details_lookup:
+                    init_method = init_method_name
+                add_edge_with_data(source_name, called, init_method)
+            elif not internal_only:
+                G.add_node(called)
+                add_edge_with_data(source_name, called)
+
+    # Add function nodes to graph and edges for function calls
+    for function_name in function_details_lookup.keys():
+        G.add_node(function_name)
+    for func_name, details in function_details_lookup.items():
+        add_edges_for_calls(func_name, details['calls'], internal_only)
+
+    # Add edges for method calls
+    for qualified_method_name, details in class_method_details_lookup.items():
+        add_edges_for_calls(qualified_method_name, details['calls'], internal_only)
+
+    # Add edge data to edges and create node and edges to return
+    for edge in G.edges:
+        source, target = edge
+        target_details = function_details_lookup.get(target) or class_method_details_lookup.get(target)
+        edge_data = get_edge_data_from_details(target_details)
+        G[source][target].update(edge_data)
+    nodes = list(G.nodes)
+    edges = [{"source": edge[0], "target": edge[1], **edge[2]} for edge in G.edges.data()]
 
     return {
         "nodes": nodes,
@@ -325,11 +324,16 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
     except SyntaxError:
         logging.warning(f"Syntax error in file: {file_path}")
         return None
+    
     visitor = CodeVisitor(code)
     visitor.analyze(tree)
-    file_details = {'file_info': visitor.file_info, 'functions': visitor.functions, 'classes': visitor.classes}
+    file_details = {
+        'file_info': visitor.file_info, 
+        'functions': visitor.functions, 
+        'classes': visitor.classes
+        }
     
-    # add graph to file_info in file_details
+    # add graphs and clean up file_summary
     file_details['file_info']['internal_code_graph'] = code_graph(file_details['file_info']['file_summary'])
     file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary'], internal_only=False)
     file_details['file_info']['file_summary'] = json.dumps(file_details['file_info']['file_summary']).replace('\"','')

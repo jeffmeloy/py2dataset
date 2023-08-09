@@ -23,36 +23,34 @@ py2dataset performs the following functions:
 
 ### From Source
 
-Clone the repository and install from source:
+Clone the repository and install dependencies:
+
     ```bash
     git clone https://github.com/jeffmeloy/py2dataset.git
-    ```
-Then install dependencies to use the command line interface:
-
-    ```bash 
     pip install -r requirements.txt 
     ```
+
 ## Usage
 
 ### Command Line Interface
 
 **Example usage:**
+    
     ```bash
-    python py2dataset.py ../my_python_code 
+    python py2dataset.py <optional arguments>
     ```
-**Positional arguments:**
-- `directory`: The directory containing the Python (*.py) files to analyze.
-
-Without any arguments, the script will prompt for a directory and write output to `./datasets`.
 
 **Optional arguments:**
-- `--use_llm`: Use large language model for question answering.
-- `--use_summary`: Use code summary (imports, function, class, method definitions) instead of code to reduce context length in instruct JSON files
-- `--quiet`: Suppress all info logging messages.
-- `--output_dir OUTPUT_DIR`: Output directory to store generated files, default is .\datasets in the current working directory
-- `--graph`: Generate code relationship graphs.
-- `--model_config` - Specify a model configuration file, default is model_config.yaml
- 
+- `--start_dir START_DIR`: Directory containing the Python files to analyze; default='./'
+- `--output_dir OUTPUT_DIR`: Output directory to save generated files; default='./datasets'
+- `--graph`: Generate code relationship graphs
+- `--model_config_pathname MODEL_CONFIG_PATHNAME`: Path and filename for the model configuration file; defualt='./py2dataset_model_config.yaml' (if exist)
+- `--questions_pathname QUESTIONS_PATHNAME`: Path and filename for the questions to create the dataset; defualt='./py2dataset_questions.json' (if exist)
+- `--use_llm`: Use language model for answering 'purpose' questions
+- `--graph`: Generate code relationship graphs
+- `--use_summary`: Use code summary (imports, function, class, method definitions) to reduce instruct dataset context length
+- `--quiet`: Suppress all info logging messages;
+
 ## Questions for datasets
 
 The following questions are answered by parsing the AST:
@@ -88,6 +86,7 @@ The following questions are answered using a language model if --use_llm:
 ## Code Structure
 
 - `py2dataset.py` - Main script
+- `get_py2dataset_params.py` - Validates parameter path and file name arguments, returns questions and model
 - `get_python_file_details.py` - Extracts details from Python files using AST
 - `get_python_datasets.py` - Generates question-answer pairs and instructions
 - `py2dataset_questions.json` - Standard questions for Python files, functions, classes
@@ -112,27 +111,34 @@ Currently configured to use [ctransformers](https://github.com/marella/ctransfor
 
 ## Output
 
-The script generates the following output:
+For each Python file assessed, the script saves the following to the output directory:
 
 - `<filename>.details.yaml` - Python file details YAML file
 - `<filename>.qa.json` - Question-answer pairs JSON file
 - `<filename>.instruct.json` - Instructions JSON file
-- `qa.json` - Combined question-answer JSON file
-- `instruct.json` - Combined instructions JSON file
-- `instruct_cleaned.json` - Replaces duplicated code elements by an empty string
 - `<filename>.internal_code_graph.png` - Code relationship graph (optional)
 - `<filename>.entire_code_graph.png` - Code relationship graph (optional)
+
+The script then creates composite datasets by combining the files above and saves the following to the output directory:
+
+- `qa.json` (complete qa dataset)
+- `qa_purpose.json` (dataset with only purpose responses)
+- `instruct.json` (complete instruct dataset)
+- `instruct_purpose.json` (dataset with only purpose responses)
+- `instruct_cleaned.json` (replace duplicate code elements with empty string)
+- `instruct_cleaned_purpose.json` (dataset with only purpose responses);
 
 If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. If this directory does not exist, it will be created.
 
 The ./example_datasets directory provided contains the py2dataset output generated on itself. 
     
-    > python .\py2dataset.py ..\ --graph --use_summary --use_llm
-
+    ```bash
+    python .\py2dataset.py --start_path ..\ --output_dir .\example_datasets --graph --use_summary --use_llm
+    ```
 ## Requirements
 
-- Python >= 3.8
-- **networkx** library for code graphs
+- Python >= 3.10
+- **networkx** library for defining code graphs
 - **ctransformers** library for large language model support
 - **yaml** library for configuration and output files
-- **matplotlib** library for code graphs
+- **matplotlib** (optional for saving code graphs)
