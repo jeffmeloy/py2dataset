@@ -2,15 +2,15 @@ prompt_template: "Provide a concise and comprehensive Response to the Instructio
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_params:
-    #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-    #model_type: "starcoder"
-    #local_files_only: false
+    model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
+    model_type: "starcoder"
+    local_files_only: false
     #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
     #model_type: "starcoder"
     #local_files_only: false
-    model_path: "./models/wizardcoder-guanaco-15b-v1.1.ggmlv1.q4_0.bin"
-    model_type: "starcoder"
-    local_files_only: true
+    #model_path: "./models/wizardcoder-guanaco-15b-v1.1.ggmlv1.q4_0.bin"
+    #model_type: "starcoder"
+    #local_files_only: true
     #model_path: "./models/starcoderplus-guanaco-gpt4.ggmlv1.q4_0.bin"
     #model_type: "starcoder"
     #local_files_only: true
