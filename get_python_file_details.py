@@ -1,39 +1,31 @@
 """
 Use AST to extract details from Python a file and return as a dictionary.
 Requirements:
-[req01] The ControlFlowVisitor class shall inherit from ast.NodeVisitor and be
-        used to visit nodes in the AST (Abstract Syntax Tree). It extracts 
-        control flow keywords to give a high-level understanding of the program
-        flow. 
-[req02] The CodeVisitor class shall inherit from ast.NodeVisitor and be used to
-        traverse an AST (Abstract Syntax Tree) and extract details about the
-        code. 
-[req03] The CodeVisitor class shall have methods to visit FunctionDef and
-        ClassDef nodes and extract details about a function or a class.
-[req04] The CodeVisitor class shall have a method to analyze a node and
-        populate file_info with details about the file.
-[req05] The get_control_flow function shall accept a string of source code as
-        an argument and return the control flow keywords in the code.
-[req06] The get_python_file_details function shall accept a file path as an
-        argument and return a dictionary of the details extracted from the
-        file.
-[req07] The CodeVisitor class shall store details about functions and classes,
-        including their code, AST, docstring, inputs, defaults, returns, calls,
-        variables, decorators, annotations, and properties.
-[req08] The CodeVisitor class shall store details about class attributes,
-        methods, inheritance, and static methods.
-[req09] The analyze function in the CodeVisitor class shall populate file_info
-        with the file's code, AST, dependencies, functions, classes, and control
-        flow. 
-[req10] The code_graph function shall create a dictionary representation of file
-        details, including nodes and edges representing the relationships in the
-        code. 
-[req11] The code_graph function shall include function nodes, class nodes, method 
-        nodes, and edges for function calls, method calls, and class inheritance.
-[req12] The get_python_file_details function shall add an internal file graph 
-        (only including function calls where both the caller and called function
-        are within the file) and an entire file graph (including all function 
-        calls) file_info in the returned file_details dictionary.
+[req01] The `ControlFlowVisitor` class shall:
+        a. Inherit from `ast.NodeVisitor`.
+        b. Visit nodes in the AST to extract control flow keywords, providing a high-level understanding of the program flow.
+        c. Provide the ability to retrieve a string representation of the control flow of the program using the `get_control_flow` method.
+[req02] The `CodeVisitor` class shall:
+        a. Inherit from `ast.NodeVisitor`.
+        b. Traverse an AST to extract extensive details about the code.
+        c. Have methods to visit `FunctionDef` and `ClassDef` nodes, extracting details about functions and classes respectively.
+        d. Analyze a node and populate the `file_info` attribute with comprehensive details about the file.
+        e. Maintain and populate details about functions, classes, methods, and attributes.
+        f. Handle and manage class attributes, methods, inheritance, and static methods, populating the relevant information as needed.
+[req03] The `get_control_flow` function shall:
+        a. Accept a string containing source code.
+        b. Return control flow keywords present in the code.
+[req04] The `code_graph` function shall:
+        a. Accept file summary as its input.
+        b. Construct a dictionary representation that includes nodes and edges, illustrating relationships in the code.
+        c. Define various elements like function nodes, class nodes, method nodes.
+        d. Define the edges to depict relationships like function calls, method calls, and class inheritance.
+        e. Return the dictionary representation of the code graph.
+[req05] The `get_python_file_details` function shall:
+        a. Accept a file path as an argument.
+        b. Extract details from the specified Python file.
+        c. Include the internal file graph and entire file graph in the file details.
+        d. Return a dictionary containing these details.
 """
 import ast
 import re

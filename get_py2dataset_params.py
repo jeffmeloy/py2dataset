@@ -1,37 +1,40 @@
 """
 Obtain data parameter and model from the py2dataset functions.
 Requirements:
-[req01] The get_default_questions function shall return a list of default
-        questions that consists of a dictionary containing keys: id, text, and
-        type.
-[req02] The get_default_model_config function shall return a dictionary
-        representing the default model configuration.
-[req03] The get_output_dir function shall validate the provided output_dir
-        argument and return its absolute path.
-[req04] The get_output_dir function shall return the default OUTPUT_DIR if the
-        provided output_dir argument is not provided or invalid.
-[req05] The get_questions function shall validate the question file provided by
-        the questions_pathname argument and return those questions.
-[req06] The get_questions function shall return default questions if the
-        questions_pathname is not provided or invalid.
-[req07] The instantiate_model function shall import the specified module and
-        class, then instantiate the model using the provided configuration.
-[req08] The get_model function shall validate the model config file provided by
-        the model_config_pathname argument and return an instantiated model and
-        a prompt template based on that configuration.
-[req09] The get_model function shall return an instantiated model and a prompt
-        template based on the default model configuration if the 
-        model_config_pathname is not provided or invalid.
-[req10] The write_questions_file function shall write the default questions to
-        the QUESTIONS_FILE in the directory specified
-[req11] The write_questions_file function shall write the default questions to
-        the QUESTIONS_FILE in the current working directory if the output_dir
-        argument is not provided or invalid.
-[req12] The write_model_config_file function shall write the default model 
-        configuration to the MODEL_CONFIG_FILE in the directory specified.
-[req13] The write_model_config_file function shall write the default model
-        configuration to the MODEL_CONFIG_FILE in the current working directory
-        if the output_dir argument is not provided or invalid.
+[req01] The `get_default_questions` function shall:
+        a. Return a list of default questions.
+        b. Ensure each question in the list is a dictionary.
+        c. Ensure each dictionary has the keys: id, text, and type.
+[req02] The `get_default_model_config` function shall:
+        a. Return a dictionary representing the default model configuration.
+        b. Include keys: prompt_template and inference_model.
+        c. Ensure the inference_model key contains a model_import_path and model_params.
+[req03] The `get_output_dir` function shall:
+        a. Accept an optional output_dir argument.
+        b. Return the absolute path of the provided output_dir if it exists or can be created.
+        c. Return the default OUTPUT_DIR if the provided output_dir argument is not provided or invalid.
+[req04] The `get_questions` function shall:
+        a. Accept an optional questions_pathname argument.
+        b. Validate the question file provided by the questions_pathname.
+        c. Return the questions from the provided questions_pathname if valid.
+        d. Return default questions if the questions_pathname is not provided or invalid.
+[req05] The `instantiate_model` function shall:
+        a. Accept a model_config dictionary as an argument.
+        b. Import the specified module and class from the model_config.
+        c. Instantiate and return the model using the provided configuration.
+[req06] The `get_model` function shall:
+        a. Accept an optional model_config_pathname argument.
+        b. Validate the model config file provided by the model_config_pathname.
+        c. Return an instantiated model and a prompt template based on the provided configuration.
+        d. Return an instantiated model and a prompt template based on the default model configuration if the model_config_pathname is not provided or invalid.
+[req07] The `write_questions_file` function shall:
+        a. Accept an optional output_dir argument.
+        b. Write the default questions to the QUESTIONS_FILE in the specified directory.
+        c. Write the default questions to the QUESTIONS_FILE in the current working directory if the output_dir argument is not provided or invalid.
+[req08] The `write_model_config_file` function shall:
+        a. Accept an optional output_dir argument.
+        b. Write the default model configuration to the MODEL_CONFIG_FILE in the specified directory.
+        c. Write the default model configuration to the MODEL_CONFIG_FILE in the current working directory if the output_dir argument is not provided or invalid.
 """
 
 import os
@@ -49,148 +52,148 @@ QUESTIONS_FILE = 'py2dataset_questions.json'
 MODEL_CONFIG_FILE = 'py2dataset_model_config.yaml'
 OUTPUT_DIR = 'datasets'
 
-
 def get_default_questions() -> List[Dict]:
-    """Returns default question list"""
+    """Return default question list"""
     questions = [
         {
             "id": "file_dependencies",
-            "text": "Dependencies of file: ({filename})?",
+            "text": "Dependencies of file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "internal_code_graph",
-            "text": "Structural graph of the relationships between the functions and classes defined in file: ({filename})?",
+            "text": "Structural graph of the relationships between the functions and classes defined in file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "entire_code_graph",
-            "text": "Structural graph of the relationships between the functions and classes defined and used in file: ({filename})?",
+            "text": "Structural graph of the relationships between the functions and classes defined and used in file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "file_functions",
-            "text": "Funtions in file: ({filename})?",
+            "text": "Funtions in file: '{filename}'?",
             "type": "file"
         },      
         {
             "id": "file_classes",
-            "text": "Classes in file: ({filename})?",
+            "text": "Classes in file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "file_control_flow",
-            "text": "Control Flow in file: ({filename})?",
+            "text": "Control Flow in file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "function_inputs",
-            "text": "Inputs to function: ({function_name}) in file: ({filename})?",
+            "text": "Inputs to function: '{function_name}' in file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_docstring",
-            "text": "Docstring of function: ({function_name}) in file: ({filename})?",
+            "text": "Docstring of function: '{function_name}' in file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_calls",
-            "text": "Calls in function: ({function_name}) in file: ({filename})?",
+            "text": "Calls in function: '{function_name}' in file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_variables",
-            "text": "Variables in function: ({function_name}) in file: ({filename})?",
+            "text": "Variables in function: '{function_name}' in file: '{filename}'?",
             "type": "function"
         }, 
         {
             "id": "function_returns",
-            "text": "Returns from function: ({function_name}) in file: ({filename})?",
+            "text": "Returns from function: '{function_name}' in file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "class_methods",
-            "text": "Methods in class: ({class_name}) in file: ({filename})?",
+            "text": "Methods in class: '{class_name}' in file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_docstring",
-            "text": "Docstring of class: ({class_name}) in file: ({filename})?",
+            "text": "Docstring of class: '{class_name}' in file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_attributes",
-            "text": "Attributes of class: ({class_name}) in file: ({filename})?",
+            "text": "Attributes of class: '{class_name}' in file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_variables",
-            "text": "Variables in class: ({class_name}) in file: ({filename})?",
+            "text": "Variables in class: '{class_name}' in file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_inheritance",
-            "text": "Inheritance of class: ({class_name}) in file: ({filename})?",
+            "text": "Inheritance of class: '{class_name}' in file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "method_inputs",
-            "text": "Inputs to method: ({method_name}) in class: ({class_name}) in file: ({filename})?",
+            "text": "Inputs to method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_docstring",
-            "text": "Docstring of method: ({method_name}) in class: ({class_name}) in file: ({filename})?",
+            "text": "Docstring of method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_calls",
-            "text": "Calls in method: ({method_name}) in class: ({class_name}) in file: ({filename})?",
+            "text": "Calls in method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_returns",
-            "text": "Returns from method: ({method_name}) in class: ({class_name}) in file: ({filename})?",
+            "text": "Returns from method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
             "type": "method"
         },
         {   
             "id": "file_purpose",
-            "text": "Purpose of file: ({filename})?",
+            "text": "Purpose of file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "function_purpose",
-            "text": "Purpose of function: ({function_name}) in file: ({filename})?",
+            "text": "Purpose of function: '{function_name}' in file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "class_purpose",
-            "text": "Purpose of class: ({class_name}) in file: ({filename})?",
+            "text": "Purpose of class: '{class_name}' in file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "method_purpose",
-            "text": "Purpose of method: ({method_name}) in class: ({class_name}) in file: ({filename})?",
+            "text": "Purpose of method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "function_variable_purpose",
-            "text": "Purpose of variable: ({function_variable}) in function: ({function_name}) in file: ({filename})?",
+            "text": "Purpose of variable: '{function_variable}' in function: '{function_name}' in file: '{filename}'?",
             "type": "function"
         },       
         {
             "id": "class_variable_purpose",
-            "text": "Purpose of variable: ({class_variable}) in class: ({class_name}) in file: ({filename})?",
+            "text": "Purpose of variable: '{class_variable}' in class: '{class_name}' in file: '{filename}'?",
             "type": "class"
         }
     ]
+    
     return questions
 
 
 def get_default_model_config() -> Dict:
-    """Returns default model config dict"""
+    """Return default model config dict"""
     model_config = {
-        "prompt_template": "Provide a concise and comprehensive Response to the Instruction considering the given Context and include your reasoning. \n### Context:\n{context}\n### Instruction:\n{query}\n### Response:",
+        "prompt_template": "Your response will be used to train AI language models. Provide semantic meaning for the given context by providing a concise and comprhensive answer to the related question.\n{context}\n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:",
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_params": {
@@ -198,8 +201,8 @@ def get_default_model_config() -> Dict:
                 "model_type": "starcoder",
                 "local_files_only": False,
                 "lib": "avx2",
-                "threads": 30,
-                "batch_size": 32,
+                "threads": 16,
+                "batch_size": 16,
                 "max_new_tokens": 2048,
                 "gpu_layers": 24,
                 "reset": True
@@ -305,10 +308,7 @@ def get_model(model_config_pathname: str):
         logging.info(f'Model config file not found: {model_config_pathname} Using default model config')
         model_config = get_default_model_config()
         return instantiate_model(model_config['inference_model']), model_config['prompt_template']
-
-     # verify if model_config_pathname is a valid json model config file
     try:
-        # Load model configuration from the YAML file
         with open(model_config_pathname, 'r') as config_file:
             model_config = yaml.safe_load(config_file)
     except:
