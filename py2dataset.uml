@@ -1,33 +1,39 @@
-startuml
+@startuml
 'Used to create py2dataset.png from https://www.plantuml.com/plantuml/uml'
 : python py2dataset.py 
 
 **Optional arguments:**
-- `--start_dir START_DIR`: Directory containing the Python files to analyze; default='./'
-- `--output_dir OUTPUT_DIR`: Output directory to save generated files; default='./datasets'
-- `--graph`: Generate code relationship graphs
-- `--model_config_pathname MODEL_CONFIG_PATHNAME`: Path and filename for the model configuration file; defualt='./py2dataset_model_config.yaml'
-- `--questions_pathname QUESTIONS_PATHNAME`: Path and filename for the questions to create the dataset; defualt='./py2dataset_questions.json'
-- `--use_llm`: Use language model for answering 'purpose' questions
-- `--graph`: Generate code relationship graphs
-- `--use_summary`: Use code summary (imports, function, class, method definitions) to reduce instruct dataset context length
-- `--quiet`: Suppress all info logging messages;
-:py2dataset.py
+- `--start_dir` (str, optional): Starting directory to search for Python files. Defaults to the current working directory.
+- `--output_dir` (str, optional): Directory to write the output files. Defaults to the 'datasets' directory in the current working directory.
+- `--questions_pathname` (str, optional): Path to the questions file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
+- `--model_config_pathname` (str, optional): Path to the model configuration file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
+- `--use_llm` (bool, optional): Use a Large Language Model for generating JSON answers. Defaults to False.
+- `--use_summary` (bool, optional): Use code summary to reduce dataset context length. Defaults to False.
+- `--graph` (bool, optional): Generate graphs for the code. Defaults to False.
+- `--html` (bool, optional): Generate HTML files from the JSON files. Defaults to False.
+- `--quiet` (bool, optional): Limit logging output. If provided, only warnings and errors will be logged. Defaults to False.;
+
+:py2dataset.py:
 - Parse command line arguments
 - Read questions
 - Obtain Python File listing within OUTPUT_DIR;
+
 Repeat :For each Python file;
-:get_python_file_details.py
+
+:get_python_file_details.py:
 - Extract code details from AST
 - Generate internal and external code relationship graphs;
-:get_python_dataset.py 
+:get_python_dataset.py: 
 - Answer questions and format answers;
+
 Repeat :For each question;
+
 if (use_llm and purpose question) then (yes)
 :Use the language model to answer question;
 else (no)
 :Parse the AST obtained data to answer question;
 endif
+
 :Construct qa.json data
 - question = current question
 - answer = answer to current question
@@ -36,19 +42,25 @@ Construct instruct.json data
 - instruction = current question
 - input = code element
 - output = answer to current question;
+
 Repeat while (More questions?) is (yes)
 ->no;
-:py2dataset.py save datasets and code file details
+
+:save_py2dataset_output.py:
+save datasets and code file details
 - <filename>.qa.json
 - <filename>.instruct.json
 - <filename>.details.yaml';
+
 if (graph is True) then (yes)
 :Save code graphs
 - <filename>.internal.png
 - <filename>.external.png;
 endif
+
 Repeat while (More Python Files?) is (yes)
 ->no;
+
 :Combine all qa and instruct JSON files and create other datasets
 - `qa.json` (complete qa dataset)
 - `qa_purpose.json` (dataset with only purpose responses)
@@ -57,4 +69,5 @@ Repeat while (More Python Files?) is (yes)
 - `instruct_cleaned.json` (replace duplicate code elements with empty string)
 - `instruct_cleaned_purpose.json` (dataset with only purpose responses);
 :End;
+
 @enduml
