@@ -1,18 +1,18 @@
-prompt_template: "Your response will be used to train AI language models. Provide semantic meaning for the given context by providing a concise and comprhensive answer to the related question. 
-                  \n{context}\n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:"
+prompt_template: "Your response will be used to train people and AI language models about Python code. Provide a brief yet thorough answer to the given question considering the context. 
+                  \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:"
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_params:
     ## USABLE OUTPUT WITH CURRENT PROMPT TEMPLATE
-    #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-    #model_type: "starcoder"
-    #local_files_only: false
+    model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
+    model_type: "starcoder"
+    local_files_only: false
     #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
     #model_type: "starcoder"
     #local_files_only: false
-    model_path: "./models/wizardcoder-guanaco-15b-v1.1.ggmlv1.q4_0.bin"
-    model_type: "starcoder"
-    local_files_only: true
+    #model_path: "./models/wizardcoder-guanaco-15b-v1.1.ggmlv1.q4_0.bin"
+    #model_type: "starcoder"
+    #local_files_only: true
     #model_path: "./models/starcoderplus-guanaco-gpt4.ggmlv1.q4_0.bin"
     #model_type: "starcoder"
     #local_files_only: true
@@ -28,5 +28,5 @@ inference_model:
     batch_size: 32
     max_new_tokens: 2048
     #  Currently only LLaMA, MPT and Falcon models support the gpu_layers parameters.
-    gpu_layers: 100 
+    gpu_layers: 64 
     reset: True

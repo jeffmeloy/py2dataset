@@ -29,6 +29,7 @@ import sys
 import json
 import logging
 import yaml
+import random
 from typing import List, Dict
 
 # Set up logging
@@ -132,9 +133,9 @@ class DatasetGenerator:
     def process_items(self, question_type: str, question_id: str, question_text: str, base_name: str, name: str, info: Dict, context: str, item_type: str) -> None:
         if info[item_type]:
             items = [item.strip() for item in self.clean_and_get_unique_elements(str(info[item_type])).split(',') if item]
-            for item in items:
-                query = question_text.format(filename=base_name, **{f'{item_type.split("_")[0]}_name': name, f'{item_type.split("_")[0]}_variable': item})
-                self.process_question(question_type, question_id, query, context, info)
+            itemstring = ', '.join(items)
+            query = question_text.format(filename=base_name, **{f'{question_type.split("_")[0]}_name': name, f'{question_type.split("_")[0]}_variables': itemstring})
+            self.process_question(question_type, question_id, query, context, info)
 
     def process_question(self, question_type: str, question_id: str, query: str, context: str, info: Dict) -> None:
         if question_id.endswith('code_graph'):
@@ -182,7 +183,6 @@ class DatasetGenerator:
             question_type = question['type']
             self.process_question_type(question_type, question_id, question_text)
         return self.qa_list, self.instruct_list
-
 
 def get_python_datasets(file_path: str, file_details: Dict, base_name: str, questions: List[Dict], llm, prompt, use_llm: bool, use_summary: bool) -> tuple[List[Dict], List[Dict]]:
     """

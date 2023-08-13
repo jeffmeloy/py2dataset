@@ -57,134 +57,134 @@ def get_default_questions() -> List[Dict]:
     questions = [
         {
             "id": "file_dependencies",
-            "text": "Dependencies of file: '{filename}'?",
+            "text": "What are the dependencies of the Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "internal_code_graph",
-            "text": "Structural graph of the relationships between the functions and classes defined in file: '{filename}'?",
+            "text": "What are the structural relationships between the functions and classes defined in the Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "entire_code_graph",
-            "text": "Structural graph of the relationships between the functions and classes defined and used in file: '{filename}'?",
+            "text": "What are the structural relationships between the functions and classes defined and used in the Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "file_functions",
-            "text": "Funtions in file: '{filename}'?",
+            "text": "What functions are defined in the Python file: '{filename}'?",
             "type": "file"
         },      
         {
             "id": "file_classes",
-            "text": "Classes in file: '{filename}'?",
+            "text": "What classes are defined in the Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "file_control_flow",
-            "text": "Control Flow in file: '{filename}'?",
+            "text": "What is the control flow of the Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "function_inputs",
-            "text": "Inputs to function: '{function_name}' in file: '{filename}'?",
+            "text": "What are the inputs to the function: '{function_name}' in the Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_docstring",
-            "text": "Docstring of function: '{function_name}' in file: '{filename}'?",
+            "text": "What is the docstring of the function: '{function_name}' in the Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_calls",
-            "text": "Calls in function: '{function_name}' in file: '{filename}'?",
+            "text": "What calls are made in the function: '{function_name}' in the Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_variables",
-            "text": "Variables in function: '{function_name}' in file: '{filename}'?",
+            "text": "What variables are defined in the function: '{function_name}' in the Python file: '{filename}'?",
             "type": "function"
         }, 
         {
             "id": "function_returns",
-            "text": "Returns from function: '{function_name}' in file: '{filename}'?",
+            "text": "What are the returned items from the function: '{function_name}' in the Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "class_methods",
-            "text": "Methods in class: '{class_name}' in file: '{filename}'?",
+            "text": "What are the methods defined within the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_docstring",
-            "text": "Docstring of class: '{class_name}' in file: '{filename}'?",
+            "text": "What is the docstring of the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_attributes",
-            "text": "Attributes of class: '{class_name}' in file: '{filename}'?",
+            "text": "What are the attributes of the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_variables",
-            "text": "Variables in class: '{class_name}' in file: '{filename}'?",
+            "text": "What variables are defined in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_inheritance",
-            "text": "Inheritance of class: '{class_name}' in file: '{filename}'?",
+            "text": "What is the Inheritance of the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "method_inputs",
-            "text": "Inputs to method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
+            "text": "What are the inputs to method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_docstring",
-            "text": "Docstring of method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
+            "text": "What is the docstring of the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_calls",
-            "text": "Calls in method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
+            "text": "What calls are made in the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_returns",
-            "text": "Returns from method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
+            "text": "What are the returns from the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "method"
         },
         {   
             "id": "file_purpose",
-            "text": "Purpose of file: '{filename}'?",
+            "text": "What is the purpose and processing summary of the Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "function_purpose",
-            "text": "Purpose of function: '{function_name}' in file: '{filename}'?",
+            "text": "What is the purpose and processing summary of the function: '{function_name}' defined in the Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "class_purpose",
-            "text": "Purpose of class: '{class_name}' in file: '{filename}'?",
+            "text": "What is the purpose and processing summary of the class: '{class_name}' defined in the Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "method_purpose",
-            "text": "Purpose of method: '{method_name}' in class: '{class_name}' in file: '{filename}'?",
+            "text": "What is the purpose and processing summary of the method: '{method_name}' defined in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "function_variable_purpose",
-            "text": "Purpose of variable: '{function_variable}' in function: '{function_name}' in file: '{filename}'?",
+            "text": "What is the purpose and usage of each of these variables: '{function_variables}' defined in the function: '{function_name}' in the Python file: '{filename}'?",
             "type": "function"
         },       
         {
             "id": "class_variable_purpose",
-            "text": "Purpose of variable: '{class_variable}' in class: '{class_name}' in file: '{filename}'?",
+            "text": "What is the purpose and usage of each of these variables: '{class_variables}' defined in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "class"
-        }
+        }      
     ]
     
     return questions
@@ -244,13 +244,6 @@ def get_questions(questions_pathname: str) -> List[Dict]:
         logging.info(f'Questions file not valid: {questions_pathname} Using default questions')
         questions = get_default_questions()
         return questions  
-
-    # check for 'id', 'text', and 'type' keys in each question
-    for question in questions:
-        if not all(key in question for key in ['id', 'text', 'type']):
-            logging.info(f'Questions file not valid: {questions_pathname} Using default questions')
-            questions = get_default_questions()
-            return questions 
 
     logging.info(f'Using questions from file: {questions_pathname}')
     return questions

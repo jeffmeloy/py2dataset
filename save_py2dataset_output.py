@@ -76,6 +76,9 @@ def convert_json_to_html(directory: str) -> None:
 
     for json_file in Path(directory).rglob('*.json'):
         dataset = read_file(json_file)
+        if not dataset:
+            continue
+
         html_file = json_file.with_suffix('.html')
         html_content = """
         <html>
@@ -83,7 +86,7 @@ def convert_json_to_html(directory: str) -> None:
             <style>
                 table {border-collapse: collapse;width: 100%;}
                 th, td {border: 1px solid black; padding: 8px; text-align: left; white-space: pre-line;}
-                td:nth-child(2) { width: 100ch; overflow-wrap: break-word;}
+                td:nth-child(2) { width: 50%; overflow-wrap: anywhere;}
             </style>
         </head>
         <body>
@@ -103,7 +106,7 @@ def convert_json_to_html(directory: str) -> None:
             for key in entry:
                 # Convert \n to HTML line breaks
                 value = escape(str(entry[key]))
-                if key == "input":  # Preserve spacing and tabs for the 'input' field
+                if key == "input":  
                     value = preserve_spacing(value)
                 value = value.replace('\n', '<br/>')
                 html_content += f"<td>{value}</td>"
@@ -116,8 +119,11 @@ def convert_json_to_html(directory: str) -> None:
         </html>
         """
         html_file_path = json_file.with_suffix('.html')
-        with open(html_file_path, 'w') as file:
-            file.write(html_content)
+        try:   
+            with open(html_file_path, 'w', encoding='utf-8') as file:
+                file.write(html_content)
+        except:
+            logging.save(logging.info(f'Failed saving: {html_file_path}'))
 
 
 def combine_json_files(directory: str, html: bool) -> Dict[str, List[Dict]]:
@@ -138,44 +144,47 @@ def combine_json_files(directory: str, html: bool) -> Dict[str, List[Dict]]:
             combined_data.extend(read_file(json_file))
         combined_data = list({i[keys[file_names.index(file)]]: i for i in combined_data}.values())
         write_file(combined_data, file_path)
-        if file == 'instruct.json':
-            instruct_combined_data = combined_data.copy()
-        combined_data = []  
-
-    # remove duplicate inputs from instruct.json to make a cleaned_instruct.json
-    seen_inputs = set()
-    for item in instruct_combined_data:
-        if item['input'] in seen_inputs:
-            item['input'] = ''
-        else:
-            seen_inputs.add(item['input'])
-    cleaned_instruct_file_path = Path(directory) / 'cleaned_instruct.json'
-    write_file(instruct_combined_data, cleaned_instruct_file_path)
-
-    # create a qa_purpose.json, qa_instruct.jaon, and qa_cleaned_instruct.json
-    file_names = ['qa.json', 'instruct.json', 'cleaned_instruct.json']
-    keys = ['question', 'instruction', 'instruction']
-    for file in file_names:
-        purpose_data = []
-        nquestion = 0
-        dataset = read_file(Path(directory) / file)
-        for item in dataset:
-            if item[keys[file_names.index(file)]].startswith('Purpose of'):
-                purpose_data.append(item)
-                nquestion += 1
-        if nquestion > 0:
-            purpose_filepath = Path(directory) / f'{file.split(".")[0]}_purpose.json'
-            write_file(purpose_data, purpose_filepath)
         if file == 'qa.json':
-            qa_list = dataset.copy()
+            qa_data = combined_data.copy()
         if file == 'instruct.json':
-            instruct_list = dataset.copy()
-       
+            instruct_data = combined_data.copy()
+        
+        # Create purpose-specific file
+        purpose_data = []
+        for item in combined_data:
+            if item[keys[file_names.index(file)]].startswith('What is the purpose'):
+                purpose_data.append(item)
+        if purpose_data:
+            purpose_file_path = file_path.with_name(file_path.stem + '_purpose.json')
+            write_file(purpose_data, purpose_file_path)
+
+        # Reset combined_data for the next iteration
+        combined_data = []
+
+    # remove duplicate "input" info in the instruct.json and instruct_purpose.json information 
+    # to make a cleaned_instruct.json cleaned_instruct_purpose_json
+    file_names = ['instruct.json', 'instruct_purpose.json']
+    for file in file_names:
+        seen_inputs = set()
+        file_path = Path(directory) / file
+        if not file_path.exists():
+            continue
+        dataset = read_file(file_path)
+        if not dataset:
+            continue
+        for item in dataset:
+            if item['input'] in seen_inputs:
+                item['input'] = ''
+            else:
+                seen_inputs.add(item['input'])
+        cleaned_instruct_file_path = Path(directory) / ('cleaned_'+ file) 
+        write_file(dataset, cleaned_instruct_file_path)
+
     # save html file for each json file in the output directory
     if html:
         convert_json_to_html(directory)
 
-    return {'qa_list': qa_list, 'instruct_list': instruct_list}
+    return {'qa_list': qa_data, 'instruct_list': instruct_data}
 
 
 def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -> None:
