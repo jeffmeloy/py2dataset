@@ -41,15 +41,15 @@ Clone the repository and install dependencies:
     ```
 
 **Optional arguments:**
-- `--start_dir START_DIR`: Directory containing the Python files to analyze; default='./'
-- `--output_dir OUTPUT_DIR`: Output directory to save generated files; default='./datasets'
-- `--graph`: Generate code relationship graphs
-- `--model_config_pathname MODEL_CONFIG_PATHNAME`: Path and filename for the model configuration file; defualt='./py2dataset_model_config.yaml' (if exist)
-- `--questions_pathname QUESTIONS_PATHNAME`: Path and filename for the questions to create the dataset; defualt='./py2dataset_questions.json' (if exist)
-- `--use_llm`: Use language model for answering 'purpose' questions
-- `--graph`: Generate code relationship graphs
-- `--use_summary`: Use code summary (imports, function, class, method definitions) to reduce instruct dataset context length
-- `--quiet`: Suppress all info logging messages;
+- `--start_dir` (str, optional): Starting directory to search for Python files. Defaults to the current working directory.
+- `--output_dir` (str, optional): Directory to write the output files. Defaults to the 'datasets' directory in the current working directory.
+- `--questions_pathname` (str, optional): Path to the questions file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
+- `--model_config_pathname` (str, optional): Path to the model configuration file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
+- `--use_llm` (bool, optional): Use a Large Language Model for generating JSON answers. Defaults to False.
+- `--use_summary` (bool, optional): Use code summary to reduce dataset context length. Defaults to False.
+- `--graph` (bool, optional): Generate graphs for the code. Defaults to False.
+- `--html` (bool, optional): Generate HTML files from the JSON files. Defaults to False.
+- `--quiet` (bool, optional): Limit logging output. If provided, only warnings and errors will be logged. Defaults to False.
 
 ## Questions for datasets
 
@@ -89,6 +89,7 @@ The following questions are answered using a language model if --use_llm:
 - `get_py2dataset_params.py` - Validates parameter path and file name arguments, returns questions and model
 - `get_python_file_details.py` - Extracts details from Python files using AST
 - `get_python_datasets.py` - Generates question-answer pairs and instructions
+- `save_p2dataset_output.py` - Save the output datasets, optional graph images and .html files 
 - `py2dataset_questions.json` - Standard questions for Python files, functions, classes
 - `py2dataset_model_config.yaml` - Configuration for language model
     
@@ -118,6 +119,8 @@ For each Python file assessed, the script saves the following to the output dire
 - `<filename>.instruct.json` - Instructions JSON file
 - `<filename>.internal_code_graph.png` - Code relationship graph (optional)
 - `<filename>.entire_code_graph.png` - Code relationship graph (optional)
+- `<filename>.qa.json.html` - Question-answer pairs JSON file in .html format (optional)
+- `<filename>.instruct.json.html` - Instructions JSON file in .html format (optional)
 
 The script then creates composite datasets by combining the files above and saves the following to the output directory:
 
@@ -126,14 +129,15 @@ The script then creates composite datasets by combining the files above and save
 - `instruct.json` (complete instruct dataset)
 - `instruct_purpose.json` (dataset with only purpose responses)
 - `instruct_cleaned.json` (replace duplicate code elements with empty string)
-- `instruct_cleaned_purpose.json` (dataset with only purpose responses);
+- `instruct_cleaned_purpose.json` (dataset with only purpose responses)
+- .html files will also be created for each of these, if --html  
 
 If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. If this directory does not exist, it will be created.
 
 The ./example_datasets directory provided contains the py2dataset output generated on itself. 
     
     ```bash
-    python .\py2dataset.py --start_path ..\ --output_dir .\example_datasets --graph --use_summary --use_llm
+    python .\py2dataset.py --start_path ..\ --output_dir .\example_datasets --graph --use_llm --\html
     ```
 ## Requirements
 
