@@ -1,4 +1,4 @@
-prompt_template: "Your response will be used to train people and AI language models about Python code. Provide a brief yet thorough answer to the given question considering the context. 
+prompt_template: "You are a master mathematician and Python programmer. Provide a brief yet thorough answer to the given question considering the context. 
                   \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:"
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
