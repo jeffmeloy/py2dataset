@@ -193,8 +193,7 @@ def get_default_questions() -> List[Dict]:
 def get_default_model_config() -> Dict:
     """Return default model config dict"""
     model_config = {
-        "prompt_template": "Your response will be used to train AI language models. Provide semantic meaning for the given context by providing a concise and comprhensive answer to the related question.\n{context}\n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:",
-        "inference_model": {
+        "prompt_template": "You are a master mathematician and Python programmer. Provide a brief yet thorough answer to the given question considering the context.\n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:",
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_params": {
                 "model_path": "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML",  
@@ -208,7 +207,6 @@ def get_default_model_config() -> Dict:
                 "reset": True
             }
         }
-    }
     return model_config
 
 

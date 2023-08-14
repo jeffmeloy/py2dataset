@@ -22,6 +22,11 @@ Requirements:
         a. Accept details of a Python file, a base name, and an output directory as arguments.
         b. Generate code graphs based on the provided file details.
         c. Save the graphs as PNG images in the specified output directory.
+[req06] The `save_python_data` function shall:
+        a. Accept details of a Python file, a base name, and an output directory as arguments.
+        b. Save the details of the Python file as a YAML file.
+        c. Save the QA and instruction data as JSON files.
+        d. Generate and save code graphs if the graph flag is set to True.
 """
 import sys
 import os
@@ -229,3 +234,32 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
         nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
         plt.savefig(output_file)
         plt.close()  # Close the figure
+
+def save_python_data(file_details, qa_list, instruct_list, relative_path, output_dir, graph, html):
+    
+    output_subdir = Path(output_dir) / relative_path.parts[0]
+    output_subdir.mkdir(parents=True, exist_ok=True)
+    base_name = '.'.join(part for part in relative_path.parts)
+
+    # write qa.json and instrunct.json files
+    file_names = [
+        f'{base_name}.qa.json', 
+        f'{base_name}.instruct.json', 
+        f'{base_name}.details.yaml'
+        ]
+    contents = [
+        qa_list, 
+        instruct_list, 
+        file_details
+        ]
+
+    for file_name, content in zip(file_names, contents):
+        write_file(content, output_subdir / file_name)
+
+    # Create code graph images
+    if graph:
+        # add error handling if anything goes wrong with creating or saving the graph
+        try:
+            create_code_graph(file_details, base_name, output_subdir)
+        except:
+            logging.info(f'Error creating graph for {file_path}')

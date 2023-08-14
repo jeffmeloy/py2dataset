@@ -54,34 +54,34 @@ Clone the repository and install dependencies:
 ## Questions for datasets
 
 The following questions are answered by parsing the AST:
-- Dependencies of file: ({filename})?,
-- Structural graph of the relationships between the functions and classes defined in file: ({filename})?
-- Structural graph of the relationships between the functions and classes defined and used in file: ({filename})?
-- Functions in file: ({filename})?
-- Classes in file: ({filename})?
-- Control Flow in file: ({filename})?
-- Inputs to function: ({function_name}) in file: ({filename})?
-- Docstring of function: ({function_name}) in file: ({filename})?
-- Calls in function: ({function_name}) in file: ({filename})?
-- Variables in function: ({function_name}) in file: ({filename})?
-- Returns from function: ({function_name}) in file: ({filename})?
-- Methods in class: ({class_name}) in file: ({filename})?
-- Docstring of class: ({class_name}) in file: ({filename})?
-- Attributes of class: ({class_name}) in file: ({filename})?
-- Variables in class: ({class_name}) in file: ({filename})?
-- Inheritance of class: ({class_name}) in file: ({filename})?
-- Inputs to method: ({method_name}) in class: ({class_name}) in file: ({filename})?
-- Docstring of method: ({method_name}) in class: ({class_name}) in file: ({filename})?
-- Calls in method: ({method_name}) in class: ({class_name}) in file: ({filename})?
-- Returns from method: ({method_name}) in class: ({class_name}) in file: ({filename})?
+- What are the dependencies of the Python file: '{filename}'?
+- What are the structural relationships between the functions and classes defined in the Python file: '{filename}'?
+- What are the structural relationships between the functions and classes defined and used in the Python file: '{filename}'?
+- What functions are defined in the Python file: '{filename}'?
+- What classes are defined in the Python file: '{filename}'?
+- What is the control flow of the Python file: '{filename}'?
+- What are the inputs to the function: '{function_name}' in the Python file: '{filename}'?
+- What is the docstring of the function: '{function_name}' in the Python file: '{filename}'?
+- What calls are made in the function: '{function_name}' in the Python file: '{filename}'?
+- What variables are defined in the function: '{function_name}' in the Python file: '{filename}'?
+- What are the returned items from the function: '{function_name}' in the Python file: '{filename}'?
+- What are the methods defined within the class: '{class_name}' in the Python file: '{filename}'?
+- What is the docstring of the class: '{class_name}' in the Python file: '{filename}'?
+- What are the attributes of the class: '{class_name}' in the Python file: '{filename}'?
+- What variables are defined in the class: '{class_name}' in the Python file: '{filename}'?
+- What is the Inheritance of the class: '{class_name}' in the Python file: '{filename}'?
+- What are the inputs to method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
+- What is the docstring of the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
+- What calls are made in the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
+- What are the returns from the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
 
 The following questions are answered using a language model if --use_llm: 
-- Purpose of file: ({filename})?
-- Purpose of function: ({function_name}) in file: ({filename})?
-- Purpose of class: ({class_name}) in file: ({filename})?
-- Purpose of method: ({method_name}) in class: ({class_name}) in file: ({filename})?
-- Purpose of variable: ({function_variable}) in function: ({function_name}) in file: ({filename})?
-- Purpose of variable: ({class_variable}) in class: ({class_name}) in file: ({filename})?
+- What is the purpose and processing summary of the Python file: '{filename}'?
+- What is the purpose and processing summary of the function: '{function_name}' defined in the Python file: '{filename}'?
+- What is the purpose and processing summary of the class: '{class_name}' defined in the Python file: '{filename}'?
+- What is the purpose and processing summary of the method: '{method_name}' defined in the class: '{class_name}' in the Python file: '{filename}'?
+- What is the purpose and usage of each of these variables: '{function_variables}' defined in the function: '{function_name}' in the Python file: '{filename}'?
+- What is the purpose and usage of each of these variables: '{class_variables}' defined in the class: '{class_name}' in the Python file: '{filename}'?
 
 ## Code Structure
 
@@ -98,16 +98,21 @@ The following questions are answered using a language model if --use_llm:
 Currently configured to use [ctransformers](https://github.com/marella/ctransformers) with the default configuration defined in py2dataset_model_config.yaml
 
     ```yaml
-    prompt_template: "Provide a concise and comprehensive Response to the Instruction considering the given Context and include your reasoning. \n### Context:\n{context}\n### Instruction:\n{query}\n### Response:"
+    prompt_template: "You are a master mathematician and Python programmer. Provide a brief yet thorough answer to the given question considering the context. 
+                  \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:"
     inference_model:
-      model_import_path: "ctransformers.AutoModelForCausalLM"
-      model_params:
-        model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
+    model_import_path: "ctransformers.AutoModelForCausalLM"
+    model_params:
+        model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
         model_type: "starcoder"
         local_files_only: false
         lib: "avx2"
         threads: 30
+        batch_size: 32
         max_new_tokens: 2048
+        #  Currently only LLaMA, MPT and Falcon models support the gpu_layers parameters.
+        gpu_layers: 64 
+        reset: True
     ```
 
 ## Output

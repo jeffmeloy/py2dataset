@@ -2,12 +2,18 @@
 For each Python file within given directory, generate, save, and return datasets
 that include responses to questions about the code.
 Requirements:
+[req00] The `extract_python_data` function shall:
+        a. Accept parameters for the Python file path, base name, questions dictionary, LLM, prompt, use of LLM, and use of summary.
+        b. Use the 'get_python_file_details' function to get the Python file details.
+        c. Use the 'get_python_datasets' function to get the qa.json and instruct.json datasets.
+        d. Return the file details, qa.json dataset, and instruct.json dataset.
 [req01] The `process_python_directories` function shall:
         a. Accept parameters for the starting directory, output directory, questions dictionary, LLM, prompt, use of LLM, use of summary, graph generation, and HTML generation.
         b. Search for all Python files within the given directory and its subdirectories.
-        c. Process each Python file using the 'get_python_file_details' and 'get_python_datasets' functions.
-        d. Write the resulting datasets to the specified output directory.
-        e. Return the datasets.
+        c. For each Python file, call the `extract_python_data` function to get the file details, qa.json dataset, and instruct.json dataset.
+        d. Call the `save_python_data` function to save the file details, qa.json dataset, and instruct.json dataset.
+        e. Combine all of the qa.json and instruct.json files together.
+        f. Return the datasets.
 [req02] The `py2dataset` function shall:
         a. Accept parameters for the starting directory, output directory, questions pathname, model configuration pathname, use of LLM, use of summary, graph generation, quiet mode, and HTML generation.
         b. Determine the appropriate parameters for the `process_python_directories` function based on provided or default values.
@@ -27,7 +33,38 @@ from typing import Dict, List, Union
 from get_python_file_details import get_python_file_details
 from get_python_datasets import get_python_datasets
 from get_py2dataset_params import get_questions, get_model, get_output_dir
-from save_py2dataset_output import read_file, write_file, combine_json_files, create_code_graph
+from save_py2dataset_output import combine_json_files, save_python_data
+
+def extract_python_data(file_path, base_name, questions, llm, prompt, use_llm, use_summary):
+    """
+    Extracts data from a Python file.
+    Args:
+        file_path (str): Path to the Python file.
+        base_name (str): Base name of the Python file.
+        questions (Dict): Questions dictionary to answer about the Python file.
+        llm: Large Language Model to use for generating answers.
+        prompt (str): Prompt to provide to the language model.
+        use_llm (bool): If True, use the LLM model to generate answers for JSON.
+        use_summary (bool): Use the code summary to reduce dataset context length.
+    Returns:
+        Union[Dict, Tuple]: File details dictionary or tuple of file details and None.
+        List[Dict]: qa.json dataset.
+        List[Dict]: instruct.json dataset.
+    """
+    file_details = None
+    qa_list = None
+    instruct_list = None
+    
+    # use AST to get python file details
+    file_details = get_python_file_details(file_path)
+    if file_details is None or isinstance(file_details, tuple):
+        return file_deails, qa_list, instruct_list
+
+    # get lists for qa.json and intruct.json for python file
+    qa_list, instruct_list = get_python_datasets(file_path, file_details, base_name, questions, llm, prompt, use_llm, use_summary)
+    
+    return file_details, qa_list, instruct_list
+
 
 def process_python_directories(start_dir: str, output_dir: str, questions: Dict, llm, prompt, use_llm: bool, use_summary: bool, graph: bool, html: bool) -> Dict[str, List[Dict]]:
     """
@@ -47,38 +84,16 @@ def process_python_directories(start_dir: str, output_dir: str, questions: Dict,
     """
     python_files = [p for p in Path(start_dir).rglob('[!_]*.py') if p.is_file()]
 
-    for file_path in python_files:
-        logging.info(f'Processing: {file_path}')
-        relative_path = Path(file_path).relative_to(start_dir)
+    for pythonfile_path in python_files:
+        logging.info(f'Processing: {pythonfile_path}')
+        relative_path = Path(pythonfile_path).relative_to(start_dir)
         base_name = '.'.join(part for part in relative_path.parts)
 
-        # use AST to get python file details
-        file_details = get_python_file_details(file_path)
+        file_details, qa_list, instruct_list = extract_python_data(pythonfile_path, base_name, questions, llm, prompt, use_llm, use_summary)
         if file_details is None or isinstance(file_details, tuple):
             continue
 
-        # get lists for qa.json and intruct.json for python file
-        qa_list, instruct_list = get_python_datasets(file_path, file_details, base_name, questions, llm, prompt, use_llm, use_summary)
-        if not qa_list:
-            continue
-
-        output_subdir = Path(output_dir) / relative_path.parts[0]
-        output_subdir.mkdir(parents=True, exist_ok=True)
-
-        # write qa.json and instrunct.json files
-        file_names = [f'{base_name}.qa.json', f'{base_name}.instruct.json', f'{base_name}.details.yaml']
-        contents = [qa_list, instruct_list, file_details]
-        for file_name, content in zip(file_names, contents):
-            write_file(content, output_subdir / file_name)
-
-        # Create code graph images
-        if graph:
-            # add error handling if anything goes wrong with creating or saving the graph
-            try:
-                create_code_graph(file_details, base_name, output_subdir)
-            except:
-                logging.info(f'Error creating graph for {file_path}')
-                continue
+        save_python_data(file_details, qa_list, instruct_list, relative_path, output_dir, graph, html)
 
     # combine all of the qa.json and instruct.json files together
     datasets = combine_json_files(output_dir, html)   
