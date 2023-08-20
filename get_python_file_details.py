@@ -1,31 +1,30 @@
 """
-Use AST to extract details from Python a file and return as a dictionary.
+Use AST to extract details from a Python file and return it as a dictionary.
 Requirements:
 [req01] The `ControlFlowVisitor` class shall:
         a. Inherit from `ast.NodeVisitor`.
-        b. Visit nodes in the AST to extract control flow keywords, providing a high-level understanding of the program flow.
-        c. Provide the ability to retrieve a string representation of the control flow of the program using the `get_control_flow` method.
+        b. Implement the `generic_visit` method to visit nodes in the AST and extract corresponding control flow keywords.
+        c. Offer the `get_control_flow` method to retrieve a string representation of the program's control flow.
 [req02] The `CodeVisitor` class shall:
         a. Inherit from `ast.NodeVisitor`.
-        b. Traverse an AST to extract extensive details about the code.
-        c. Have methods to visit `FunctionDef` and `ClassDef` nodes, extracting details about functions and classes respectively.
-        d. Analyze a node and populate the `file_info` attribute with comprehensive details about the file.
-        e. Maintain and populate details about functions, classes, methods, and attributes.
-        f. Handle and manage class attributes, methods, inheritance, and static methods, populating the relevant information as needed.
+        b. Implement the `visit_FunctionDef` method to gather details about functions.
+        c. Implement the `visit_ClassDef` method to gather details about classes.
+        d. Implement the `extract_details` method to parse information about a given node.
+        e. Implement the `analyze` method to traverse the AST, list all nodes within the current file, and populate the 'file_info' attribute with comprehensive file details.
 [req03] The `get_control_flow` function shall:
-        a. Accept a string containing source code.
-        b. Return control flow keywords present in the code.
+        a. Accept a string of source code as input.
+        b. Return control flow keywords found in the code, providing a high-level overview of the code's flow.
 [req04] The `code_graph` function shall:
-        a. Accept file summary as its input.
-        b. Construct a dictionary representation that includes nodes and edges, illustrating relationships in the code.
-        c. Define various elements like function nodes, class nodes, method nodes.
-        d. Define the edges to depict relationships like function calls, method calls, and class inheritance.
-        e. Return the dictionary representation of the code graph.
+        a. Take the file summary and file details as input.
+        b. Construct a dictionary with nodes and edges that illustrate code relationships.
+        c. Define elements such as function nodes, class nodes, and method nodes.
+        d. Specify edges to represent relationships like function calls, method calls, and class inheritance.
+        e. Return a dictionary representation of the code graph, aiding in understanding the code's structure and inter-relationships.
 [req05] The `get_python_file_details` function shall:
         a. Accept a file path as an argument.
-        b. Extract details from the specified Python file.
-        c. Include the internal file graph and entire file graph in the file details.
-        d. Return a dictionary containing these details.
+        b. Extract detailed information from the specified Python file using the AST and the `CodeVisitor` class.
+        c. Include both the internal file graph and the entire file graph in the returned details.
+        d. Return a dictionary encompassing the extracted file details.
 """
 import ast
 import re
@@ -37,24 +36,15 @@ from typing import Dict, List, Optional, Union
 
 class ControlFlowVisitor(ast.NodeVisitor):
     """
-    This class inherits from ast.NodeVisitor and is used to visit nodes in the
-    AST (Abstract Syntax Tree).It extracts control flow keywords to give a 
-    high-level understanding of the program flow.
+    Inherits from ast.NodeVisitor to visit nodes in the AST and extract control flow keywords to provide a high-level understanding of the program flow.
     Attributes:
-        node_type_to_keyword (dict): A dictionary mapping AST node types to 
-            corresponding control flow keywords.
-        control_flow (list): A list storing the sequence of control flow 
-            keywords encountered in the AST.
+        node_type_to_keyword (dict): A dictionary mapping AST node types to corresponding control flow keywords.
+        control_flow (list): A list storing the sequence of control flow keywords encountered in the AST.
     Methods:
-        __init__(): Initializes a new instance of the class, setting up the
-            control flow list.
-        generic_visit(node): Method to visit a node. If the node type 
-            corresponds to a control flow keyword, it is added to the 
-            control_flow list. The method then calls the inherited
-            generic_visit to continue visiting other nodes.
-        get_control_flow(): Returns a string representing the control flow of
-            the program. The control flow keywords are joined in the order they
-            were encountered during the AST visit.
+        generic_visit(node: ast.AST) -> None:
+            Visit a node in the AST and extract the corresponding control flow keyword.
+        get_control_flow() -> str:
+            Return a string representation of the control flow of the program.
     """
     node_type_to_keyword = {
         ast.If: "if",
@@ -71,8 +61,23 @@ class ControlFlowVisitor(ast.NodeVisitor):
         ast.Module: "module",
     }
     def __init__(self):
+        """
+        Initialize a new instance of the class.
+        Args:
+            None
+        Returns:
+            None
+        """
         self.control_flow = []
+    
     def generic_visit(self, node):
+        """
+        Visit a node in the AST and extract the corresponding control flow keyword.
+        Args:
+            node: ast.AST: The node to visit.
+        Returns:
+            None
+        """
         keyword = self.node_type_to_keyword.get(type(node))
         if keyword:
             if isinstance(node, ast.FunctionDef):
@@ -80,12 +85,24 @@ class ControlFlowVisitor(ast.NodeVisitor):
             else:
                 self.control_flow.append(keyword)
         super().generic_visit(node)
+    
     def get_control_flow(self):
+        """
+        Return a string representation of the control flow of the program.
+        Args:
+            None
+        Returns:
+            str: The control flow of the program.
+        """
         return ' -> '.join(self.control_flow)
 
 def get_all_calls(node):
     """
     Recursively find all function calls in the subtree rooted at `node`.
+    Args:
+        node: ast.AST: The node to start the search from.
+    Returns:
+        list: A list of all function calls in the subtree rooted at `node`.
     """
     calls = []
     for child in ast.iter_child_nodes(node):
@@ -96,42 +113,73 @@ def get_all_calls(node):
 
 class CodeVisitor(ast.NodeVisitor):
     """
-    Visitor class for traversing an AST (Abstract Syntax Tree) and extracting
-    details about the code.
+    Visitor class for traversing an AST (Abstract Syntax Tree) and extracting details about the code.
     Attributes:
         code (str): The source code.
         functions(Dict): details about functions in the code.
         classes (Dict): details about classes in the code.
         file_info (Dict): details about the file.
     Methods:
-        visit_FunctionDef(node: ast.FunctionDef) -> None: Extract details 
-            about a function.
-        visit_ClassDef(node: ast.ClassDef) -> None: Extract details about a 
-            class.
-        extract_details(node: ast.AST, node_type: str) -> 
-            Dict[str, Union[str, List[str]]]: Extract details about a node.
-        analyze(node: ast.AST) -> None: Populate file_info with details about
-                the file.
+        visit_FunctionDef(node: ast.FunctionDef) -> None: 
+            Extract details about a function.
+        visit_ClassDef(node: ast.ClassDef) -> None: 
+            Extract details about a class.
+        extract_details(node: ast.AST, node_type: str) -> Dict[str, Union[str, List[str]]]: 
+            Extract details about a node.
+        analyze(node: ast.AST) -> None: 
+            Populate file_info with details about the file.
     """
     def __init__(self, code: str):
-        # initialize dictionaries to store function, class, and file definitions
+        """
+        Initialize a new instance of the class.
+        Args:
+            code: str: The source code.
+        Returns:
+            None
+        """
         self.code: str = code
         self.functions: Dict[str, Dict[str, Union[str, List[str]]]] = {}
         self.classes: Dict[str, Dict[str, Union[str, List[str]]]] = {}
         self.file_info: Dict[str, Union[str, List[str]]] = {}
         self.current_class: str = None
+    
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        if self.current_class: # if inside a class, add this function as a method of the class
-            self.classes[self.current_class][f'class_method_{node.name}'] = self.extract_details(node, 'method')
-        else: # populate function dictionary when function definition found in AST
-            self.functions[node.name] = self.extract_details(node, 'function')
-        self.generic_visit(node) # continue AST traversal to the next node
+        """
+        Extract details about a function.
+        Args:
+            node: ast.FunctionDef: The node to visit.
+        Returns:
+            None
+        """
+        details = self.extract_details(node, 'method' if self.current_class else 'function')
+        if self.current_class:
+            self.classes[self.current_class][f'class_method_{node.name}'] = details
+        else:
+            self.functions[node.name] = details
+        self.generic_visit(node)
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        """
+        Extract details about a class.
+        Args:
+            node: ast.ClassDef: The node to visit.
+        Returns:
+            None
+        """
         self.classes[node.name] = self.extract_details(node, 'class') # populate class dictionary when class definition found in AST
         self.current_class = node.name  # set current_class to indicate inside a class
         self.generic_visit(node) # continue AST traversal to the next node
         self.current_class = None  # reset current_class when finished with this class
+    
     def extract_details(self, node: ast.AST, node_type: str) -> Dict[str, Union[str, List[str]]]:
+        """
+        Extract details about a node.
+        Args:
+            node: ast.AST: The node to extract details from.
+            node_type: str: The type of node.
+        Returns:
+            Dict[str, Union[str, List[str]]]: The details extracted from the node.
+        """
         node_walk = list(ast.walk(node))
         details = {
             f"{node_type}_name": node.name, 
@@ -165,7 +213,13 @@ class CodeVisitor(ast.NodeVisitor):
         return details
 
     def analyze(self, node: ast.AST) -> None:
-        # traverse the AST rooted at 'node', create a list of all nodes within the current file, and populate 'file_info' with file details
+        """
+        Traverse the AST rooted at 'node', create a list of all nodes within the current file, and populate 'file_info' with file details
+        Args:
+            node: ast.AST: The node to analyze.
+        Returns:
+            None
+        """
         node_walk = list(ast.walk(node))
         self.visit(node)
         self.file_info = {
@@ -210,8 +264,7 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = 
         file_summary: Dict[str, Union[Dict, str]]: The details extracted from the file.
         internal_only: bool: If True, only include function calls where both the caller and called function are within the file.
     Returns:
-        dict: A dictionary with nodes and edges representing the relationships
-            in the code.
+        dict: A dictionary with nodes and edges representing the relationships in the code.
     """
     G = nx.DiGraph()
 
@@ -308,14 +361,10 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
     try:
         with open(file_path, "r", encoding="utf-8", errors='ignore') as f:
             code = f.read()
-    except PermissionError:
-        logging.warning(f"Permission denied: {file_path}")
+            tree = ast.parse(code)
+    except PermissionError or SyntaxError:
+        logging.warning(f"Permission denied or syntax error in file: {file_path}")
         return None 
-    try:
-        tree = ast.parse(code)
-    except SyntaxError:
-        logging.warning(f"Syntax error in file: {file_path}")
-        return None
     
     visitor = CodeVisitor(code)
     visitor.analyze(tree)

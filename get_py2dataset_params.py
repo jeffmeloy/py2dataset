@@ -53,7 +53,12 @@ MODEL_CONFIG_FILE = 'py2dataset_model_config.yaml'
 OUTPUT_DIR = 'datasets'
 
 def get_default_questions() -> List[Dict]:
-    """Return default question list"""
+    """Return default question list
+    Args:
+        None
+    Returns:
+        List[Dict]: The default question list
+    """
     questions = [
         {
             "id": "file_dependencies",
@@ -186,15 +191,21 @@ def get_default_questions() -> List[Dict]:
             "type": "class"
         }      
     ]
-    
     return questions
 
 
 def get_default_model_config() -> Dict:
-    """Return default model config dict"""
+    """Return default model config dict
+    Args:
+        None
+    Returns:
+        Dict: The default model config dictionary
+    """
     model_config = {
-        "prompt_template": "You are a master mathematician and Python programmer. Provide a brief yet thorough answer to the given question considering the context.\n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:",
+        "prompt_template": "You are a genius mathematician and expert Python programmer. Please review the provided Python code context and use your intelligence and expertise to provide the best answer to the question below, which will be used to train people and AI models. \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:",
+        "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
+            "model_inference_function": "from_pretrained",
             "model_params": {
                 "model_path": "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML",  
                 "model_type": "starcoder",
@@ -203,47 +214,44 @@ def get_default_model_config() -> Dict:
                 "threads": 16,
                 "batch_size": 16,
                 "max_new_tokens": 2048,
-                "gpu_layers": 24,
+                "gpu_layers": 0,
                 "reset": True
+                }
             }
         }
     return model_config
 
 
 def get_output_dir(output_dir: str='') -> str:
-    """Returns the appropriate output directory."""   
-    if output_dir: # Check if the directory exists and create it if not
-        output_dir = os.path.abspath(output_dir)
-    else: # Default to OUTPUT_DIR at the current working directory
-        output_dir = os.path.join(os.getcwd(), OUTPUT_DIR)
-    if not Path(output_dir).is_dir(): #create output_dir if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
+    """Returns the appropriate output directory.
+    Args:
+        output_dir (str): The directory to write the output to.
+    Returns:
+        str: The absolute path of the provided output_dir if it exists or can be created.
+    """
+    output_dir = os.path.abspath(output_dir or OUTPUT_DIR)
+    os.makedirs(output_dir, exist_ok=True)
     logging.info(f'Using output directory: {output_dir}')
     return output_dir
 
 
 def get_questions(questions_pathname: str) -> List[Dict]:
-    """Get questions from file or default"""
-    # check if questions_pathname is an empty string
-    if not questions_pathname:
-        questions_pathname = os.path.join(os.getcwd(), QUESTIONS_FILE)    
-
-    # verify if questions_pathname is a valid file
-    if not Path(questions_pathname).is_file():
-        logging.info(f'Questions file {questions_pathname} not found. Using default questions')
-        questions = get_default_questions()
-        return questions
-
-    # verify if questions_pathname is a valid json questions file
-    try:
+    """
+    Get questions from file or default
+    Args:
+        questions_pathname (str): The pathname of the questions file
+    Returns:
+        List[Dict]: The list of questions
+    """
+    try: # get questions from provided or default configuration file
+        if not questions_pathname:
+            questions_pathname = os.path.join(os.getcwd(), QUESTIONS_FILE)
         with open(questions_pathname, 'r') as f:
             questions = json.load(f)
-    except:
+        logging.info(f'Using questions from file: {questions_pathname}')
+    except: # get default questions if can't read questions_pathname file 
         logging.info(f'Questions file not valid: {questions_pathname} Using default questions')
         questions = get_default_questions()
-        return questions  
-
-    logging.info(f'Using questions from file: {questions_pathname}')
     return questions
 
 
@@ -251,73 +259,56 @@ def instantiate_model(model_config: Dict) -> object:
     """
     Imports and instantiates a model based on the provided configuration.
     Args:
-        model_config (dict): A dictionary containing the configuration for the
-            model. It should include the import path for the model class and
-            parameters for instantiation.
-        user_config (dict): A dictionary containing user-provided configurations.
-            If provided, these configurations will override the defaults.
+        model_config (dict): model configuration dictionary.
     Returns:
-        object: An instance of the specified model class, or None if there was
-            an error.
+        object: An instance of the specified model class, or None if error.
     """
-    model = None
     try:
         module_name, class_name = model_config['model_import_path'].rsplit('.', 1)
-        module = importlib.import_module(module_name)
-    except ImportError as e:
-        print(f"Failed to import module {module_name}. Error: {e}")
+        ModelClass = getattr(importlib.import_module(module_name), class_name)
+        model_params = model_config['model_params']
+        inference_function_name = model_config['model_inference_function']
+        if inference_function_name != "": 
+            inference_function = getattr(ModelClass, inference_function_name)
+            model = inference_function(model_params.pop('model_path'), **model_params)
+        else: 
+            model = ModelClass(model_params.pop('model_path'), **model_params)
         return model
-    try:
-        ModelClass = getattr(module, class_name)
-    except AttributeError as e:
-        print(f"Module {module_name} does not have a class named {class_name}. Error: {e}")
-        return model
-    
-    model_params = model_config['model_params']
-    try:
-        model = ModelClass.from_pretrained(model_params.pop('model_path'), **model_params)
-    except Exception as e:
-        print(f"Failed to instantiate the model with the provided parameters. Error: {e}")
-        return model
-
-    return model
+    except ImportError or AttributeError or Exception as e:
+        logging.info(f"Failed to instantiate the model. Error: {e}")    
+        return None
 
 
-def get_model(model_config_pathname: str):
+def get_model(model_config_pathname: str) -> tuple[object, str]:
     """
+    Returns an instantiated model and prompt template based on the model configuration.
     Agrs:
         model_config_pathname (str): The pathname of the model config file
     Returns:
         Tuple[object, str]: The instantiated model and prompt template 
     """
-    # check if model_config_pathname is an empty string
-    if not model_config_pathname:
-        model_config_pathname = os.path.join(os.getcwd(), MODEL_CONFIG_FILE)
-    
-    # verify if model_config_pathname is a valid file
-    if not Path(model_config_pathname).is_file():
-        logging.info(f'Model config file not found: {model_config_pathname} Using default model config')
-        model_config = get_default_model_config()
-        return instantiate_model(model_config['inference_model']), model_config['prompt_template']
     try:
+        if not model_config_pathname:
+            model_config_pathname = os.path.join(os.getcwd(), MODEL_CONFIG_FILE)
         with open(model_config_pathname, 'r') as config_file:
             model_config = yaml.safe_load(config_file)
+        logging.info(f'Using model config from file: {model_config_pathname}')
     except:
         logging.info(f'Model config file not valid: {model_config_pathname} Using default model config')
         model_config = get_default_model_config()
-        return instantiate_model(model_config['inference_model']), model_config['prompt_template']
-
-    logging.info(f'Using model config from file: {model_config_pathname}')
     return instantiate_model(model_config['inference_model']), model_config['prompt_template']
 
 
 def write_questions_file(output_dir: str='') -> None:
     """
     Writes the default questions to a file in JSON format.
+    Args:
+        output_dir (str): The directory to write the questions file to.
+    Returns:
+        None
     """
     questions = get_default_questions()
-    if not output_dir or not Path(output_dir).is_dir():
-        output_dir = os.getcwd()
+    output_dir = output_dir if output_dir and Path(output_dir).is_dir() else os.getcwd()
     with open(os.path.join(output_dir, QUESTIONS_FILE), 'w') as file:
         json.dump(questions, file, indent=4)
 
@@ -325,9 +316,12 @@ def write_questions_file(output_dir: str='') -> None:
 def write_model_config_file(output_dir: str='') -> None:
     """
     Writes the default model config to a file in YAML format.
+    Args:
+        output_dir (str): The directory to write the model config file to.
+    Returns:
+        None
     """
     model_config = get_default_model_config()
-    if not output_dir or not Path(output_dir).is_dir():
-        output_dir = os.getcwd()
+    output_dir = output_dir if output_dir and Path(output_dir).is_dir() else os.getcwd()
     with open(os.path.join(output_dir, MODEL_CONFIG_FILE), 'w') as file:
         yaml.dump(model_config, file)

@@ -1,4 +1,5 @@
 """
+Utility functions for reading the input and saving the output of the py2dataset script.
 Requirements:
 [req01] The `read_file` function shall:
         a. Accept a file path as an argument.
@@ -63,6 +64,8 @@ def write_file(data: Dict, file_path: Path) -> None:
     Args:
         data (Dict): The data to write to the file.
         file_path (Path): The path to the file.
+    Returns:
+        None
     """
     file_type = file_path.suffix[1:]
     with file_path.open('w') as f:
@@ -74,7 +77,13 @@ def write_file(data: Dict, file_path: Path) -> None:
 
 
 def convert_json_to_html(directory: str) -> None:
-
+    """
+    Convert JSON files within a given directory to HTML format.
+    Args:
+        directory (str): The directory where the JSON files are located.
+    Returns:
+        None    
+    """
     def preserve_spacing(text: str, tab_width: int = 4) -> str:
         """Preserve spaces and tabs in the provided text."""
         return text.replace(" ", "&nbsp;").replace("\t", "&nbsp;" * tab_width)
@@ -133,59 +142,42 @@ def convert_json_to_html(directory: str) -> None:
 
 def combine_json_files(directory: str, html: bool) -> Dict[str, List[Dict]]:
     """
-    Combine all JSON files in the output directory into 'qa.json' and 
-    'instruct.json', and then remove duplicates.
+    Combine all JSON files in the output directory into 'qa.json' and 'instruct.json', and then remove duplicates.
     Args:
         directory (str): The directory where the output files are located.
+        html (bool): Whether to convert JSON files to HTML format.
+    Returns:
+        A dictionary containing the 'qa_list' and 'instruct_list' datasets.
     """
-    file_names = ['qa.json', 'instruct.json']
-    keys = ['question', 'instruction']
-    combined_data = []
-    for file in file_names:
-        file_path = Path(directory) / file
-        if file_path.exists():
-            combined_data = read_file(file_path)
-        for json_file in Path(directory).rglob(f'*.{file}'):
-            combined_data.extend(read_file(json_file))
-        combined_data = list({i[keys[file_names.index(file)]]: i for i in combined_data}.values())
-        write_file(combined_data, file_path)
-        if file == 'qa.json':
-            qa_data = combined_data.copy()
-        if file == 'instruct.json':
-            instruct_data = combined_data.copy()
-        
-        # Create purpose-specific file
-        purpose_data = []
-        for item in combined_data:
-            if item[keys[file_names.index(file)]].startswith('What is the purpose'):
-                purpose_data.append(item)
-        if purpose_data:
-            purpose_file_path = file_path.with_name(file_path.stem + '_purpose.json')
-            write_file(purpose_data, purpose_file_path)
-
-        # Reset combined_data for the next iteration
+    qa_data = []
+    instruct_data = []
+    for file_name in ['qa.json', 'instruct.json']:
+        file_path = Path(directory) / file_name
         combined_data = []
+        for json_file in Path(directory).rglob(f'*.{file_name}'):
+            combined_data.extend(read_file(json_file))
+        combined_data = list({i['question' if file_name == 'qa.json' else 'instruction']: i for i in combined_data}.values())
+        write_file(combined_data, file_path)
+        if file_name == 'qa.json':
+            qa_data = combined_data.copy()
+        else:
+            instruct_data = combined_data.copy()
+            # Create purpose-specific file
+            purpose_data = [item for item in combined_data if item['instruction'].startswith('What is the purpose')]
+            if purpose_data:
+                purpose_file_path = file_path.with_name(file_path.stem + '_purpose.json')
+                write_file(purpose_data, purpose_file_path)
+            # Remove duplicate "input" fields in instruct.json and instruct_purpose.json
+            dataset = read_file(file_path)
+            seen_inputs = set()
+            for item in dataset:
+                if item['input'] in seen_inputs:
+                    item['input'] = ''
+                else:
+                    seen_inputs.add(item['input'])
+            write_file(dataset, Path(directory) / ('cleaned_'+ file_name))
 
-    # remove duplicate "input" info in the instruct.json and instruct_purpose.json information 
-    # to make a cleaned_instruct.json cleaned_instruct_purpose_json
-    file_names = ['instruct.json', 'instruct_purpose.json']
-    for file in file_names:
-        seen_inputs = set()
-        file_path = Path(directory) / file
-        if not file_path.exists():
-            continue
-        dataset = read_file(file_path)
-        if not dataset:
-            continue
-        for item in dataset:
-            if item['input'] in seen_inputs:
-                item['input'] = ''
-            else:
-                seen_inputs.add(item['input'])
-        cleaned_instruct_file_path = Path(directory) / ('cleaned_'+ file) 
-        write_file(dataset, cleaned_instruct_file_path)
-
-    # save html file for each json file in the output directory
+    # Save html file for each json file in the output directory
     if html:
         convert_json_to_html(directory)
 
@@ -198,28 +190,22 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
     Args:
         file_details (dict): The details extracted from the Python file.
         base_name (str): The base name of the output files.
-        output_subdir (Path): The subdirectory where the output files will be
-            saved.
+        output_subdir (Path): The subdirectory where the output files will be saved.
+    Returns:
+        None
     """
     for graph_type in ['internal_code_graph', 'entire_code_graph']:
         # Create graphs
         output_file = output_subdir / f'{base_name}.{graph_type}.png'  
         G = nx.DiGraph()
-        for node_name in file_details['file_info'][graph_type]['nodes']:
-            G.add_node(node_name)
+        # Add nodes
+        G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])
         # Add edges
         for edge in file_details['file_info'][graph_type]['edges']:
-            source = edge['source']
-            target = edge['target']
+            source, target = edge['source'], edge['target']
             if source in G.nodes and target in G.nodes:
-                edge_data = {}
-                if 'target_inputs' in edge:
-                    edge_data['target_inputs'] = edge['target_inputs']
-                if 'target_returns' in edge:
-                    edge_data['target_returns'] = edge['target_returns']
-                G.add_edge(source, target, **edge_data)
-            
-        # Save code graph as png
+               G.add_edge(source, target, **{k: v for k, v in edge.items() if k in ['target_inputs', 'target_returns']})
+        # Draw graphs
         plt.figure(figsize=(20, 20))
         pos = nx.spring_layout(G)
         nx.draw(G, pos, with_labels=True, font_weight='bold', font_size = 8, node_shape='s', node_size=500, width=1, arrowsize=12)
@@ -232,34 +218,37 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
                 label.append(f"\nReturns: {', '.join(edge[2]['target_returns'])}")
             edge_labels[(edge[0], edge[1])] = '\n'.join(label)
         nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
-        plt.savefig(output_file)
+        plt.savefig(output_file) # Save the figure
         plt.close()  # Close the figure
 
-def save_python_data(file_details, qa_list, instruct_list, relative_path, output_dir, graph, html):
-    
+
+def save_python_data(file_details: dict, qa_list: list, instruct_list: list, relative_path: Path, output_dir: str, graph: bool, html: bool) -> None:
+    """
+    Save Python file details as a YAML file, the QA and instruction data as JSON files, and code graphs if the graph flag is set to True.
+    Args:
+        file_details (dict): The details extracted from the Python file.
+        qa_list (list): The QA data extracted from the Python file.
+        instruct_list (list): The instruction data extracted from the Python file.
+        relative_path (Path): The relative path to the Python file.
+        output_dir (str): The directory where the output files will be saved.
+        graph (bool): Whether to generate code graphs.
+        html (bool): Whether to convert JSON files to HTML format.
+    Returns:
+        None
+    """
     output_subdir = Path(output_dir) / relative_path.parts[0]
     output_subdir.mkdir(parents=True, exist_ok=True)
     base_name = '.'.join(part for part in relative_path.parts)
 
     # write qa.json and instrunct.json files
-    file_names = [
-        f'{base_name}.qa.json', 
-        f'{base_name}.instruct.json', 
-        f'{base_name}.details.yaml'
-        ]
-    contents = [
-        qa_list, 
-        instruct_list, 
-        file_details
-        ]
+    file_names = [f'{base_name}.qa.json', f'{base_name}.instruct.json', f'{base_name}.details.yaml']
+    contents = [qa_list, instruct_list, file_details]
 
     for file_name, content in zip(file_names, contents):
         write_file(content, output_subdir / file_name)
 
-    # Create code graph images
-    if graph:
-        # add error handling if anything goes wrong with creating or saving the graph
+    if graph: # Create code graph images
         try:
             create_code_graph(file_details, base_name, output_subdir)
         except:
-            logging.info(f'Error creating graph for {file_path}')
+            logging.info(f'Error creating graph for {base_name}')

@@ -1,20 +1,21 @@
-prompt_template: "You are a master mathematician and Python programmer. Provide a brief yet thorough answer to the given question considering the context. 
-                  \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:"
+prompt_template: "You are a genius mathematician and expert Python programmer. Please review the provided Python code context and use your intelligence and expertise to provide the best answer to the question below, which will be used to train people and AI models. 
+                  \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning step by step: {query}\n### Response:"
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
+  model_inference_function: "from_pretrained"
   model_params:
     ## USABLE OUTPUT WITH CURRENT PROMPT TEMPLATE
     model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-    model_type: "starcoder"
+    model_type: "gpt_bigcode"
     local_files_only: false
     #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
-    #model_type: "starcoder"
+    #model_type: "gpt_bigcode"
     #local_files_only: false
     #model_path: "./models/wizardcoder-guanaco-15b-v1.1.ggmlv1.q4_0.bin"
-    #model_type: "starcoder"
+    #model_type: "gpt_bigcode"
     #local_files_only: true
     #model_path: "./models/starcoderplus-guanaco-gpt4.ggmlv1.q4_0.bin"
-    #model_type: "starcoder"
+    #model_type: "gpt_bigcode"
     #local_files_only: true
     ## NOT USABLE OUTPUT WITH CURRENT PROMPT TEMPLATE
     #model_path: "./models/vicuna-13b-v1.5-16k.ggmlv3.q4_1.bin"
@@ -27,6 +28,5 @@ inference_model:
     threads: 30
     batch_size: 32
     max_new_tokens: 2048
-    #  Currently only LLaMA, MPT and Falcon models support the gpu_layers parameters.
-    gpu_layers: 64 
-    reset: True
+    gpu_layers: 0
+    reset: true
