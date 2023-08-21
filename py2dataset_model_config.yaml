@@ -5,20 +5,26 @@ inference_model:
   model_inference_function: "from_pretrained"
   model_params:
     ## USABLE OUTPUT WITH CURRENT PROMPT TEMPLATE
-    model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-    model_type: "gpt_bigcode"
-    local_files_only: false
+    #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
+    #model_type: "gpt_bigcode"
+    #local_files_only: false
     #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
+    #model_type: "gpt_bigcode"
+    #local_files_only: false
+    #model_path: "TheBloke/Octocoder-GGML"
     #model_type: "gpt_bigcode"
     #local_files_only: false
     #model_path: "./models/wizardcoder-guanaco-15b-v1.1.ggmlv1.q4_0.bin"
     #model_type: "gpt_bigcode"
     #local_files_only: true
-    #model_path: "./models/starcoderplus-guanaco-gpt4.ggmlv1.q4_0.bin"
+    model_path: "./models/starcoderplus-guanaco-gpt4.ggmlv1.q4_0.bin"
+    model_type: "gpt_bigcode"
+    local_files_only: true
+    #model_path: "./models/octocoder.ggmlv1.q4_1.bin"
     #model_type: "gpt_bigcode"
     #local_files_only: true
     ## NOT USABLE OUTPUT WITH CURRENT PROMPT TEMPLATE
-    #model_path: "./models/vicuna-13b-v1.5-16k.ggmlv3.q4_1.bin"
+    #model_path: "./models/llama-2-13b-guanaco-qlora.ggmlv3.q4_K_S.bin"
     #model_type: "llama"
     #local_files_only: true
     #model_path: "TheBloke/stablecode-instruct-alpha-3b-GGML"

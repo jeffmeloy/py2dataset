@@ -7,8 +7,6 @@ Requirements:
         c. Ensure each dictionary has the keys: id, text, and type.
 [req02] The `get_default_model_config` function shall:
         a. Return a dictionary representing the default model configuration.
-        b. Include keys: prompt_template and inference_model.
-        c. Ensure the inference_model key contains a model_import_path and model_params.
 [req03] The `get_output_dir` function shall:
         a. Accept an optional output_dir argument.
         b. Return the absolute path of the provided output_dir if it exists or can be created.
@@ -167,29 +165,19 @@ def get_default_questions() -> List[Dict]:
         },
         {
             "id": "function_purpose",
-            "text": "What is the purpose and processing summary of the function: '{function_name}' defined in the Python file: '{filename}'?",
+            "text": "What is the purpose and processing summary of the function: '{function_name}' and its variables: '{function_variables}' in the Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "class_purpose",
-            "text": "What is the purpose and processing summary of the class: '{class_name}' defined in the Python file: '{filename}'?",
+            "text": "What is the purpose and processing summary of the class: '{class_name}' and its variables: '{class_variables}' in the Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "method_purpose",
             "text": "What is the purpose and processing summary of the method: '{method_name}' defined in the class: '{class_name}' in the Python file: '{filename}'?",
             "type": "method"
-        },
-        {
-            "id": "function_variable_purpose",
-            "text": "What is the purpose and usage of each of these variables: '{function_variables}' defined in the function: '{function_name}' in the Python file: '{filename}'?",
-            "type": "function"
-        },       
-        {
-            "id": "class_variable_purpose",
-            "text": "What is the purpose and usage of each of these variables: '{class_variables}' defined in the class: '{class_name}' in the Python file: '{filename}'?",
-            "type": "class"
-        }      
+        }   
     ]
     return questions
 

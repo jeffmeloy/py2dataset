@@ -1,6 +1,5 @@
 """
-For each Python file within given directory, generate, save, and return datasets
-that include responses to questions about the code.
+For each Python file within given directory, generate, save, and return datasets that include responses to questions about the code.
 Requirements:
 [req00] The extract_python_data function shall:
     a. Accept parameters for the Python file path, base name, model configuration pathname, questions dictionary, use of LLM, and use of summary.

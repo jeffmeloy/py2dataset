@@ -7,10 +7,9 @@ Requirements:
         c. Provide the `clean_and_get_unique_elements` method to clean an input string (str) and return a string of unique elements.
         d. Provide the `add_to_list` method to add a response (str) to a list (List[Dict]).
         e. Provide the `get_response_from_llm` method to retrieve a response from the language model.
-        f. Provide the `process_items` method to process questions related to the purpose of a variable.
-        g. Provide the `process_question` method to process a question and add the generated response to the qa_list and instruct_list.
-        h. Provide the `process_question_type` method to process questions related to a file, function, class, or method.
-        i. Provide the `generate` method to generate responses for all questions in the list and return the qa_list and instruct_list.
+        f. Provide the `process_question` method to process a question and add the generated response to the qa_list and instruct_list.
+        g. Provide the `process_question_type` method to process questions related to a file, function, class, or method.
+        h. Provide the `generate` method to generate responses for all questions in the list and return the qa_list and instruct_list.
 [req02] The `get_python_datasets` function shall:
         a. Accept a Python file path (str), file details (Dict), base name (str), list of questions (List[Dict]), use_summary flag (bool), use_llm flag (bool), language model (object), and prompt (str) as input.
         b. Create an instance of the `DatasetGenerator` class using the provided input.
@@ -30,8 +29,7 @@ logger = logging.getLogger(__name__)
 
 class DatasetGenerator:
     """
-    A class used to generate JSON formatted dictionary outputs for a Python 
-    file.
+    Generate JSON formatted dictionary outputs for a Python file.
     Attributes:
         file_path (str): The path to the Python file.
         file_details (Dict[str, Any]): Details of the Python file.
@@ -48,25 +46,28 @@ class DatasetGenerator:
         clean_and_get_unique_elements(input_str: str) -> str: 
             Clean and return unique elements from an input string.
         add_to_list(list_to_update: List[Dict], query: str, response: str, additional_field=None) -> List[Dict]: 
-            Add a response to a list.
+            Add response to qa and instruct list.
         get_response_from_llm(query: str, context: str) -> str:
-            Retrieve a response from the language model.
-        get_variable_purpose(question_id: str, question_text: str, base_name: str, name: str, info: Dict, context: str, variable_type: str) -> None: 
-            Process questions about a variable's purpose.
-        process_question(question_id: str, query: str, context: str, info) -> None: 
-            Process a question and add the response to lists.
-        process_file_question(question_id: str, question_text: str) -> None:
-            Process questions related to a file.
-        process_func_class_question(question_type: str, question_id: str, question_text: str) -> None: 
-            Process questions about a function or class.
-        generate() -> Tuple[List[Dict], List[Dict]]: 
-            Generate responses for all questions and return them.
+            Get language model response to query for given context.
+        process_question(question_type: str, question_id: str, query: str, context: str, info: Dict) -> None:
+            Process question and add generated response to the qa_list and instruct_list.
+        process_question_type(question_type: str, question_id: str, question_text: str) -> None:
+            Process question related to file, function, class, or method.
+        generate() -> Tuple[List[Dict], List[Dict]]:
+            Generate responses for all the questions and return the qa_list and instruct_list.
     """
     def __init__(self, file_path: str, file_details: Dict, base_name: str, questions: List[Dict], use_summary: bool, use_llm: bool, llm: object, prompt: str) -> None:
         self.file_path = file_path
         self.file_details = file_details
         self.base_name = base_name
         self.questions = questions
+        self.use_summary = use_summary
+        self.use_llm = use_llm
+        self.llm = llm
+        self.prompt = prompt
+        if not self.use_llm or self.llm is None:
+            self.use_llm = False
+            self.llm = None
         self.qa_list = []
         self.instruct_list = []
         self.question_mapping = {
@@ -75,19 +76,11 @@ class DatasetGenerator:
             'class': 'classes',
             'method': 'classes'
         }
-        self.use_summary = use_summary
-        self.use_llm = use_llm
-        self.llm = llm
-        self.prompt = prompt
-        if not self.use_llm or self.llm is None:
-            self.use_llm = False
-            self.llm = None
-
 
     @staticmethod
     def clean_and_get_unique_elements(input_str: str) -> str:
         """
-        Cleans an input string and returns a string of unique elements.
+        Clean input string and return string of unique elements.
         Args:
             input_str (str): The input string to be cleaned.
         Returns:
@@ -100,7 +93,7 @@ class DatasetGenerator:
     @staticmethod
     def add_to_list(list_to_update: List[Dict], query: str, response: str, additional_field=None) -> List[Dict]:
         """
-        Adds a response to a list.
+        Adds response qa and instruct list.
         Args:
             list_to_update (List[Dict]): The list to be updated.
             query (str): The query to be added.
@@ -119,7 +112,7 @@ class DatasetGenerator:
 
     def get_response_from_llm(self, query: str, context: str) -> str:
         """
-        Gets a response from the language model.
+        Get language model response to query for given context.
         Args:
             query (str): The query to be used for generating the response.
             context (str): The context to be used for generating the response.
@@ -136,32 +129,9 @@ class DatasetGenerator:
             logger.error('Failed to generate model response')
         return response
 
-
-    def process_items(self, question_type: str, question_id: str, question_text: str, base_name: str, name: str, info: Dict, context: str, item_type: str) -> None:
-        """
-        Processes questions related to the purpose of a variable.
-        Args:
-            question_type (str): The type of question to be processed.
-            question_id (str): The ID of the question to be processed.
-            question_text (str): The text of the question to be processed.
-            base_name (str): The base name of the Python file.
-            name (str): The name of the variable.
-            info (Dict): The information of the variable.
-            context (str): The context to be used for generating the response.
-            item_type (str): The type of the variable.
-        Returns:
-            None
-        """
-        if info[item_type]:
-            items = [item.strip() for item in self.clean_and_get_unique_elements(str(info[item_type])).split(',') if item]
-            itemstring = ', '.join(items)
-            query = question_text.format(filename=base_name, **{f'{question_type.split("_")[0]}_name': name, f'{question_type.split("_")[0]}_variables': itemstring})
-            self.process_question(question_type, question_id, query, context, info)
-
-
     def process_question(self, question_type: str, question_id: str, query: str, context: str, info: Dict) -> None:
         """
-        Processes a question and adds the generated response to the qa_list and instruct_list.
+        Process question and add the generated response to the qa_list and instruct_list.
         Args:
             question_type (str): The type of question to be processed.
             question_id (str): The ID of the question to be processed.
@@ -186,7 +156,7 @@ class DatasetGenerator:
 
     def process_question_type(self, question_type: str, question_id: str, question_text: str) -> None:
         """
-        Processes questions related to a file, function, class, or method.
+        Process questions related to a file, function, class, or method.
         Args:
             question_type (str): The type of question to be processed.
             question_id (str): The ID of the question to be processed.
@@ -208,29 +178,31 @@ class DatasetGenerator:
                         mapping = {'class_name': class_name, 'method_name': method_name}
                         query = question_text.format(filename=self.base_name, **mapping)
                         self.process_question(question_type, question_id, query, context, method_info)
-        else:
+        else: #question_type = class or function
             for name, info in self.file_details[self.question_mapping[question_type]].items():
                 context = info[f'{question_type}_code']
                 mapping = {f'{question_type}_name': name}
-                if question_id == f'{question_type}_variable_purpose' and self.use_llm:
-                    self.process_items(question_type, question_id, question_text, self.base_name, name, info, context, f'{question_type}_variables')
-                elif question_id != f'{question_type}_variable_purpose':
+                if question_id == f'{question_type}_purpose' and self.use_llm:
+                    item_type = f'{question_type}_variables'
+                    itemstring = ''
+                    if info[item_type]:
+                        items = [item.strip() for item in self.clean_and_get_unique_elements(str(info[item_type])).split(',') if item]
+                        itemstring = ', '.join(items)
+                    query = question_text.format(filename=self.base_name, **{f'{question_type.split("_")[0]}_name': name, f'{question_type.split("_")[0]}_variables': itemstring})
+                elif question_id != f'{question_type}_purpose':
                     query = question_text.format(filename=self.base_name, **mapping)
-                    self.process_question(question_type, question_id, query, context, info)
+                self.process_question(question_type, question_id, query, context, info)
 
     def generate(self) -> Tuple[List[Dict], List[Dict]]:
         """
-        Generates responses for all the questions and returns the qa_list and instruct_list.
+        Generate responses for all the questions and returns the qa_list and instruct_list.
         Args:
             None
         Returns:
             Tuple[List[Dict], List[Dict]]: The generated question-answer pairs and instructions.
         """
         for question in self.questions:
-            question_id = question['id']
-            question_text = question['text']
-            question_type = question['type']
-            self.process_question_type(question_type, question_id, question_text)
+            self.process_question_type(question['type'], question['id'], question['text'])
         return self.qa_list, self.instruct_list
 
 

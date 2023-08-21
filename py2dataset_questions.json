@@ -31,72 +31,72 @@
     },
     {
         "id": "function_inputs",
-        "text": "What are the inputs to the function: '{function_name}' within the Python file: '{filename}'?",
+        "text": "What are the inputs to the function: '{function_name}' in the Python file: '{filename}'?",
         "type": "function"
     },
     {
         "id": "function_docstring",
-        "text": "What is the docstring of the function: '{function_name}' within the Python file: '{filename}'?",
+        "text": "What is the docstring of the function: '{function_name}' in the Python file: '{filename}'?",
         "type": "function"
     },
     {
         "id": "function_calls",
-        "text": "What calls are made in the function: '{function_name}' within the Python file: '{filename}'?",
+        "text": "What calls are made in the function: '{function_name}' in the Python file: '{filename}'?",
         "type": "function"
     },
     {
         "id": "function_variables",
-        "text": "What variables are defined in the function: '{function_name}' within the Python file: '{filename}'?",
+        "text": "What variables are defined in the function: '{function_name}' in the Python file: '{filename}'?",
         "type": "function"
     }, 
     {
         "id": "function_returns",
-        "text": "What are the returned items from the function: '{function_name}' within the Python file: '{filename}'?",
+        "text": "What are the returned items from the function: '{function_name}' in the Python file: '{filename}'?",
         "type": "function"
     },
     {
         "id": "class_methods",
-        "text": "What are the methods defined within the class: '{class_name}' within the Python file: '{filename}'?",
+        "text": "What are the methods defined in the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "class"
     },
     {
         "id": "class_docstring",
-        "text": "What is the docstring of the class: '{class_name}' within the Python file: '{filename}'?",
+        "text": "What is the docstring of the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "class"
     },
     {
         "id": "class_attributes",
-        "text": "What are the attributes of the class: '{class_name}' within the Python file: '{filename}'?",
+        "text": "What are the attributes of the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "class"
     },
     {
         "id": "class_variables",
-        "text": "What variables are defined in the class: '{class_name}' within the Python file: '{filename}'?",
+        "text": "What variables are defined in the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "class"
     },
     {
         "id": "class_inheritance",
-        "text": "What is the Inheritance of the class: '{class_name}' within the Python file: '{filename}'?",
+        "text": "What is the Inheritance of the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "class"
     },
     {
         "id": "method_inputs",
-        "text": "What are the inputs to method: '{method_name}' within the class: '{class_name}' in the Python file: '{filename}'?",
+        "text": "What are the inputs to method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "method"
     },
     {
         "id": "method_docstring",
-        "text": "What is the docstring of the method: '{method_name}' within the class: '{class_name}' in the Python file: '{filename}'?",
+        "text": "What is the docstring of the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "method"
     },
     {
         "id": "method_calls",
-        "text": "What calls are made in the method: '{method_name}' within the class: '{class_name}' in the Python file: '{filename}'?",
+        "text": "What calls are made in the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "method"
     },
     {
         "id": "method_returns",
-        "text": "What are the returns from the method: '{method_name}' within the class: '{class_name}' in the Python file: '{filename}'?",
+        "text": "What are the returns from the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "method"
     },
     {   
@@ -106,27 +106,17 @@
     },
     {
         "id": "function_purpose",
-        "text": "What is the purpose and processing summary of the function: '{function_name}' within the Python file: '{filename}'?",
+        "text": "What is the purpose and processing summary of the function: '{function_name}' and its variables: '{function_variables}' in the Python file: '{filename}'?",
         "type": "function"
     },
     {
         "id": "class_purpose",
-        "text": "What is the purpose and processing summary of the class: '{class_name}' within the Python file: '{filename}'?",
+        "text": "What is the purpose and processing summary of the class: '{class_name}' and its variables: '{class_variables}' in the Python file: '{filename}'?",
         "type": "class"
     },
     {
         "id": "method_purpose",
-        "text": "What is the purpose and processing summary of the method: '{method_name}' within the class: '{class_name}' in the Python file: '{filename}'?",
+        "text": "What is the purpose and processing summary of the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "method"
-    },
-    {
-        "id": "function_variable_purpose",
-        "text": "What is the purpose and usage of each of these variables: '{function_variables}' within the function: '{function_name}' in the Python file: '{filename}'?",
-        "type": "function"
-    },       
-    {
-        "id": "class_variable_purpose",
-        "text": "What is the purpose and usage of each of these variables: '{class_variables}' within the class: '{class_name}' in the Python file: '{filename}'?",
-        "type": "class"
     }
 ]
