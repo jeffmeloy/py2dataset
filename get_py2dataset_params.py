@@ -34,7 +34,6 @@ Requirements:
         b. Write the default model configuration to the MODEL_CONFIG_FILE in the specified directory.
         c. Write the default model configuration to the MODEL_CONFIG_FILE in the current working directory if the output_dir argument is not provided or invalid.
 """
-
 import os
 import json
 import logging

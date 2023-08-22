@@ -1,13 +1,13 @@
-prompt_template: "You are a genius mathematician and expert Python programmer. Please review the provided Python code context and use your intelligence and expertise to provide the best answer to the question below, which will be used to train people and AI models. 
+prompt_template: "Assuming the role of a master mathematician and expert Python developer, please analyze the given Python code. Provide a clear, concise response to the question and explain how the code implements its mathematical and logical functions, making it understandable for both humans and AI models. 
                   \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning step by step: {query}\n### Response:"
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
   model_params:
     ## USABLE OUTPUT WITH CURRENT PROMPT TEMPLATE
-    #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-    #model_type: "gpt_bigcode"
-    #local_files_only: false
+    model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
+    model_type: "gpt_bigcode"
+    local_files_only: false
     #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
     #model_type: "gpt_bigcode"
     #local_files_only: false
@@ -17,9 +17,9 @@ inference_model:
     #model_path: "./models/wizardcoder-guanaco-15b-v1.1.ggmlv1.q4_0.bin"
     #model_type: "gpt_bigcode"
     #local_files_only: true
-    model_path: "./models/starcoderplus-guanaco-gpt4.ggmlv1.q4_0.bin"
-    model_type: "gpt_bigcode"
-    local_files_only: true
+    #model_path: "./models/starcoderplus-guanaco-gpt4.ggmlv1.q4_0.bin"
+    #model_type: "gpt_bigcode"
+    #local_files_only: true
     #model_path: "./models/octocoder.ggmlv1.q4_1.bin"
     #model_type: "gpt_bigcode"
     #local_files_only: true
@@ -30,9 +30,11 @@ inference_model:
     #model_path: "TheBloke/stablecode-instruct-alpha-3b-GGML"
     #model_type: "gpt_neox"
     #local_files_only: false
-    lib: "avx2"
-    threads: 30
-    batch_size: 32
+    ## MODEL CONFIGURATION PARAMETERS
+    #avx2 and gpu_layers are not compatible with ctransformers
+    #lib: "avx2"
+    threads: 16
+    batch_size: 256
     max_new_tokens: 2048
-    gpu_layers: 0
-    reset: true
+    gpu_layers: 32
+    reset: false
