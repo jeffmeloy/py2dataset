@@ -1,0 +1,2317 @@
+file_info:
+  file_code: "\"\"\"\nUtility functions for reading the input and saving the output\
+    \ of the py2dataset script.\nRequirements:\n[req01] The `read_file` function shall:\n\
+    \        a. Accept a file path as an argument.\n        b. Read and return the\
+    \ contents of a JSON or YAML file as a dictionary.\n[req02] The `write_file` function\
+    \ shall:\n        a. Accept a dictionary and a file path as arguments.\n     \
+    \   b. Write the dictionary to a file in either JSON or YAML format.\n[req03]\
+    \ The `convert_json_to_html` function shall:\n        a. Convert JSON files within\
+    \ a given directory to HTML format.\n        b. Save each converted file with\
+    \ a .html extension.\n        c. Preserve spacing and tabs for the 'input' field.\n\
+    [req04] The `combine_json_files` function shall:\n        a. Accept a directory\
+    \ path as an argument.\n        b. Merge all JSON files in the directory.\n  \
+    \      c. Remove duplicates from the combined JSON files.\n        d. Write the\
+    \ combined data to 'instruct.json' files.\n        e. Convert the merged JSON\
+    \ files to HTML format.\n        f. Return the 'instruct_list' datasets.\n[req05]\
+    \ The `create_code_graph` function shall:\n        a. Accept details of a Python\
+    \ file, a base name, and an output directory as arguments.\n        b. Generate\
+    \ code graphs based on the provided file details.\n        c. Save the graphs\
+    \ as PNG images in the specified output directory.\n[req06] The `save_python_data`\
+    \ function shall:\n        a. Accept details of a Python file, a base name, and\
+    \ an output directory as arguments.\n        b. Save the details of the Python\
+    \ file as a YAML file.\n        c. Save the instruction data as JSON files.\n\
+    \        d. Generate and save code graphs.\n\"\"\"\nimport sys\nimport os\nimport\
+    \ re\nimport json\nimport logging\nimport yaml\nimport matplotlib.pyplot as plt\n\
+    import networkx as nx\nfrom html import escape\nfrom pathlib import Path\nfrom\
+    \ typing import Dict, List, Union\n\n\ndef read_file(file_path: Path) -> Dict:\n\
+    \    \"\"\"\n    Reads a JSON or YAML file and returns its contents as a dictionary.\n\
+    \    Args:\n        file_path (Path): The path to the file.\n    Returns:\n  \
+    \      The contents of the file as a dictionary.\n    \"\"\"\n    file_type =\
+    \ file_path.suffix[1:]\n    with file_path.open() as f:\n        if file_type\
+    \ == 'json':\n            return json.load(f)\n        elif file_type == 'yaml':\n\
+    \            return yaml.load(f)\n\n\ndef write_file(data: Dict, file_path: Path)\
+    \ -> None:\n    \"\"\"\n    Writes a dictionary to a JSON or YAML file. \n   \
+    \ Args:\n        data (Dict): The data to write to the file.\n        file_path\
+    \ (Path): The path to the file.\n    Returns:\n        None\n    \"\"\"\n    file_type\
+    \ = file_path.suffix[1:]\n    with file_path.open('w') as f:\n        if file_type\
+    \ == 'json':\n            json.dump(data, f, indent=4)\n        elif file_type\
+    \ == 'yaml':\n            yaml.SafeDumper.ignore_aliases = lambda *args: True\n\
+    \            yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)\n\n\n\
+    def convert_json_to_html(directory: str) -> None:\n    \"\"\"\n    Convert JSON\
+    \ files within a given directory to HTML format.\n    Args:\n        directory\
+    \ (str): The directory where the JSON files are located.\n    Returns:\n     \
+    \   None    \n    \"\"\"\n    def preserve_spacing(text: str, tab_width: int =\
+    \ 4) -> str:\n        \"\"\"Preserve spaces and tabs in the provided text.\"\"\
+    \"\n        return text.replace(\" \", \"&nbsp;\").replace(\"\\t\", \"&nbsp;\"\
+    \ * tab_width)\n\n    for json_file in Path(directory).rglob('*.json'):\n    \
+    \    dataset = read_file(json_file)\n        if not dataset:\n            continue\n\
+    \n        html_file = json_file.with_suffix('.html')\n        html_content = \"\
+    \"\"\n        <html>\n        <head>\n            <style>\n                table\
+    \ {border-collapse: collapse; width: 100%; table-layout: fixed;}\n           \
+    \     th, td {\n                    border: 1px solid black;\n               \
+    \     padding: 8px;\n                    text-align: left;\n                 \
+    \   white-space: pre-line;\n                    vertical-align: top;\n       \
+    \             word-wrap: break-word;\n                }\n            </style>\n\
+    \        </head>\n        <body>\n            <table>\n                <thead>\n\
+    \                    <tr>\n        \"\"\"\n        column_count = len(dataset[0].keys())\n\
+    \        column_width = 100 / column_count  # Calculate the width for each column\
+    \ based on the number of columns\n        for key in dataset[0].keys():\n    \
+    \        html_content += f\"<th style='width: {column_width}%;'>{key}</th>\"\n\
+    \        html_content += \"\"\"\n                    </tr>\n                </thead>\n\
+    \                <tbody>\n        \"\"\"\n        for entry in dataset:\n    \
+    \        html_content += \"<tr>\"\n            for key in entry:\n           \
+    \     # Convert \\n to HTML line breaks\n                value = escape(str(entry[key]))\n\
+    \                value = preserve_spacing(value)\n                value = value.replace('\\\
+    n', '<br/>')\n                html_content += f\"<td>{value}</td>\"\n        \
+    \    html_content += \"</tr>\"\n\n        html_content += \"\"\"\n           \
+    \     </tbody>\n            </table>\n        </body>\n        </html>\n     \
+    \   \"\"\"\n        html_file_path = json_file.with_suffix('.html')\n        try:\
+    \   \n            with open(html_file_path, 'w', encoding='utf-8') as file:\n\
+    \                file.write(html_content)\n        except:\n            logging.save(logging.info(f'Failed\
+    \ saving: {html_file_path}'))\n\n\ndef combine_json_files(directory: str) -> Dict[str,\
+    \ List[Dict]]:\n    \"\"\"\n    Combine all JSON files in the output directory\
+    \ into 'instruct.json', and then remove duplicates.\n    Args:\n        directory\
+    \ (str): The directory where the output files are located.\n    Returns:\n   \
+    \     A dictionary containing the 'instruct_list' datasets.\n    \"\"\"\n   \n\
+    \    def remove_duplicate_dataset_entries(dataset: List[Dict], key1: str, key2:\
+    \ str) -> List[Dict]:\n        \"\"\"\n        Remove duplicate entries from the\
+    \ provided dataset based on the provided keys.\n        Args:\n            dataset\
+    \ (List[Dict]): The dataset to remove duplicates from.\n            key1 (str):\
+    \ The first key to check for duplicates.\n            key2 (str): The second key\
+    \ to check for duplicates.\n        Returns:\n            A dataset without duplicate\
+    \ entries.\n        \"\"\"\n        seen = set()\n        result = []\n      \
+    \  for item in dataset:\n            if (item[key1], item[key2]) not in seen:\n\
+    \                seen.add((item[key1], item[key2]))\n                result.append(item)\n\
+    \        return result\n\n    instruct_data = []\n    for file_name in ['instruct.json']:\n\
+    \        file_path = Path(directory) / file_name\n        combined_data = []\n\
+    \        for json_file in Path(directory).rglob(f'*.{file_name}'):\n         \
+    \   json_file_data = read_file(json_file)\n            combined_data.extend(json_file_data)\n\
+    \            combined_data = remove_duplicate_dataset_entries(combined_data, 'instruction',\
+    \ 'output')\n            instruct_data = combined_data.copy()\n            # gen\
+    \ training datasets that contains purpose and graph data formatted as follow for\
+    \ each item in the dataset:\n            purpose_data = [item for item in combined_data\
+    \ if item['instruction'].startswith('1) Describe the purpose')]\n            graph_data\
+    \ = [item for item in combined_data if item['instruction'].startswith('What is\
+    \ the call code graph')]\n            code_output = []\n            graph_output\
+    \ = []\n            for item in purpose_data:\n                code_output.append({'instruction':\
+    \ 'Define the Python code file that is described as follows:\\n'+ item['output'],\
+    \ 'output': item['input']})\n            for item in graph_data:\n           \
+    \     graph_output.append({'instruction': 'Define the call code graph for Python\
+    \ file:\\n' + item['input'], 'output': item['output']})\n            code_graph_output\
+    \ = code_output + graph_output\n            write_file(code_graph_output, Path(directory)\
+    \ / 'training.json')\n\n        write_file(combined_data, file_path)\n\n    #\
+    \ Save html file for each json file in the output directory\n    convert_json_to_html(directory)\n\
+    \    return {'instruct_list': instruct_data}\n\n\ndef create_code_graph(file_details:\
+    \ Dict, base_name: str, output_subdir: Path) -> None:\n    \"\"\"\n    Generate\
+    \ graphs from the file_details and save them as PNG images.\n    Args:\n     \
+    \   file_details (dict): The details extracted from the Python file.\n       \
+    \ base_name (str): The base name of the output files.\n        output_subdir (Path):\
+    \ The subdirectory where the output files will be saved.\n    Returns:\n     \
+    \   None\n    \"\"\"\n    graph_type = 'entire_code_graph'\n    output_file =\
+    \ output_subdir / f'{base_name}.{graph_type}.png'\n\n    # Create graphs, add\
+    \ nodes, and add edges\n    G = nx.DiGraph()\n    G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])\n\
+    \    for edge in file_details['file_info'][graph_type]['edges']:\n        source,\
+    \ target = edge['source'], edge['target']\n        if source in G.nodes and target\
+    \ in G.nodes:\n           G.add_edge(source, target, **{k: v for k, v in edge.items()\
+    \ if k in ['target_inputs', 'target_returns']})\n    # Draw graphs\n    plt.figure(figsize=(20,\
+    \ 20))\n    pos = nx.spring_layout(G)\n    nx.draw(G, pos, with_labels=True, font_weight='bold',\
+    \ font_size = 8, node_shape='s', node_size=500, width=1, arrowsize=12)\n    edge_labels\
+    \ = {}\n    for edge in G.edges(data=True):\n        label = []\n        if 'target_inputs'\
+    \ in edge[2] and edge[2]['target_inputs']:\n            label.append(f\"Inputs:\
+    \ {', '.join(edge[2]['target_inputs'])}\")\n        if 'target_returns' in edge[2]\
+    \ and edge[2]['target_returns']:\n            label.append(f\"\\nReturns: {',\
+    \ '.join(edge[2]['target_returns'])}\")\n        edge_labels[(edge[0], edge[1])]\
+    \ = '\\n'.join(label)\n    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels,\
+    \ font_size=6)\n    plt.savefig(output_file) # Save the figure\n    plt.close()\
+    \  # Close the figure\n\n\ndef save_python_data(file_details: dict, instruct_list:\
+    \ list, relative_path: Path, output_dir: str) -> None:\n    \"\"\"\n    Save Python\
+    \ file details as a YAML file, the instruction data as a JSON file, and code graphs.\n\
+    \    Args:\n        file_details (dict): The details extracted from the Python\
+    \ file.\n        instruct_list (list): The instruction data extracted from the\
+    \ Python file.\n        relative_path (Path): The relative path to the Python\
+    \ file.\n        output_dir (str): The directory where the output files will be\
+    \ saved.\n    Returns:\n        None\n    \"\"\"\n    output_subdir = Path(output_dir)\
+    \ / relative_path.parts[0]\n    output_subdir.mkdir(parents=True, exist_ok=True)\n\
+    \    base_name = '.'.join(part for part in relative_path.parts)\n\n    # write\
+    \ instrunct.json files\n    file_names = [f'{base_name}.instruct.json', f'{base_name}.details.yaml']\n\
+    \    contents = [instruct_list, file_details]\n\n    for file_name, content in\
+    \ zip(file_names, contents):\n        write_file(content, output_subdir / file_name)\n\
+    \n    try:\n        create_code_graph(file_details, base_name, output_subdir)\n\
+    \    except:\n        logging.info(f'Error creating graph for {base_name}')\n"
+  file_ast: 'Module(body=[Expr(value=Constant(value="\nUtility functions for reading
+    the input and saving the output of the py2dataset script.\nRequirements:\n[req01]
+    The `read_file` function shall:\n        a. Accept a file path as an argument.\n        b.
+    Read and return the contents of a JSON or YAML file as a dictionary.\n[req02]
+    The `write_file` function shall:\n        a. Accept a dictionary and a file path
+    as arguments.\n        b. Write the dictionary to a file in either JSON or YAML
+    format.\n[req03] The `convert_json_to_html` function shall:\n        a. Convert
+    JSON files within a given directory to HTML format.\n        b. Save each converted
+    file with a .html extension.\n        c. Preserve spacing and tabs for the ''input''
+    field.\n[req04] The `combine_json_files` function shall:\n        a. Accept a
+    directory path as an argument.\n        b. Merge all JSON files in the directory.\n        c.
+    Remove duplicates from the combined JSON files.\n        d. Write the combined
+    data to ''instruct.json'' files.\n        e. Convert the merged JSON files to
+    HTML format.\n        f. Return the ''instruct_list'' datasets.\n[req05] The `create_code_graph`
+    function shall:\n        a. Accept details of a Python file, a base name, and
+    an output directory as arguments.\n        b. Generate code graphs based on the
+    provided file details.\n        c. Save the graphs as PNG images in the specified
+    output directory.\n[req06] The `save_python_data` function shall:\n        a.
+    Accept details of a Python file, a base name, and an output directory as arguments.\n        b.
+    Save the details of the Python file as a YAML file.\n        c. Save the instruction
+    data as JSON files.\n        d. Generate and save code graphs.\n")), Import(names=[alias(name=''sys'')]),
+    Import(names=[alias(name=''os'')]), Import(names=[alias(name=''re'')]), Import(names=[alias(name=''json'')]),
+    Import(names=[alias(name=''logging'')]), Import(names=[alias(name=''yaml'')]),
+    Import(names=[alias(name=''matplotlib.pyplot'', asname=''plt'')]), Import(names=[alias(name=''networkx'',
+    asname=''nx'')]), ImportFrom(module=''html'', names=[alias(name=''escape'')],
+    level=0), ImportFrom(module=''pathlib'', names=[alias(name=''Path'')], level=0),
+    ImportFrom(module=''typing'', names=[alias(name=''Dict''), alias(name=''List''),
+    alias(name=''Union'')], level=0), FunctionDef(name=''read_file'', args=arguments(posonlyargs=[],
+    args=[arg(arg=''file_path'', annotation=Name(id=''Path'', ctx=Load()))], kwonlyargs=[],
+    kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value=''\n    Reads a
+    JSON or YAML file and returns its contents as a dictionary.\n    Args:\n        file_path
+    (Path): The path to the file.\n    Returns:\n        The contents of the file
+    as a dictionary.\n    '')), Assign(targets=[Name(id=''file_type'', ctx=Store())],
+    value=Subscript(value=Attribute(value=Name(id=''file_path'', ctx=Load()), attr=''suffix'',
+    ctx=Load()), slice=Slice(lower=Constant(value=1)), ctx=Load())), With(items=[withitem(context_expr=Call(func=Attribute(value=Name(id=''file_path'',
+    ctx=Load()), attr=''open'', ctx=Load()), args=[], keywords=[]), optional_vars=Name(id=''f'',
+    ctx=Store()))], body=[If(test=Compare(left=Name(id=''file_type'', ctx=Load()),
+    ops=[Eq()], comparators=[Constant(value=''json'')]), body=[Return(value=Call(func=Attribute(value=Name(id=''json'',
+    ctx=Load()), attr=''load'', ctx=Load()), args=[Name(id=''f'', ctx=Load())], keywords=[]))],
+    orelse=[If(test=Compare(left=Name(id=''file_type'', ctx=Load()), ops=[Eq()], comparators=[Constant(value=''yaml'')]),
+    body=[Return(value=Call(func=Attribute(value=Name(id=''yaml'', ctx=Load()), attr=''load'',
+    ctx=Load()), args=[Name(id=''f'', ctx=Load())], keywords=[]))], orelse=[])])])],
+    decorator_list=[], returns=Name(id=''Dict'', ctx=Load())), FunctionDef(name=''write_file'',
+    args=arguments(posonlyargs=[], args=[arg(arg=''data'', annotation=Name(id=''Dict'',
+    ctx=Load())), arg(arg=''file_path'', annotation=Name(id=''Path'', ctx=Load()))],
+    kwonlyargs=[], kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value=''\n    Writes
+    a dictionary to a JSON or YAML file. \n    Args:\n        data (Dict): The data
+    to write to the file.\n        file_path (Path): The path to the file.\n    Returns:\n        None\n    '')),
+    Assign(targets=[Name(id=''file_type'', ctx=Store())], value=Subscript(value=Attribute(value=Name(id=''file_path'',
+    ctx=Load()), attr=''suffix'', ctx=Load()), slice=Slice(lower=Constant(value=1)),
+    ctx=Load())), With(items=[withitem(context_expr=Call(func=Attribute(value=Name(id=''file_path'',
+    ctx=Load()), attr=''open'', ctx=Load()), args=[Constant(value=''w'')], keywords=[]),
+    optional_vars=Name(id=''f'', ctx=Store()))], body=[If(test=Compare(left=Name(id=''file_type'',
+    ctx=Load()), ops=[Eq()], comparators=[Constant(value=''json'')]), body=[Expr(value=Call(func=Attribute(value=Name(id=''json'',
+    ctx=Load()), attr=''dump'', ctx=Load()), args=[Name(id=''data'', ctx=Load()),
+    Name(id=''f'', ctx=Load())], keywords=[keyword(arg=''indent'', value=Constant(value=4))]))],
+    orelse=[If(test=Compare(left=Name(id=''file_type'', ctx=Load()), ops=[Eq()], comparators=[Constant(value=''yaml'')]),
+    body=[Assign(targets=[Attribute(value=Attribute(value=Name(id=''yaml'', ctx=Load()),
+    attr=''SafeDumper'', ctx=Load()), attr=''ignore_aliases'', ctx=Store())], value=Lambda(args=arguments(posonlyargs=[],
+    args=[], vararg=arg(arg=''args''), kwonlyargs=[], kw_defaults=[], defaults=[]),
+    body=Constant(value=True))), Expr(value=Call(func=Attribute(value=Name(id=''yaml'',
+    ctx=Load()), attr=''dump'', ctx=Load()), args=[Name(id=''data'', ctx=Load()),
+    Name(id=''f'', ctx=Load())], keywords=[keyword(arg=''Dumper'', value=Attribute(value=Name(id=''yaml'',
+    ctx=Load()), attr=''SafeDumper'', ctx=Load())), keyword(arg=''sort_keys'', value=Constant(value=False))]))],
+    orelse=[])])])], decorator_list=[], returns=Constant(value=None)), FunctionDef(name=''convert_json_to_html'',
+    args=arguments(posonlyargs=[], args=[arg(arg=''directory'', annotation=Name(id=''str'',
+    ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value=''\n    Convert
+    JSON files within a given directory to HTML format.\n    Args:\n        directory
+    (str): The directory where the JSON files are located.\n    Returns:\n        None    \n    '')),
+    FunctionDef(name=''preserve_spacing'', args=arguments(posonlyargs=[], args=[arg(arg=''text'',
+    annotation=Name(id=''str'', ctx=Load())), arg(arg=''tab_width'', annotation=Name(id=''int'',
+    ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=4)]), body=[Expr(value=Constant(value=''Preserve
+    spaces and tabs in the provided text.'')), Return(value=Call(func=Attribute(value=Call(func=Attribute(value=Name(id=''text'',
+    ctx=Load()), attr=''replace'', ctx=Load()), args=[Constant(value='' ''), Constant(value=''&nbsp;'')],
+    keywords=[]), attr=''replace'', ctx=Load()), args=[Constant(value=''\t''), BinOp(left=Constant(value=''&nbsp;''),
+    op=Mult(), right=Name(id=''tab_width'', ctx=Load()))], keywords=[]))], decorator_list=[],
+    returns=Name(id=''str'', ctx=Load())), For(target=Name(id=''json_file'', ctx=Store()),
+    iter=Call(func=Attribute(value=Call(func=Name(id=''Path'', ctx=Load()), args=[Name(id=''directory'',
+    ctx=Load())], keywords=[]), attr=''rglob'', ctx=Load()), args=[Constant(value=''*.json'')],
+    keywords=[]), body=[Assign(targets=[Name(id=''dataset'', ctx=Store())], value=Call(func=Name(id=''read_file'',
+    ctx=Load()), args=[Name(id=''json_file'', ctx=Load())], keywords=[])), If(test=UnaryOp(op=Not(),
+    operand=Name(id=''dataset'', ctx=Load())), body=[Continue()], orelse=[]), Assign(targets=[Name(id=''html_file'',
+    ctx=Store())], value=Call(func=Attribute(value=Name(id=''json_file'', ctx=Load()),
+    attr=''with_suffix'', ctx=Load()), args=[Constant(value=''.html'')], keywords=[])),
+    Assign(targets=[Name(id=''html_content'', ctx=Store())], value=Constant(value=''\n        <html>\n        <head>\n            <style>\n                table
+    {border-collapse: collapse; width: 100%; table-layout: fixed;}\n                th,
+    td {\n                    border: 1px solid black;\n                    padding:
+    8px;\n                    text-align: left;\n                    white-space:
+    pre-line;\n                    vertical-align: top;\n                    word-wrap:
+    break-word;\n                }\n            </style>\n        </head>\n        <body>\n            <table>\n                <thead>\n                    <tr>\n        '')),
+    Assign(targets=[Name(id=''column_count'', ctx=Store())], value=Call(func=Name(id=''len'',
+    ctx=Load()), args=[Call(func=Attribute(value=Subscript(value=Name(id=''dataset'',
+    ctx=Load()), slice=Constant(value=0), ctx=Load()), attr=''keys'', ctx=Load()),
+    args=[], keywords=[])], keywords=[])), Assign(targets=[Name(id=''column_width'',
+    ctx=Store())], value=BinOp(left=Constant(value=100), op=Div(), right=Name(id=''column_count'',
+    ctx=Load()))), For(target=Name(id=''key'', ctx=Store()), iter=Call(func=Attribute(value=Subscript(value=Name(id=''dataset'',
+    ctx=Load()), slice=Constant(value=0), ctx=Load()), attr=''keys'', ctx=Load()),
+    args=[], keywords=[]), body=[AugAssign(target=Name(id=''html_content'', ctx=Store()),
+    op=Add(), value=JoinedStr(values=[Constant(value="<th style=''width: "), FormattedValue(value=Name(id=''column_width'',
+    ctx=Load()), conversion=-1), Constant(value="%;''>"), FormattedValue(value=Name(id=''key'',
+    ctx=Load()), conversion=-1), Constant(value=''</th>'')]))], orelse=[]), AugAssign(target=Name(id=''html_content'',
+    ctx=Store()), op=Add(), value=Constant(value=''\n                    </tr>\n                </thead>\n                <tbody>\n        '')),
+    For(target=Name(id=''entry'', ctx=Store()), iter=Name(id=''dataset'', ctx=Load()),
+    body=[AugAssign(target=Name(id=''html_content'', ctx=Store()), op=Add(), value=Constant(value=''<tr>'')),
+    For(target=Name(id=''key'', ctx=Store()), iter=Name(id=''entry'', ctx=Load()),
+    body=[Assign(targets=[Name(id=''value'', ctx=Store())], value=Call(func=Name(id=''escape'',
+    ctx=Load()), args=[Call(func=Name(id=''str'', ctx=Load()), args=[Subscript(value=Name(id=''entry'',
+    ctx=Load()), slice=Name(id=''key'', ctx=Load()), ctx=Load())], keywords=[])],
+    keywords=[])), Assign(targets=[Name(id=''value'', ctx=Store())], value=Call(func=Name(id=''preserve_spacing'',
+    ctx=Load()), args=[Name(id=''value'', ctx=Load())], keywords=[])), Assign(targets=[Name(id=''value'',
+    ctx=Store())], value=Call(func=Attribute(value=Name(id=''value'', ctx=Load()),
+    attr=''replace'', ctx=Load()), args=[Constant(value=''\n''), Constant(value=''<br/>'')],
+    keywords=[])), AugAssign(target=Name(id=''html_content'', ctx=Store()), op=Add(),
+    value=JoinedStr(values=[Constant(value=''<td>''), FormattedValue(value=Name(id=''value'',
+    ctx=Load()), conversion=-1), Constant(value=''</td>'')]))], orelse=[]), AugAssign(target=Name(id=''html_content'',
+    ctx=Store()), op=Add(), value=Constant(value=''</tr>''))], orelse=[]), AugAssign(target=Name(id=''html_content'',
+    ctx=Store()), op=Add(), value=Constant(value=''\n                </tbody>\n            </table>\n        </body>\n        </html>\n        '')),
+    Assign(targets=[Name(id=''html_file_path'', ctx=Store())], value=Call(func=Attribute(value=Name(id=''json_file'',
+    ctx=Load()), attr=''with_suffix'', ctx=Load()), args=[Constant(value=''.html'')],
+    keywords=[])), Try(body=[With(items=[withitem(context_expr=Call(func=Name(id=''open'',
+    ctx=Load()), args=[Name(id=''html_file_path'', ctx=Load()), Constant(value=''w'')],
+    keywords=[keyword(arg=''encoding'', value=Constant(value=''utf-8''))]), optional_vars=Name(id=''file'',
+    ctx=Store()))], body=[Expr(value=Call(func=Attribute(value=Name(id=''file'', ctx=Load()),
+    attr=''write'', ctx=Load()), args=[Name(id=''html_content'', ctx=Load())], keywords=[]))])],
+    handlers=[ExceptHandler(body=[Expr(value=Call(func=Attribute(value=Name(id=''logging'',
+    ctx=Load()), attr=''save'', ctx=Load()), args=[Call(func=Attribute(value=Name(id=''logging'',
+    ctx=Load()), attr=''info'', ctx=Load()), args=[JoinedStr(values=[Constant(value=''Failed
+    saving: ''), FormattedValue(value=Name(id=''html_file_path'', ctx=Load()), conversion=-1)])],
+    keywords=[])], keywords=[]))])], orelse=[], finalbody=[])], orelse=[])], decorator_list=[],
+    returns=Constant(value=None)), FunctionDef(name=''combine_json_files'', args=arguments(posonlyargs=[],
+    args=[arg(arg=''directory'', annotation=Name(id=''str'', ctx=Load()))], kwonlyargs=[],
+    kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value="\n    Combine all
+    JSON files in the output directory into ''instruct.json'', and then remove duplicates.\n    Args:\n        directory
+    (str): The directory where the output files are located.\n    Returns:\n        A
+    dictionary containing the ''instruct_list'' datasets.\n    ")), FunctionDef(name=''remove_duplicate_dataset_entries'',
+    args=arguments(posonlyargs=[], args=[arg(arg=''dataset'', annotation=Subscript(value=Name(id=''List'',
+    ctx=Load()), slice=Name(id=''Dict'', ctx=Load()), ctx=Load())), arg(arg=''key1'',
+    annotation=Name(id=''str'', ctx=Load())), arg(arg=''key2'', annotation=Name(id=''str'',
+    ctx=Load()))], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value=''\n        Remove
+    duplicate entries from the provided dataset based on the provided keys.\n        Args:\n            dataset
+    (List[Dict]): The dataset to remove duplicates from.\n            key1 (str):
+    The first key to check for duplicates.\n            key2 (str): The second key
+    to check for duplicates.\n        Returns:\n            A dataset without duplicate
+    entries.\n        '')), Assign(targets=[Name(id=''seen'', ctx=Store())], value=Call(func=Name(id=''set'',
+    ctx=Load()), args=[], keywords=[])), Assign(targets=[Name(id=''result'', ctx=Store())],
+    value=List(elts=[], ctx=Load())), For(target=Name(id=''item'', ctx=Store()), iter=Name(id=''dataset'',
+    ctx=Load()), body=[If(test=Compare(left=Tuple(elts=[Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Name(id=''key1'', ctx=Load()), ctx=Load()), Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Name(id=''key2'', ctx=Load()), ctx=Load())], ctx=Load()), ops=[NotIn()],
+    comparators=[Name(id=''seen'', ctx=Load())]), body=[Expr(value=Call(func=Attribute(value=Name(id=''seen'',
+    ctx=Load()), attr=''add'', ctx=Load()), args=[Tuple(elts=[Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Name(id=''key1'', ctx=Load()), ctx=Load()), Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Name(id=''key2'', ctx=Load()), ctx=Load())], ctx=Load())],
+    keywords=[])), Expr(value=Call(func=Attribute(value=Name(id=''result'', ctx=Load()),
+    attr=''append'', ctx=Load()), args=[Name(id=''item'', ctx=Load())], keywords=[]))],
+    orelse=[])], orelse=[]), Return(value=Name(id=''result'', ctx=Load()))], decorator_list=[],
+    returns=Subscript(value=Name(id=''List'', ctx=Load()), slice=Name(id=''Dict'',
+    ctx=Load()), ctx=Load())), Assign(targets=[Name(id=''instruct_data'', ctx=Store())],
+    value=List(elts=[], ctx=Load())), For(target=Name(id=''file_name'', ctx=Store()),
+    iter=List(elts=[Constant(value=''instruct.json'')], ctx=Load()), body=[Assign(targets=[Name(id=''file_path'',
+    ctx=Store())], value=BinOp(left=Call(func=Name(id=''Path'', ctx=Load()), args=[Name(id=''directory'',
+    ctx=Load())], keywords=[]), op=Div(), right=Name(id=''file_name'', ctx=Load()))),
+    Assign(targets=[Name(id=''combined_data'', ctx=Store())], value=List(elts=[],
+    ctx=Load())), For(target=Name(id=''json_file'', ctx=Store()), iter=Call(func=Attribute(value=Call(func=Name(id=''Path'',
+    ctx=Load()), args=[Name(id=''directory'', ctx=Load())], keywords=[]), attr=''rglob'',
+    ctx=Load()), args=[JoinedStr(values=[Constant(value=''*.''), FormattedValue(value=Name(id=''file_name'',
+    ctx=Load()), conversion=-1)])], keywords=[]), body=[Assign(targets=[Name(id=''json_file_data'',
+    ctx=Store())], value=Call(func=Name(id=''read_file'', ctx=Load()), args=[Name(id=''json_file'',
+    ctx=Load())], keywords=[])), Expr(value=Call(func=Attribute(value=Name(id=''combined_data'',
+    ctx=Load()), attr=''extend'', ctx=Load()), args=[Name(id=''json_file_data'', ctx=Load())],
+    keywords=[])), Assign(targets=[Name(id=''combined_data'', ctx=Store())], value=Call(func=Name(id=''remove_duplicate_dataset_entries'',
+    ctx=Load()), args=[Name(id=''combined_data'', ctx=Load()), Constant(value=''instruction''),
+    Constant(value=''output'')], keywords=[])), Assign(targets=[Name(id=''instruct_data'',
+    ctx=Store())], value=Call(func=Attribute(value=Name(id=''combined_data'', ctx=Load()),
+    attr=''copy'', ctx=Load()), args=[], keywords=[])), Assign(targets=[Name(id=''purpose_data'',
+    ctx=Store())], value=ListComp(elt=Name(id=''item'', ctx=Load()), generators=[comprehension(target=Name(id=''item'',
+    ctx=Store()), iter=Name(id=''combined_data'', ctx=Load()), ifs=[Call(func=Attribute(value=Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Constant(value=''instruction''), ctx=Load()), attr=''startswith'',
+    ctx=Load()), args=[Constant(value=''1) Describe the purpose'')], keywords=[])],
+    is_async=0)])), Assign(targets=[Name(id=''graph_data'', ctx=Store())], value=ListComp(elt=Name(id=''item'',
+    ctx=Load()), generators=[comprehension(target=Name(id=''item'', ctx=Store()),
+    iter=Name(id=''combined_data'', ctx=Load()), ifs=[Call(func=Attribute(value=Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Constant(value=''instruction''), ctx=Load()), attr=''startswith'',
+    ctx=Load()), args=[Constant(value=''What is the call code graph'')], keywords=[])],
+    is_async=0)])), Assign(targets=[Name(id=''code_output'', ctx=Store())], value=List(elts=[],
+    ctx=Load())), Assign(targets=[Name(id=''graph_output'', ctx=Store())], value=List(elts=[],
+    ctx=Load())), For(target=Name(id=''item'', ctx=Store()), iter=Name(id=''purpose_data'',
+    ctx=Load()), body=[Expr(value=Call(func=Attribute(value=Name(id=''code_output'',
+    ctx=Load()), attr=''append'', ctx=Load()), args=[Dict(keys=[Constant(value=''instruction''),
+    Constant(value=''output'')], values=[BinOp(left=Constant(value=''Define the Python
+    code file that is described as follows:\n''), op=Add(), right=Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Constant(value=''output''), ctx=Load())), Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Constant(value=''input''), ctx=Load())])], keywords=[]))],
+    orelse=[]), For(target=Name(id=''item'', ctx=Store()), iter=Name(id=''graph_data'',
+    ctx=Load()), body=[Expr(value=Call(func=Attribute(value=Name(id=''graph_output'',
+    ctx=Load()), attr=''append'', ctx=Load()), args=[Dict(keys=[Constant(value=''instruction''),
+    Constant(value=''output'')], values=[BinOp(left=Constant(value=''Define the call
+    code graph for Python file:\n''), op=Add(), right=Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Constant(value=''input''), ctx=Load())), Subscript(value=Name(id=''item'',
+    ctx=Load()), slice=Constant(value=''output''), ctx=Load())])], keywords=[]))],
+    orelse=[]), Assign(targets=[Name(id=''code_graph_output'', ctx=Store())], value=BinOp(left=Name(id=''code_output'',
+    ctx=Load()), op=Add(), right=Name(id=''graph_output'', ctx=Load()))), Expr(value=Call(func=Name(id=''write_file'',
+    ctx=Load()), args=[Name(id=''code_graph_output'', ctx=Load()), BinOp(left=Call(func=Name(id=''Path'',
+    ctx=Load()), args=[Name(id=''directory'', ctx=Load())], keywords=[]), op=Div(),
+    right=Constant(value=''training.json''))], keywords=[]))], orelse=[]), Expr(value=Call(func=Name(id=''write_file'',
+    ctx=Load()), args=[Name(id=''combined_data'', ctx=Load()), Name(id=''file_path'',
+    ctx=Load())], keywords=[]))], orelse=[]), Expr(value=Call(func=Name(id=''convert_json_to_html'',
+    ctx=Load()), args=[Name(id=''directory'', ctx=Load())], keywords=[])), Return(value=Dict(keys=[Constant(value=''instruct_list'')],
+    values=[Name(id=''instruct_data'', ctx=Load())]))], decorator_list=[], returns=Subscript(value=Name(id=''Dict'',
+    ctx=Load()), slice=Tuple(elts=[Name(id=''str'', ctx=Load()), Subscript(value=Name(id=''List'',
+    ctx=Load()), slice=Name(id=''Dict'', ctx=Load()), ctx=Load())], ctx=Load()), ctx=Load())),
+    FunctionDef(name=''create_code_graph'', args=arguments(posonlyargs=[], args=[arg(arg=''file_details'',
+    annotation=Name(id=''Dict'', ctx=Load())), arg(arg=''base_name'', annotation=Name(id=''str'',
+    ctx=Load())), arg(arg=''output_subdir'', annotation=Name(id=''Path'', ctx=Load()))],
+    kwonlyargs=[], kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value=''\n    Generate
+    graphs from the file_details and save them as PNG images.\n    Args:\n        file_details
+    (dict): The details extracted from the Python file.\n        base_name (str):
+    The base name of the output files.\n        output_subdir (Path): The subdirectory
+    where the output files will be saved.\n    Returns:\n        None\n    '')), Assign(targets=[Name(id=''graph_type'',
+    ctx=Store())], value=Constant(value=''entire_code_graph'')), Assign(targets=[Name(id=''output_file'',
+    ctx=Store())], value=BinOp(left=Name(id=''output_subdir'', ctx=Load()), op=Div(),
+    right=JoinedStr(values=[FormattedValue(value=Name(id=''base_name'', ctx=Load()),
+    conversion=-1), Constant(value=''.''), FormattedValue(value=Name(id=''graph_type'',
+    ctx=Load()), conversion=-1), Constant(value=''.png'')]))), Assign(targets=[Name(id=''G'',
+    ctx=Store())], value=Call(func=Attribute(value=Name(id=''nx'', ctx=Load()), attr=''DiGraph'',
+    ctx=Load()), args=[], keywords=[])), Expr(value=Call(func=Attribute(value=Name(id=''G'',
+    ctx=Load()), attr=''add_nodes_from'', ctx=Load()), args=[Subscript(value=Subscript(value=Subscript(value=Name(id=''file_details'',
+    ctx=Load()), slice=Constant(value=''file_info''), ctx=Load()), slice=Name(id=''graph_type'',
+    ctx=Load()), ctx=Load()), slice=Constant(value=''nodes''), ctx=Load())], keywords=[])),
+    For(target=Name(id=''edge'', ctx=Store()), iter=Subscript(value=Subscript(value=Subscript(value=Name(id=''file_details'',
+    ctx=Load()), slice=Constant(value=''file_info''), ctx=Load()), slice=Name(id=''graph_type'',
+    ctx=Load()), ctx=Load()), slice=Constant(value=''edges''), ctx=Load()), body=[Assign(targets=[Tuple(elts=[Name(id=''source'',
+    ctx=Store()), Name(id=''target'', ctx=Store())], ctx=Store())], value=Tuple(elts=[Subscript(value=Name(id=''edge'',
+    ctx=Load()), slice=Constant(value=''source''), ctx=Load()), Subscript(value=Name(id=''edge'',
+    ctx=Load()), slice=Constant(value=''target''), ctx=Load())], ctx=Load())), If(test=BoolOp(op=And(),
+    values=[Compare(left=Name(id=''source'', ctx=Load()), ops=[In()], comparators=[Attribute(value=Name(id=''G'',
+    ctx=Load()), attr=''nodes'', ctx=Load())]), Compare(left=Name(id=''target'', ctx=Load()),
+    ops=[In()], comparators=[Attribute(value=Name(id=''G'', ctx=Load()), attr=''nodes'',
+    ctx=Load())])]), body=[Expr(value=Call(func=Attribute(value=Name(id=''G'', ctx=Load()),
+    attr=''add_edge'', ctx=Load()), args=[Name(id=''source'', ctx=Load()), Name(id=''target'',
+    ctx=Load())], keywords=[keyword(value=DictComp(key=Name(id=''k'', ctx=Load()),
+    value=Name(id=''v'', ctx=Load()), generators=[comprehension(target=Tuple(elts=[Name(id=''k'',
+    ctx=Store()), Name(id=''v'', ctx=Store())], ctx=Store()), iter=Call(func=Attribute(value=Name(id=''edge'',
+    ctx=Load()), attr=''items'', ctx=Load()), args=[], keywords=[]), ifs=[Compare(left=Name(id=''k'',
+    ctx=Load()), ops=[In()], comparators=[List(elts=[Constant(value=''target_inputs''),
+    Constant(value=''target_returns'')], ctx=Load())])], is_async=0)]))]))], orelse=[])],
+    orelse=[]), Expr(value=Call(func=Attribute(value=Name(id=''plt'', ctx=Load()),
+    attr=''figure'', ctx=Load()), args=[], keywords=[keyword(arg=''figsize'', value=Tuple(elts=[Constant(value=20),
+    Constant(value=20)], ctx=Load()))])), Assign(targets=[Name(id=''pos'', ctx=Store())],
+    value=Call(func=Attribute(value=Name(id=''nx'', ctx=Load()), attr=''spring_layout'',
+    ctx=Load()), args=[Name(id=''G'', ctx=Load())], keywords=[])), Expr(value=Call(func=Attribute(value=Name(id=''nx'',
+    ctx=Load()), attr=''draw'', ctx=Load()), args=[Name(id=''G'', ctx=Load()), Name(id=''pos'',
+    ctx=Load())], keywords=[keyword(arg=''with_labels'', value=Constant(value=True)),
+    keyword(arg=''font_weight'', value=Constant(value=''bold'')), keyword(arg=''font_size'',
+    value=Constant(value=8)), keyword(arg=''node_shape'', value=Constant(value=''s'')),
+    keyword(arg=''node_size'', value=Constant(value=500)), keyword(arg=''width'',
+    value=Constant(value=1)), keyword(arg=''arrowsize'', value=Constant(value=12))])),
+    Assign(targets=[Name(id=''edge_labels'', ctx=Store())], value=Dict(keys=[], values=[])),
+    For(target=Name(id=''edge'', ctx=Store()), iter=Call(func=Attribute(value=Name(id=''G'',
+    ctx=Load()), attr=''edges'', ctx=Load()), args=[], keywords=[keyword(arg=''data'',
+    value=Constant(value=True))]), body=[Assign(targets=[Name(id=''label'', ctx=Store())],
+    value=List(elts=[], ctx=Load())), If(test=BoolOp(op=And(), values=[Compare(left=Constant(value=''target_inputs''),
+    ops=[In()], comparators=[Subscript(value=Name(id=''edge'', ctx=Load()), slice=Constant(value=2),
+    ctx=Load())]), Subscript(value=Subscript(value=Name(id=''edge'', ctx=Load()),
+    slice=Constant(value=2), ctx=Load()), slice=Constant(value=''target_inputs''),
+    ctx=Load())]), body=[Expr(value=Call(func=Attribute(value=Name(id=''label'', ctx=Load()),
+    attr=''append'', ctx=Load()), args=[JoinedStr(values=[Constant(value=''Inputs:
+    ''), FormattedValue(value=Call(func=Attribute(value=Constant(value='', ''), attr=''join'',
+    ctx=Load()), args=[Subscript(value=Subscript(value=Name(id=''edge'', ctx=Load()),
+    slice=Constant(value=2), ctx=Load()), slice=Constant(value=''target_inputs''),
+    ctx=Load())], keywords=[]), conversion=-1)])], keywords=[]))], orelse=[]), If(test=BoolOp(op=And(),
+    values=[Compare(left=Constant(value=''target_returns''), ops=[In()], comparators=[Subscript(value=Name(id=''edge'',
+    ctx=Load()), slice=Constant(value=2), ctx=Load())]), Subscript(value=Subscript(value=Name(id=''edge'',
+    ctx=Load()), slice=Constant(value=2), ctx=Load()), slice=Constant(value=''target_returns''),
+    ctx=Load())]), body=[Expr(value=Call(func=Attribute(value=Name(id=''label'', ctx=Load()),
+    attr=''append'', ctx=Load()), args=[JoinedStr(values=[Constant(value=''\nReturns:
+    ''), FormattedValue(value=Call(func=Attribute(value=Constant(value='', ''), attr=''join'',
+    ctx=Load()), args=[Subscript(value=Subscript(value=Name(id=''edge'', ctx=Load()),
+    slice=Constant(value=2), ctx=Load()), slice=Constant(value=''target_returns''),
+    ctx=Load())], keywords=[]), conversion=-1)])], keywords=[]))], orelse=[]), Assign(targets=[Subscript(value=Name(id=''edge_labels'',
+    ctx=Load()), slice=Tuple(elts=[Subscript(value=Name(id=''edge'', ctx=Load()),
+    slice=Constant(value=0), ctx=Load()), Subscript(value=Name(id=''edge'', ctx=Load()),
+    slice=Constant(value=1), ctx=Load())], ctx=Load()), ctx=Store())], value=Call(func=Attribute(value=Constant(value=''\n''),
+    attr=''join'', ctx=Load()), args=[Name(id=''label'', ctx=Load())], keywords=[]))],
+    orelse=[]), Expr(value=Call(func=Attribute(value=Name(id=''nx'', ctx=Load()),
+    attr=''draw_networkx_edge_labels'', ctx=Load()), args=[Name(id=''G'', ctx=Load()),
+    Name(id=''pos'', ctx=Load())], keywords=[keyword(arg=''edge_labels'', value=Name(id=''edge_labels'',
+    ctx=Load())), keyword(arg=''font_size'', value=Constant(value=6))])), Expr(value=Call(func=Attribute(value=Name(id=''plt'',
+    ctx=Load()), attr=''savefig'', ctx=Load()), args=[Name(id=''output_file'', ctx=Load())],
+    keywords=[])), Expr(value=Call(func=Attribute(value=Name(id=''plt'', ctx=Load()),
+    attr=''close'', ctx=Load()), args=[], keywords=[]))], decorator_list=[], returns=Constant(value=None)),
+    FunctionDef(name=''save_python_data'', args=arguments(posonlyargs=[], args=[arg(arg=''file_details'',
+    annotation=Name(id=''dict'', ctx=Load())), arg(arg=''instruct_list'', annotation=Name(id=''list'',
+    ctx=Load())), arg(arg=''relative_path'', annotation=Name(id=''Path'', ctx=Load())),
+    arg(arg=''output_dir'', annotation=Name(id=''str'', ctx=Load()))], kwonlyargs=[],
+    kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value=''\n    Save Python
+    file details as a YAML file, the instruction data as a JSON file, and code graphs.\n    Args:\n        file_details
+    (dict): The details extracted from the Python file.\n        instruct_list (list):
+    The instruction data extracted from the Python file.\n        relative_path (Path):
+    The relative path to the Python file.\n        output_dir (str): The directory
+    where the output files will be saved.\n    Returns:\n        None\n    '')), Assign(targets=[Name(id=''output_subdir'',
+    ctx=Store())], value=BinOp(left=Call(func=Name(id=''Path'', ctx=Load()), args=[Name(id=''output_dir'',
+    ctx=Load())], keywords=[]), op=Div(), right=Subscript(value=Attribute(value=Name(id=''relative_path'',
+    ctx=Load()), attr=''parts'', ctx=Load()), slice=Constant(value=0), ctx=Load()))),
+    Expr(value=Call(func=Attribute(value=Name(id=''output_subdir'', ctx=Load()), attr=''mkdir'',
+    ctx=Load()), args=[], keywords=[keyword(arg=''parents'', value=Constant(value=True)),
+    keyword(arg=''exist_ok'', value=Constant(value=True))])), Assign(targets=[Name(id=''base_name'',
+    ctx=Store())], value=Call(func=Attribute(value=Constant(value=''.''), attr=''join'',
+    ctx=Load()), args=[GeneratorExp(elt=Name(id=''part'', ctx=Load()), generators=[comprehension(target=Name(id=''part'',
+    ctx=Store()), iter=Attribute(value=Name(id=''relative_path'', ctx=Load()), attr=''parts'',
+    ctx=Load()), ifs=[], is_async=0)])], keywords=[])), Assign(targets=[Name(id=''file_names'',
+    ctx=Store())], value=List(elts=[JoinedStr(values=[FormattedValue(value=Name(id=''base_name'',
+    ctx=Load()), conversion=-1), Constant(value=''.instruct.json'')]), JoinedStr(values=[FormattedValue(value=Name(id=''base_name'',
+    ctx=Load()), conversion=-1), Constant(value=''.details.yaml'')])], ctx=Load())),
+    Assign(targets=[Name(id=''contents'', ctx=Store())], value=List(elts=[Name(id=''instruct_list'',
+    ctx=Load()), Name(id=''file_details'', ctx=Load())], ctx=Load())), For(target=Tuple(elts=[Name(id=''file_name'',
+    ctx=Store()), Name(id=''content'', ctx=Store())], ctx=Store()), iter=Call(func=Name(id=''zip'',
+    ctx=Load()), args=[Name(id=''file_names'', ctx=Load()), Name(id=''contents'',
+    ctx=Load())], keywords=[]), body=[Expr(value=Call(func=Name(id=''write_file'',
+    ctx=Load()), args=[Name(id=''content'', ctx=Load()), BinOp(left=Name(id=''output_subdir'',
+    ctx=Load()), op=Div(), right=Name(id=''file_name'', ctx=Load()))], keywords=[]))],
+    orelse=[]), Try(body=[Expr(value=Call(func=Name(id=''create_code_graph'', ctx=Load()),
+    args=[Name(id=''file_details'', ctx=Load()), Name(id=''base_name'', ctx=Load()),
+    Name(id=''output_subdir'', ctx=Load())], keywords=[]))], handlers=[ExceptHandler(body=[Expr(value=Call(func=Attribute(value=Name(id=''logging'',
+    ctx=Load()), attr=''info'', ctx=Load()), args=[JoinedStr(values=[Constant(value=''Error
+    creating graph for ''), FormattedValue(value=Name(id=''base_name'', ctx=Load()),
+    conversion=-1)])], keywords=[]))])], orelse=[], finalbody=[])], decorator_list=[],
+    returns=Constant(value=None))], type_ignores=[])'
+  file_dependencies:
+  - sys
+  - networkx
+  - os
+  - json
+  - matplotlib.pyplot
+  - html
+  - re
+  - yaml
+  - typing
+  - logging
+  - pathlib
+  file_functions:
+  - read_file
+  - write_file
+  - convert_json_to_html
+  - preserve_spacing
+  - combine_json_files
+  - remove_duplicate_dataset_entries
+  - create_code_graph
+  - save_python_data
+  file_classes: []
+  file_summary: '{dependencies: [sys, networkx, os, json, matplotlib.pyplot, html,
+    re, yaml, typing, logging, pathlib], function_defs: [{read_file: {inputs: [file_path],
+    calls: [file_path.open, json.load, yaml.load], call_inputs: {file_path.open: [],
+    json.load: [f], yaml.load: [f]}, returns: [json.load(f), yaml.load(f)]}}, {write_file:
+    {inputs: [data, file_path], calls: [file_path.open, json.dump, yaml.dump], call_inputs:
+    {file_path.open: [''w''], json.dump: [data, f], yaml.dump: [data, f]}, returns:
+    []}}, {convert_json_to_html: {inputs: [directory], calls: [text.replace('' '',
+    ''&nbsp;'').replace, text.replace, Path(directory).rglob, Path, read_file, json_file.with_suffix,
+    len, dataset[0].keys, escape, str, preserve_spacing, value.replace, open, file.write,
+    logging.save, logging.info], call_inputs: {text.replace('' '', ''&nbsp;'').replace:
+    [''\\t'', ''&nbsp;'' * tab_width], text.replace: ['' '', ''&nbsp;''], Path(directory).rglob:
+    [''*.json''], Path: [directory], read_file: [json_file], json_file.with_suffix:
+    [''.html''], len: [dataset[0].keys()], dataset[0].keys: [], escape: [str(entry[key])],
+    str: [entry[key]], preserve_spacing: [value], value.replace: [''\\n'', ''<br/>''],
+    open: [html_file_path, ''w''], file.write: [html_content], logging.save: [logging.info(f''Failed
+    saving: {html_file_path}'')], logging.info: [f''Failed saving: {html_file_path}'']},
+    returns: [text.replace('' '', ''&nbsp;'').replace(''\\t'', ''&nbsp;'' * tab_width)]}},
+    {preserve_spacing: {inputs: [text, tab_width], calls: [text.replace('' '', ''&nbsp;'').replace,
+    text.replace], call_inputs: {text.replace('' '', ''&nbsp;'').replace: [''\\t'',
+    ''&nbsp;'' * tab_width], text.replace: ['' '', ''&nbsp;'']}, returns: [text.replace(''
+    '', ''&nbsp;'').replace(''\\t'', ''&nbsp;'' * tab_width)]}}, {combine_json_files:
+    {inputs: [directory], calls: [set, seen.add, result.append, Path, Path(directory).rglob,
+    read_file, combined_data.extend, remove_duplicate_dataset_entries, combined_data.copy,
+    item[''instruction''].startswith, code_output.append, graph_output.append, write_file,
+    convert_json_to_html], call_inputs: {set: [], seen.add: [(item[key1], item[key2])],
+    result.append: [item], Path: [directory], Path(directory).rglob: [f''*.{file_name}''],
+    read_file: [json_file], combined_data.extend: [json_file_data], remove_duplicate_dataset_entries:
+    [combined_data, ''instruction'', ''output''], combined_data.copy: [], item[''instruction''].startswith:
+    [''What is the call code graph''], code_output.append: [{''instruction'': ''Define
+    the Python code file that is described as follows:\\n'' + item[''output''], ''output'':
+    item[''input'']}], graph_output.append: [{''instruction'': ''Define the call code
+    graph for Python file:\\n'' + item[''input''], ''output'': item[''output'']}],
+    write_file: [combined_data, file_path], convert_json_to_html: [directory]}, returns:
+    [{''instruct_list'': instruct_data}, result]}}, {remove_duplicate_dataset_entries:
+    {inputs: [dataset, key1, key2], calls: [set, seen.add, result.append], call_inputs:
+    {set: [], seen.add: [(item[key1], item[key2])], result.append: [item]}, returns:
+    [result]}}, {create_code_graph: {inputs: [file_details, base_name, output_subdir],
+    calls: [nx.DiGraph, G.add_nodes_from, G.add_edge, edge.items, plt.figure, nx.spring_layout,
+    nx.draw, G.edges, label.append, '', ''.join, ''\\n''.join, nx.draw_networkx_edge_labels,
+    plt.savefig, plt.close], call_inputs: {nx.DiGraph: [], G.add_nodes_from: [file_details[''file_info''][graph_type][''nodes'']],
+    G.add_edge: [source, target], edge.items: [], plt.figure: [], nx.spring_layout:
+    [G], nx.draw: [G, pos], G.edges: [], label.append: [f\\\nReturns: {'', ''.join(edge[2][''target_returns''])}\],
+    '', ''.join: [edge[2][''target_returns'']], ''\\n''.join: [label], nx.draw_networkx_edge_labels:
+    [G, pos], plt.savefig: [output_file], plt.close: []}, returns: []}}, {save_python_data:
+    {inputs: [file_details, instruct_list, relative_path, output_dir], calls: [Path,
+    output_subdir.mkdir, ''.''.join, zip, write_file, create_code_graph, logging.info],
+    call_inputs: {Path: [output_dir], output_subdir.mkdir: [], ''.''.join: [(part
+    for part in relative_path.parts)], zip: [file_names, contents], write_file: [content,
+    output_subdir / file_name], create_code_graph: [file_details, base_name, output_subdir],
+    logging.info: [f''Error creating graph for {base_name}'']}, returns: []}}], class_defs:
+    []}'
+  entire_code_graph:
+    nodes:
+    - read_file
+    - write_file
+    - convert_json_to_html
+    - preserve_spacing
+    - combine_json_files
+    - remove_duplicate_dataset_entries
+    - create_code_graph
+    - save_python_data
+    - file_path.open
+    - json.load
+    - yaml.load
+    - json.dump
+    - yaml.dump
+    - text.replace(' ', '&nbsp;').replace
+    - text.replace
+    - Path(directory).rglob
+    - Path
+    - json_file.with_suffix
+    - len
+    - dataset[0].keys
+    - escape
+    - str
+    - value.replace
+    - open
+    - file.write
+    - logging.save
+    - logging.info
+    - set
+    - seen.add
+    - result.append
+    - combined_data.extend
+    - combined_data.copy
+    - item['instruction'].startswith
+    - code_output.append
+    - graph_output.append
+    - nx.DiGraph
+    - G.add_nodes_from
+    - G.add_edge
+    - edge.items
+    - plt.figure
+    - nx.spring_layout
+    - nx.draw
+    - G.edges
+    - label.append
+    - ''', ''.join'
+    - '''\n''.join'
+    - nx.draw_networkx_edge_labels
+    - plt.savefig
+    - plt.close
+    - output_subdir.mkdir
+    - '''.''.join'
+    - zip
+    edges:
+    - source: read_file
+      target: file_path.open
+      target_inputs: []
+    - source: read_file
+      target: json.load
+      target_inputs:
+      - f
+    - source: read_file
+      target: yaml.load
+      target_inputs:
+      - f
+    - source: write_file
+      target: file_path.open
+      target_inputs:
+      - '''w'''
+    - source: write_file
+      target: json.dump
+      target_inputs:
+      - data
+      - f
+    - source: write_file
+      target: yaml.dump
+      target_inputs:
+      - data
+      - f
+    - source: convert_json_to_html
+      target: text.replace(' ', '&nbsp;').replace
+      target_inputs:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+    - source: convert_json_to_html
+      target: text.replace
+      target_inputs:
+      - ''' '''
+      - '''&nbsp;'''
+    - source: convert_json_to_html
+      target: Path(directory).rglob
+      target_inputs:
+      - '''*.json'''
+    - source: convert_json_to_html
+      target: Path
+      target_inputs:
+      - directory
+    - source: convert_json_to_html
+      target: read_file
+      target_inputs:
+      - json_file
+      target_returns:
+      - json.load(f)
+      - yaml.load(f)
+    - source: convert_json_to_html
+      target: json_file.with_suffix
+      target_inputs:
+      - '''.html'''
+    - source: convert_json_to_html
+      target: len
+      target_inputs:
+      - dataset[0].keys()
+    - source: convert_json_to_html
+      target: dataset[0].keys
+      target_inputs: []
+    - source: convert_json_to_html
+      target: escape
+      target_inputs:
+      - str(entry[key])
+    - source: convert_json_to_html
+      target: str
+      target_inputs:
+      - entry[key]
+    - source: convert_json_to_html
+      target: preserve_spacing
+      target_inputs:
+      - value
+      target_returns:
+      - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    - source: convert_json_to_html
+      target: value.replace
+      target_inputs:
+      - '''\n'''
+      - '''<br/>'''
+    - source: convert_json_to_html
+      target: open
+      target_inputs:
+      - html_file_path
+      - '''w'''
+    - source: convert_json_to_html
+      target: file.write
+      target_inputs:
+      - html_content
+    - source: convert_json_to_html
+      target: logging.save
+      target_inputs:
+      - 'logging.info(f''Failed saving: {html_file_path}'')'
+    - source: convert_json_to_html
+      target: logging.info
+      target_inputs:
+      - 'f''Failed saving: {html_file_path}'''
+    - source: preserve_spacing
+      target: text.replace(' ', '&nbsp;').replace
+      target_inputs:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+    - source: preserve_spacing
+      target: text.replace
+      target_inputs:
+      - ''' '''
+      - '''&nbsp;'''
+    - source: combine_json_files
+      target: set
+      target_inputs: []
+    - source: combine_json_files
+      target: seen.add
+      target_inputs:
+      - (item[key1], item[key2])
+    - source: combine_json_files
+      target: result.append
+      target_inputs:
+      - item
+    - source: combine_json_files
+      target: Path
+      target_inputs:
+      - directory
+    - source: combine_json_files
+      target: Path(directory).rglob
+      target_inputs:
+      - f'*.{file_name}'
+    - source: combine_json_files
+      target: read_file
+      target_inputs:
+      - json_file
+      target_returns:
+      - json.load(f)
+      - yaml.load(f)
+    - source: combine_json_files
+      target: combined_data.extend
+      target_inputs:
+      - json_file_data
+    - source: combine_json_files
+      target: remove_duplicate_dataset_entries
+      target_inputs:
+      - combined_data
+      - '''instruction'''
+      - '''output'''
+      target_returns:
+      - result
+    - source: combine_json_files
+      target: combined_data.copy
+      target_inputs: []
+    - source: combine_json_files
+      target: item['instruction'].startswith
+      target_inputs:
+      - '''What is the call code graph'''
+    - source: combine_json_files
+      target: code_output.append
+      target_inputs:
+      - '{''instruction'': ''Define the Python code file that is described as follows:\n''
+        + item[''output''], ''output'': item[''input'']}'
+    - source: combine_json_files
+      target: graph_output.append
+      target_inputs:
+      - '{''instruction'': ''Define the call code graph for Python file:\n'' + item[''input''],
+        ''output'': item[''output'']}'
+    - source: combine_json_files
+      target: write_file
+      target_inputs:
+      - combined_data
+      - file_path
+      target_returns: []
+    - source: combine_json_files
+      target: convert_json_to_html
+      target_inputs:
+      - directory
+      target_returns:
+      - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    - source: remove_duplicate_dataset_entries
+      target: set
+      target_inputs: []
+    - source: remove_duplicate_dataset_entries
+      target: seen.add
+      target_inputs:
+      - (item[key1], item[key2])
+    - source: remove_duplicate_dataset_entries
+      target: result.append
+      target_inputs:
+      - item
+    - source: create_code_graph
+      target: nx.DiGraph
+      target_inputs: []
+    - source: create_code_graph
+      target: G.add_nodes_from
+      target_inputs:
+      - file_details['file_info'][graph_type]['nodes']
+    - source: create_code_graph
+      target: G.add_edge
+      target_inputs:
+      - source
+      - target
+    - source: create_code_graph
+      target: edge.items
+      target_inputs: []
+    - source: create_code_graph
+      target: plt.figure
+      target_inputs: []
+    - source: create_code_graph
+      target: nx.spring_layout
+      target_inputs:
+      - G
+    - source: create_code_graph
+      target: nx.draw
+      target_inputs:
+      - G
+      - pos
+    - source: create_code_graph
+      target: G.edges
+      target_inputs: []
+    - source: create_code_graph
+      target: label.append
+      target_inputs:
+      - 'f"\nReturns: {'', ''.join(edge[2][''target_returns''])}"'
+    - source: create_code_graph
+      target: ''', ''.join'
+      target_inputs:
+      - edge[2]['target_returns']
+    - source: create_code_graph
+      target: '''\n''.join'
+      target_inputs:
+      - label
+    - source: create_code_graph
+      target: nx.draw_networkx_edge_labels
+      target_inputs:
+      - G
+      - pos
+    - source: create_code_graph
+      target: plt.savefig
+      target_inputs:
+      - output_file
+    - source: create_code_graph
+      target: plt.close
+      target_inputs: []
+    - source: save_python_data
+      target: Path
+      target_inputs:
+      - output_dir
+    - source: save_python_data
+      target: output_subdir.mkdir
+      target_inputs: []
+    - source: save_python_data
+      target: '''.''.join'
+      target_inputs:
+      - (part for part in relative_path.parts)
+    - source: save_python_data
+      target: zip
+      target_inputs:
+      - file_names
+      - contents
+    - source: save_python_data
+      target: write_file
+      target_inputs:
+      - content
+      - output_subdir / file_name
+      target_returns: []
+    - source: save_python_data
+      target: create_code_graph
+      target_inputs:
+      - file_details
+      - base_name
+      - output_subdir
+      target_returns: []
+    - source: save_python_data
+      target: logging.info
+      target_inputs:
+      - f'Error creating graph for {base_name}'
+functions:
+  read_file:
+    function_name: read_file
+    function_code: "def read_file(file_path: Path) -> Dict:\n    \"\"\"\n    Reads\
+      \ a JSON or YAML file and returns its contents as a dictionary.\n    Args:\n\
+      \        file_path (Path): The path to the file.\n    Returns:\n        The\
+      \ contents of the file as a dictionary.\n    \"\"\"\n    file_type = file_path.suffix[1:]\n\
+      \    with file_path.open() as f:\n        if file_type == 'json':\n        \
+      \    return json.load(f)\n        elif file_type == 'yaml':\n            return\
+      \ yaml.load(f)"
+    function_ast: 'FunctionDef(name=''read_file'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''file_path'', annotation=Name(id=''Path'', ctx=Load(), lineno=44,
+      col_offset=25, end_lineno=44, end_col_offset=29), lineno=44, col_offset=14,
+      end_lineno=44, end_col_offset=29)], kwonlyargs=[], kw_defaults=[], defaults=[]),
+      body=[Expr(value=Constant(value=''\n    Reads a JSON or YAML file and returns
+      its contents as a dictionary.\n    Args:\n        file_path (Path): The path
+      to the file.\n    Returns:\n        The contents of the file as a dictionary.\n    '',
+      lineno=45, col_offset=4, end_lineno=51, end_col_offset=7), lineno=45, col_offset=4,
+      end_lineno=51, end_col_offset=7), Assign(targets=[Name(id=''file_type'', ctx=Store(),
+      lineno=52, col_offset=4, end_lineno=52, end_col_offset=13)], value=Subscript(value=Attribute(value=Name(id=''file_path'',
+      ctx=Load(), lineno=52, col_offset=16, end_lineno=52, end_col_offset=25), attr=''suffix'',
+      ctx=Load(), lineno=52, col_offset=16, end_lineno=52, end_col_offset=32), slice=Slice(lower=Constant(value=1,
+      lineno=52, col_offset=33, end_lineno=52, end_col_offset=34), lineno=52, col_offset=33,
+      end_lineno=52, end_col_offset=35), ctx=Load(), lineno=52, col_offset=16, end_lineno=52,
+      end_col_offset=36), lineno=52, col_offset=4, end_lineno=52, end_col_offset=36),
+      With(items=[withitem(context_expr=Call(func=Attribute(value=Name(id=''file_path'',
+      ctx=Load(), lineno=53, col_offset=9, end_lineno=53, end_col_offset=18), attr=''open'',
+      ctx=Load(), lineno=53, col_offset=9, end_lineno=53, end_col_offset=23), args=[],
+      keywords=[], lineno=53, col_offset=9, end_lineno=53, end_col_offset=25), optional_vars=Name(id=''f'',
+      ctx=Store(), lineno=53, col_offset=29, end_lineno=53, end_col_offset=30))],
+      body=[If(test=Compare(left=Name(id=''file_type'', ctx=Load(), lineno=54, col_offset=11,
+      end_lineno=54, end_col_offset=20), ops=[Eq()], comparators=[Constant(value=''json'',
+      lineno=54, col_offset=24, end_lineno=54, end_col_offset=30)], lineno=54, col_offset=11,
+      end_lineno=54, end_col_offset=30), body=[Return(value=Call(func=Attribute(value=Name(id=''json'',
+      ctx=Load(), lineno=55, col_offset=19, end_lineno=55, end_col_offset=23), attr=''load'',
+      ctx=Load(), lineno=55, col_offset=19, end_lineno=55, end_col_offset=28), args=[Name(id=''f'',
+      ctx=Load(), lineno=55, col_offset=29, end_lineno=55, end_col_offset=30)], keywords=[],
+      lineno=55, col_offset=19, end_lineno=55, end_col_offset=31), lineno=55, col_offset=12,
+      end_lineno=55, end_col_offset=31)], orelse=[If(test=Compare(left=Name(id=''file_type'',
+      ctx=Load(), lineno=56, col_offset=13, end_lineno=56, end_col_offset=22), ops=[Eq()],
+      comparators=[Constant(value=''yaml'', lineno=56, col_offset=26, end_lineno=56,
+      end_col_offset=32)], lineno=56, col_offset=13, end_lineno=56, end_col_offset=32),
+      body=[Return(value=Call(func=Attribute(value=Name(id=''yaml'', ctx=Load(), lineno=57,
+      col_offset=19, end_lineno=57, end_col_offset=23), attr=''load'', ctx=Load(),
+      lineno=57, col_offset=19, end_lineno=57, end_col_offset=28), args=[Name(id=''f'',
+      ctx=Load(), lineno=57, col_offset=29, end_lineno=57, end_col_offset=30)], keywords=[],
+      lineno=57, col_offset=19, end_lineno=57, end_col_offset=31), lineno=57, col_offset=12,
+      end_lineno=57, end_col_offset=31)], orelse=[], lineno=56, col_offset=8, end_lineno=57,
+      end_col_offset=31)], lineno=54, col_offset=8, end_lineno=57, end_col_offset=31)],
+      lineno=53, col_offset=4, end_lineno=57, end_col_offset=31)], decorator_list=[],
+      returns=Name(id=''Dict'', ctx=Load(), lineno=44, col_offset=34, end_lineno=44,
+      end_col_offset=38), lineno=44, col_offset=0, end_lineno=57, end_col_offset=31)'
+    function_docstring: "Reads a JSON or YAML file and returns its contents as a dictionary.\n\
+      Args:\n    file_path (Path): The path to the file.\nReturns:\n    The contents\
+      \ of the file as a dictionary."
+    function_inputs:
+    - file_path
+    function_defaults: []
+    function_returns:
+    - json.load(f)
+    - yaml.load(f)
+    function_calls:
+    - file_path.open
+    - json.load
+    - yaml.load
+    function_call_inputs:
+      file_path.open: []
+      json.load:
+      - f
+      yaml.load:
+      - f
+    function_variables:
+    - file_type
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  write_file:
+    function_name: write_file
+    function_code: "def write_file(data: Dict, file_path: Path) -> None:\n    \"\"\
+      \"\n    Writes a dictionary to a JSON or YAML file. \n    Args:\n        data\
+      \ (Dict): The data to write to the file.\n        file_path (Path): The path\
+      \ to the file.\n    Returns:\n        None\n    \"\"\"\n    file_type = file_path.suffix[1:]\n\
+      \    with file_path.open('w') as f:\n        if file_type == 'json':\n     \
+      \       json.dump(data, f, indent=4)\n        elif file_type == 'yaml':\n  \
+      \          yaml.SafeDumper.ignore_aliases = lambda *args: True\n           \
+      \ yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)"
+    function_ast: 'FunctionDef(name=''write_file'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''data'', annotation=Name(id=''Dict'', ctx=Load(), lineno=60,
+      col_offset=21, end_lineno=60, end_col_offset=25), lineno=60, col_offset=15,
+      end_lineno=60, end_col_offset=25), arg(arg=''file_path'', annotation=Name(id=''Path'',
+      ctx=Load(), lineno=60, col_offset=38, end_lineno=60, end_col_offset=42), lineno=60,
+      col_offset=27, end_lineno=60, end_col_offset=42)], kwonlyargs=[], kw_defaults=[],
+      defaults=[]), body=[Expr(value=Constant(value=''\n    Writes a dictionary to
+      a JSON or YAML file. \n    Args:\n        data (Dict): The data to write to
+      the file.\n        file_path (Path): The path to the file.\n    Returns:\n        None\n    '',
+      lineno=61, col_offset=4, end_lineno=68, end_col_offset=7), lineno=61, col_offset=4,
+      end_lineno=68, end_col_offset=7), Assign(targets=[Name(id=''file_type'', ctx=Store(),
+      lineno=69, col_offset=4, end_lineno=69, end_col_offset=13)], value=Subscript(value=Attribute(value=Name(id=''file_path'',
+      ctx=Load(), lineno=69, col_offset=16, end_lineno=69, end_col_offset=25), attr=''suffix'',
+      ctx=Load(), lineno=69, col_offset=16, end_lineno=69, end_col_offset=32), slice=Slice(lower=Constant(value=1,
+      lineno=69, col_offset=33, end_lineno=69, end_col_offset=34), lineno=69, col_offset=33,
+      end_lineno=69, end_col_offset=35), ctx=Load(), lineno=69, col_offset=16, end_lineno=69,
+      end_col_offset=36), lineno=69, col_offset=4, end_lineno=69, end_col_offset=36),
+      With(items=[withitem(context_expr=Call(func=Attribute(value=Name(id=''file_path'',
+      ctx=Load(), lineno=70, col_offset=9, end_lineno=70, end_col_offset=18), attr=''open'',
+      ctx=Load(), lineno=70, col_offset=9, end_lineno=70, end_col_offset=23), args=[Constant(value=''w'',
+      lineno=70, col_offset=24, end_lineno=70, end_col_offset=27)], keywords=[], lineno=70,
+      col_offset=9, end_lineno=70, end_col_offset=28), optional_vars=Name(id=''f'',
+      ctx=Store(), lineno=70, col_offset=32, end_lineno=70, end_col_offset=33))],
+      body=[If(test=Compare(left=Name(id=''file_type'', ctx=Load(), lineno=71, col_offset=11,
+      end_lineno=71, end_col_offset=20), ops=[Eq()], comparators=[Constant(value=''json'',
+      lineno=71, col_offset=24, end_lineno=71, end_col_offset=30)], lineno=71, col_offset=11,
+      end_lineno=71, end_col_offset=30), body=[Expr(value=Call(func=Attribute(value=Name(id=''json'',
+      ctx=Load(), lineno=72, col_offset=12, end_lineno=72, end_col_offset=16), attr=''dump'',
+      ctx=Load(), lineno=72, col_offset=12, end_lineno=72, end_col_offset=21), args=[Name(id=''data'',
+      ctx=Load(), lineno=72, col_offset=22, end_lineno=72, end_col_offset=26), Name(id=''f'',
+      ctx=Load(), lineno=72, col_offset=28, end_lineno=72, end_col_offset=29)], keywords=[keyword(arg=''indent'',
+      value=Constant(value=4, lineno=72, col_offset=38, end_lineno=72, end_col_offset=39),
+      lineno=72, col_offset=31, end_lineno=72, end_col_offset=39)], lineno=72, col_offset=12,
+      end_lineno=72, end_col_offset=40), lineno=72, col_offset=12, end_lineno=72,
+      end_col_offset=40)], orelse=[If(test=Compare(left=Name(id=''file_type'', ctx=Load(),
+      lineno=73, col_offset=13, end_lineno=73, end_col_offset=22), ops=[Eq()], comparators=[Constant(value=''yaml'',
+      lineno=73, col_offset=26, end_lineno=73, end_col_offset=32)], lineno=73, col_offset=13,
+      end_lineno=73, end_col_offset=32), body=[Assign(targets=[Attribute(value=Attribute(value=Name(id=''yaml'',
+      ctx=Load(), lineno=74, col_offset=12, end_lineno=74, end_col_offset=16), attr=''SafeDumper'',
+      ctx=Load(), lineno=74, col_offset=12, end_lineno=74, end_col_offset=27), attr=''ignore_aliases'',
+      ctx=Store(), lineno=74, col_offset=12, end_lineno=74, end_col_offset=42)], value=Lambda(args=arguments(posonlyargs=[],
+      args=[], vararg=arg(arg=''args'', lineno=74, col_offset=53, end_lineno=74, end_col_offset=57),
+      kwonlyargs=[], kw_defaults=[], defaults=[]), body=Constant(value=True, lineno=74,
+      col_offset=59, end_lineno=74, end_col_offset=63), lineno=74, col_offset=45,
+      end_lineno=74, end_col_offset=63), lineno=74, col_offset=12, end_lineno=74,
+      end_col_offset=63), Expr(value=Call(func=Attribute(value=Name(id=''yaml'', ctx=Load(),
+      lineno=75, col_offset=12, end_lineno=75, end_col_offset=16), attr=''dump'',
+      ctx=Load(), lineno=75, col_offset=12, end_lineno=75, end_col_offset=21), args=[Name(id=''data'',
+      ctx=Load(), lineno=75, col_offset=22, end_lineno=75, end_col_offset=26), Name(id=''f'',
+      ctx=Load(), lineno=75, col_offset=28, end_lineno=75, end_col_offset=29)], keywords=[keyword(arg=''Dumper'',
+      value=Attribute(value=Name(id=''yaml'', ctx=Load(), lineno=75, col_offset=38,
+      end_lineno=75, end_col_offset=42), attr=''SafeDumper'', ctx=Load(), lineno=75,
+      col_offset=38, end_lineno=75, end_col_offset=53), lineno=75, col_offset=31,
+      end_lineno=75, end_col_offset=53), keyword(arg=''sort_keys'', value=Constant(value=False,
+      lineno=75, col_offset=65, end_lineno=75, end_col_offset=70), lineno=75, col_offset=55,
+      end_lineno=75, end_col_offset=70)], lineno=75, col_offset=12, end_lineno=75,
+      end_col_offset=71), lineno=75, col_offset=12, end_lineno=75, end_col_offset=71)],
+      orelse=[], lineno=73, col_offset=8, end_lineno=75, end_col_offset=71)], lineno=71,
+      col_offset=8, end_lineno=75, end_col_offset=71)], lineno=70, col_offset=4, end_lineno=75,
+      end_col_offset=71)], decorator_list=[], returns=Constant(value=None, lineno=60,
+      col_offset=47, end_lineno=60, end_col_offset=51), lineno=60, col_offset=0, end_lineno=75,
+      end_col_offset=71)'
+    function_docstring: "Writes a dictionary to a JSON or YAML file. \nArgs:\n   \
+      \ data (Dict): The data to write to the file.\n    file_path (Path): The path\
+      \ to the file.\nReturns:\n    None"
+    function_inputs:
+    - data
+    - file_path
+    function_defaults: []
+    function_returns: []
+    function_calls:
+    - file_path.open
+    - json.dump
+    - yaml.dump
+    function_call_inputs:
+      file_path.open:
+      - '''w'''
+      json.dump:
+      - data
+      - f
+      yaml.dump:
+      - data
+      - f
+    function_variables:
+    - file_type
+    function_decorators: []
+    function_annotations: []
+    function_properties:
+    - yaml.SafeDumper.ignore_aliases
+  convert_json_to_html:
+    function_name: convert_json_to_html
+    function_code: "def convert_json_to_html(directory: str) -> None:\n    \"\"\"\n\
+      \    Convert JSON files within a given directory to HTML format.\n    Args:\n\
+      \        directory (str): The directory where the JSON files are located.\n\
+      \    Returns:\n        None    \n    \"\"\"\n\n    def preserve_spacing(text:\
+      \ str, tab_width: int=4) -> str:\n        \"\"\"Preserve spaces and tabs in\
+      \ the provided text.\"\"\"\n        return text.replace(' ', '&nbsp;').replace('\\\
+      t', '&nbsp;' * tab_width)\n    for json_file in Path(directory).rglob('*.json'):\n\
+      \        dataset = read_file(json_file)\n        if not dataset:\n         \
+      \   continue\n        html_file = json_file.with_suffix('.html')\n        html_content\
+      \ = '\\n        <html>\\n        <head>\\n            <style>\\n           \
+      \     table {border-collapse: collapse; width: 100%; table-layout: fixed;}\\\
+      n                th, td {\\n                    border: 1px solid black;\\n\
+      \                    padding: 8px;\\n                    text-align: left;\\\
+      n                    white-space: pre-line;\\n                    vertical-align:\
+      \ top;\\n                    word-wrap: break-word;\\n                }\\n \
+      \           </style>\\n        </head>\\n        <body>\\n            <table>\\\
+      n                <thead>\\n                    <tr>\\n        '\n        column_count\
+      \ = len(dataset[0].keys())\n        column_width = 100 / column_count\n    \
+      \    for key in dataset[0].keys():\n            html_content += f\"<th style='width:\
+      \ {column_width}%;'>{key}</th>\"\n        html_content += '\\n             \
+      \       </tr>\\n                </thead>\\n                <tbody>\\n      \
+      \  '\n        for entry in dataset:\n            html_content += '<tr>'\n  \
+      \          for key in entry:\n                value = escape(str(entry[key]))\n\
+      \                value = preserve_spacing(value)\n                value = value.replace('\\\
+      n', '<br/>')\n                html_content += f'<td>{value}</td>'\n        \
+      \    html_content += '</tr>'\n        html_content += '\\n                </tbody>\\\
+      n            </table>\\n        </body>\\n        </html>\\n        '\n    \
+      \    html_file_path = json_file.with_suffix('.html')\n        try:\n       \
+      \     with open(html_file_path, 'w', encoding='utf-8') as file:\n          \
+      \      file.write(html_content)\n        except:\n            logging.save(logging.info(f'Failed\
+      \ saving: {html_file_path}'))"
+    function_ast: 'FunctionDef(name=''convert_json_to_html'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''directory'', annotation=Name(id=''str'', ctx=Load(), lineno=78,
+      col_offset=36, end_lineno=78, end_col_offset=39), lineno=78, col_offset=25,
+      end_lineno=78, end_col_offset=39)], kwonlyargs=[], kw_defaults=[], defaults=[]),
+      body=[Expr(value=Constant(value=''\n    Convert JSON files within a given directory
+      to HTML format.\n    Args:\n        directory (str): The directory where the
+      JSON files are located.\n    Returns:\n        None    \n    '', lineno=79,
+      col_offset=4, end_lineno=85, end_col_offset=7), lineno=79, col_offset=4, end_lineno=85,
+      end_col_offset=7), FunctionDef(name=''preserve_spacing'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''text'', annotation=Name(id=''str'', ctx=Load(), lineno=86, col_offset=31,
+      end_lineno=86, end_col_offset=34), lineno=86, col_offset=25, end_lineno=86,
+      end_col_offset=34), arg(arg=''tab_width'', annotation=Name(id=''int'', ctx=Load(),
+      lineno=86, col_offset=47, end_lineno=86, end_col_offset=50), lineno=86, col_offset=36,
+      end_lineno=86, end_col_offset=50)], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=4,
+      lineno=86, col_offset=53, end_lineno=86, end_col_offset=54)]), body=[Expr(value=Constant(value=''Preserve
+      spaces and tabs in the provided text.'', lineno=87, col_offset=8, end_lineno=87,
+      end_col_offset=60), lineno=87, col_offset=8, end_lineno=87, end_col_offset=60),
+      Return(value=Call(func=Attribute(value=Call(func=Attribute(value=Name(id=''text'',
+      ctx=Load(), lineno=88, col_offset=15, end_lineno=88, end_col_offset=19), attr=''replace'',
+      ctx=Load(), lineno=88, col_offset=15, end_lineno=88, end_col_offset=27), args=[Constant(value=''
+      '', lineno=88, col_offset=28, end_lineno=88, end_col_offset=31), Constant(value=''&nbsp;'',
+      lineno=88, col_offset=33, end_lineno=88, end_col_offset=41)], keywords=[], lineno=88,
+      col_offset=15, end_lineno=88, end_col_offset=42), attr=''replace'', ctx=Load(),
+      lineno=88, col_offset=15, end_lineno=88, end_col_offset=50), args=[Constant(value=''\t'',
+      lineno=88, col_offset=51, end_lineno=88, end_col_offset=55), BinOp(left=Constant(value=''&nbsp;'',
+      lineno=88, col_offset=57, end_lineno=88, end_col_offset=65), op=Mult(), right=Name(id=''tab_width'',
+      ctx=Load(), lineno=88, col_offset=68, end_lineno=88, end_col_offset=77), lineno=88,
+      col_offset=57, end_lineno=88, end_col_offset=77)], keywords=[], lineno=88, col_offset=15,
+      end_lineno=88, end_col_offset=78), lineno=88, col_offset=8, end_lineno=88, end_col_offset=78)],
+      decorator_list=[], returns=Name(id=''str'', ctx=Load(), lineno=86, col_offset=59,
+      end_lineno=86, end_col_offset=62), lineno=86, col_offset=4, end_lineno=88, end_col_offset=78),
+      For(target=Name(id=''json_file'', ctx=Store(), lineno=90, col_offset=8, end_lineno=90,
+      end_col_offset=17), iter=Call(func=Attribute(value=Call(func=Name(id=''Path'',
+      ctx=Load(), lineno=90, col_offset=21, end_lineno=90, end_col_offset=25), args=[Name(id=''directory'',
+      ctx=Load(), lineno=90, col_offset=26, end_lineno=90, end_col_offset=35)], keywords=[],
+      lineno=90, col_offset=21, end_lineno=90, end_col_offset=36), attr=''rglob'',
+      ctx=Load(), lineno=90, col_offset=21, end_lineno=90, end_col_offset=42), args=[Constant(value=''*.json'',
+      lineno=90, col_offset=43, end_lineno=90, end_col_offset=51)], keywords=[], lineno=90,
+      col_offset=21, end_lineno=90, end_col_offset=52), body=[Assign(targets=[Name(id=''dataset'',
+      ctx=Store(), lineno=91, col_offset=8, end_lineno=91, end_col_offset=15)], value=Call(func=Name(id=''read_file'',
+      ctx=Load(), lineno=91, col_offset=18, end_lineno=91, end_col_offset=27), args=[Name(id=''json_file'',
+      ctx=Load(), lineno=91, col_offset=28, end_lineno=91, end_col_offset=37)], keywords=[],
+      lineno=91, col_offset=18, end_lineno=91, end_col_offset=38), lineno=91, col_offset=8,
+      end_lineno=91, end_col_offset=38), If(test=UnaryOp(op=Not(), operand=Name(id=''dataset'',
+      ctx=Load(), lineno=92, col_offset=15, end_lineno=92, end_col_offset=22), lineno=92,
+      col_offset=11, end_lineno=92, end_col_offset=22), body=[Continue(lineno=93,
+      col_offset=12, end_lineno=93, end_col_offset=20)], orelse=[], lineno=92, col_offset=8,
+      end_lineno=93, end_col_offset=20), Assign(targets=[Name(id=''html_file'', ctx=Store(),
+      lineno=95, col_offset=8, end_lineno=95, end_col_offset=17)], value=Call(func=Attribute(value=Name(id=''json_file'',
+      ctx=Load(), lineno=95, col_offset=20, end_lineno=95, end_col_offset=29), attr=''with_suffix'',
+      ctx=Load(), lineno=95, col_offset=20, end_lineno=95, end_col_offset=41), args=[Constant(value=''.html'',
+      lineno=95, col_offset=42, end_lineno=95, end_col_offset=49)], keywords=[], lineno=95,
+      col_offset=20, end_lineno=95, end_col_offset=50), lineno=95, col_offset=8, end_lineno=95,
+      end_col_offset=50), Assign(targets=[Name(id=''html_content'', ctx=Store(), lineno=96,
+      col_offset=8, end_lineno=96, end_col_offset=20)], value=Constant(value=''\n        <html>\n        <head>\n            <style>\n                table
+      {border-collapse: collapse; width: 100%; table-layout: fixed;}\n                th,
+      td {\n                    border: 1px solid black;\n                    padding:
+      8px;\n                    text-align: left;\n                    white-space:
+      pre-line;\n                    vertical-align: top;\n                    word-wrap:
+      break-word;\n                }\n            </style>\n        </head>\n        <body>\n            <table>\n                <thead>\n                    <tr>\n        '',
+      lineno=96, col_offset=23, end_lineno=115, end_col_offset=11), lineno=96, col_offset=8,
+      end_lineno=115, end_col_offset=11), Assign(targets=[Name(id=''column_count'',
+      ctx=Store(), lineno=116, col_offset=8, end_lineno=116, end_col_offset=20)],
+      value=Call(func=Name(id=''len'', ctx=Load(), lineno=116, col_offset=23, end_lineno=116,
+      end_col_offset=26), args=[Call(func=Attribute(value=Subscript(value=Name(id=''dataset'',
+      ctx=Load(), lineno=116, col_offset=27, end_lineno=116, end_col_offset=34), slice=Constant(value=0,
+      lineno=116, col_offset=35, end_lineno=116, end_col_offset=36), ctx=Load(), lineno=116,
+      col_offset=27, end_lineno=116, end_col_offset=37), attr=''keys'', ctx=Load(),
+      lineno=116, col_offset=27, end_lineno=116, end_col_offset=42), args=[], keywords=[],
+      lineno=116, col_offset=27, end_lineno=116, end_col_offset=44)], keywords=[],
+      lineno=116, col_offset=23, end_lineno=116, end_col_offset=45), lineno=116, col_offset=8,
+      end_lineno=116, end_col_offset=45), Assign(targets=[Name(id=''column_width'',
+      ctx=Store(), lineno=117, col_offset=8, end_lineno=117, end_col_offset=20)],
+      value=BinOp(left=Constant(value=100, lineno=117, col_offset=23, end_lineno=117,
+      end_col_offset=26), op=Div(), right=Name(id=''column_count'', ctx=Load(), lineno=117,
+      col_offset=29, end_lineno=117, end_col_offset=41), lineno=117, col_offset=23,
+      end_lineno=117, end_col_offset=41), lineno=117, col_offset=8, end_lineno=117,
+      end_col_offset=41), For(target=Name(id=''key'', ctx=Store(), lineno=118, col_offset=12,
+      end_lineno=118, end_col_offset=15), iter=Call(func=Attribute(value=Subscript(value=Name(id=''dataset'',
+      ctx=Load(), lineno=118, col_offset=19, end_lineno=118, end_col_offset=26), slice=Constant(value=0,
+      lineno=118, col_offset=27, end_lineno=118, end_col_offset=28), ctx=Load(), lineno=118,
+      col_offset=19, end_lineno=118, end_col_offset=29), attr=''keys'', ctx=Load(),
+      lineno=118, col_offset=19, end_lineno=118, end_col_offset=34), args=[], keywords=[],
+      lineno=118, col_offset=19, end_lineno=118, end_col_offset=36), body=[AugAssign(target=Name(id=''html_content'',
+      ctx=Store(), lineno=119, col_offset=12, end_lineno=119, end_col_offset=24),
+      op=Add(), value=JoinedStr(values=[Constant(value="<th style=''width: ", lineno=119,
+      col_offset=28, end_lineno=119, end_col_offset=77), FormattedValue(value=Name(id=''column_width'',
+      ctx=Load(), lineno=119, col_offset=49, end_lineno=119, end_col_offset=61), conversion=-1,
+      lineno=119, col_offset=28, end_lineno=119, end_col_offset=77), Constant(value="%;''>",
+      lineno=119, col_offset=28, end_lineno=119, end_col_offset=77), FormattedValue(value=Name(id=''key'',
+      ctx=Load(), lineno=119, col_offset=67, end_lineno=119, end_col_offset=70), conversion=-1,
+      lineno=119, col_offset=28, end_lineno=119, end_col_offset=77), Constant(value=''</th>'',
+      lineno=119, col_offset=28, end_lineno=119, end_col_offset=77)], lineno=119,
+      col_offset=28, end_lineno=119, end_col_offset=77), lineno=119, col_offset=12,
+      end_lineno=119, end_col_offset=77)], orelse=[], lineno=118, col_offset=8, end_lineno=119,
+      end_col_offset=77), AugAssign(target=Name(id=''html_content'', ctx=Store(),
+      lineno=120, col_offset=8, end_lineno=120, end_col_offset=20), op=Add(), value=Constant(value=''\n                    </tr>\n                </thead>\n                <tbody>\n        '',
+      lineno=120, col_offset=24, end_lineno=124, end_col_offset=11), lineno=120, col_offset=8,
+      end_lineno=124, end_col_offset=11), For(target=Name(id=''entry'', ctx=Store(),
+      lineno=125, col_offset=12, end_lineno=125, end_col_offset=17), iter=Name(id=''dataset'',
+      ctx=Load(), lineno=125, col_offset=21, end_lineno=125, end_col_offset=28), body=[AugAssign(target=Name(id=''html_content'',
+      ctx=Store(), lineno=126, col_offset=12, end_lineno=126, end_col_offset=24),
+      op=Add(), value=Constant(value=''<tr>'', lineno=126, col_offset=28, end_lineno=126,
+      end_col_offset=34), lineno=126, col_offset=12, end_lineno=126, end_col_offset=34),
+      For(target=Name(id=''key'', ctx=Store(), lineno=127, col_offset=16, end_lineno=127,
+      end_col_offset=19), iter=Name(id=''entry'', ctx=Load(), lineno=127, col_offset=23,
+      end_lineno=127, end_col_offset=28), body=[Assign(targets=[Name(id=''value'',
+      ctx=Store(), lineno=129, col_offset=16, end_lineno=129, end_col_offset=21)],
+      value=Call(func=Name(id=''escape'', ctx=Load(), lineno=129, col_offset=24, end_lineno=129,
+      end_col_offset=30), args=[Call(func=Name(id=''str'', ctx=Load(), lineno=129,
+      col_offset=31, end_lineno=129, end_col_offset=34), args=[Subscript(value=Name(id=''entry'',
+      ctx=Load(), lineno=129, col_offset=35, end_lineno=129, end_col_offset=40), slice=Name(id=''key'',
+      ctx=Load(), lineno=129, col_offset=41, end_lineno=129, end_col_offset=44), ctx=Load(),
+      lineno=129, col_offset=35, end_lineno=129, end_col_offset=45)], keywords=[],
+      lineno=129, col_offset=31, end_lineno=129, end_col_offset=46)], keywords=[],
+      lineno=129, col_offset=24, end_lineno=129, end_col_offset=47), lineno=129, col_offset=16,
+      end_lineno=129, end_col_offset=47), Assign(targets=[Name(id=''value'', ctx=Store(),
+      lineno=130, col_offset=16, end_lineno=130, end_col_offset=21)], value=Call(func=Name(id=''preserve_spacing'',
+      ctx=Load(), lineno=130, col_offset=24, end_lineno=130, end_col_offset=40), args=[Name(id=''value'',
+      ctx=Load(), lineno=130, col_offset=41, end_lineno=130, end_col_offset=46)],
+      keywords=[], lineno=130, col_offset=24, end_lineno=130, end_col_offset=47),
+      lineno=130, col_offset=16, end_lineno=130, end_col_offset=47), Assign(targets=[Name(id=''value'',
+      ctx=Store(), lineno=131, col_offset=16, end_lineno=131, end_col_offset=21)],
+      value=Call(func=Attribute(value=Name(id=''value'', ctx=Load(), lineno=131, col_offset=24,
+      end_lineno=131, end_col_offset=29), attr=''replace'', ctx=Load(), lineno=131,
+      col_offset=24, end_lineno=131, end_col_offset=37), args=[Constant(value=''\n'',
+      lineno=131, col_offset=38, end_lineno=131, end_col_offset=42), Constant(value=''<br/>'',
+      lineno=131, col_offset=44, end_lineno=131, end_col_offset=51)], keywords=[],
+      lineno=131, col_offset=24, end_lineno=131, end_col_offset=52), lineno=131, col_offset=16,
+      end_lineno=131, end_col_offset=52), AugAssign(target=Name(id=''html_content'',
+      ctx=Store(), lineno=132, col_offset=16, end_lineno=132, end_col_offset=28),
+      op=Add(), value=JoinedStr(values=[Constant(value=''<td>'', lineno=132, col_offset=32,
+      end_lineno=132, end_col_offset=51), FormattedValue(value=Name(id=''value'',
+      ctx=Load(), lineno=132, col_offset=39, end_lineno=132, end_col_offset=44), conversion=-1,
+      lineno=132, col_offset=32, end_lineno=132, end_col_offset=51), Constant(value=''</td>'',
+      lineno=132, col_offset=32, end_lineno=132, end_col_offset=51)], lineno=132,
+      col_offset=32, end_lineno=132, end_col_offset=51), lineno=132, col_offset=16,
+      end_lineno=132, end_col_offset=51)], orelse=[], lineno=127, col_offset=12, end_lineno=132,
+      end_col_offset=51), AugAssign(target=Name(id=''html_content'', ctx=Store(),
+      lineno=133, col_offset=12, end_lineno=133, end_col_offset=24), op=Add(), value=Constant(value=''</tr>'',
+      lineno=133, col_offset=28, end_lineno=133, end_col_offset=35), lineno=133, col_offset=12,
+      end_lineno=133, end_col_offset=35)], orelse=[], lineno=125, col_offset=8, end_lineno=133,
+      end_col_offset=35), AugAssign(target=Name(id=''html_content'', ctx=Store(),
+      lineno=135, col_offset=8, end_lineno=135, end_col_offset=20), op=Add(), value=Constant(value=''\n                </tbody>\n            </table>\n        </body>\n        </html>\n        '',
+      lineno=135, col_offset=24, end_lineno=140, end_col_offset=11), lineno=135, col_offset=8,
+      end_lineno=140, end_col_offset=11), Assign(targets=[Name(id=''html_file_path'',
+      ctx=Store(), lineno=141, col_offset=8, end_lineno=141, end_col_offset=22)],
+      value=Call(func=Attribute(value=Name(id=''json_file'', ctx=Load(), lineno=141,
+      col_offset=25, end_lineno=141, end_col_offset=34), attr=''with_suffix'', ctx=Load(),
+      lineno=141, col_offset=25, end_lineno=141, end_col_offset=46), args=[Constant(value=''.html'',
+      lineno=141, col_offset=47, end_lineno=141, end_col_offset=54)], keywords=[],
+      lineno=141, col_offset=25, end_lineno=141, end_col_offset=55), lineno=141, col_offset=8,
+      end_lineno=141, end_col_offset=55), Try(body=[With(items=[withitem(context_expr=Call(func=Name(id=''open'',
+      ctx=Load(), lineno=143, col_offset=17, end_lineno=143, end_col_offset=21), args=[Name(id=''html_file_path'',
+      ctx=Load(), lineno=143, col_offset=22, end_lineno=143, end_col_offset=36), Constant(value=''w'',
+      lineno=143, col_offset=38, end_lineno=143, end_col_offset=41)], keywords=[keyword(arg=''encoding'',
+      value=Constant(value=''utf-8'', lineno=143, col_offset=52, end_lineno=143, end_col_offset=59),
+      lineno=143, col_offset=43, end_lineno=143, end_col_offset=59)], lineno=143,
+      col_offset=17, end_lineno=143, end_col_offset=60), optional_vars=Name(id=''file'',
+      ctx=Store(), lineno=143, col_offset=64, end_lineno=143, end_col_offset=68))],
+      body=[Expr(value=Call(func=Attribute(value=Name(id=''file'', ctx=Load(), lineno=144,
+      col_offset=16, end_lineno=144, end_col_offset=20), attr=''write'', ctx=Load(),
+      lineno=144, col_offset=16, end_lineno=144, end_col_offset=26), args=[Name(id=''html_content'',
+      ctx=Load(), lineno=144, col_offset=27, end_lineno=144, end_col_offset=39)],
+      keywords=[], lineno=144, col_offset=16, end_lineno=144, end_col_offset=40),
+      lineno=144, col_offset=16, end_lineno=144, end_col_offset=40)], lineno=143,
+      col_offset=12, end_lineno=144, end_col_offset=40)], handlers=[ExceptHandler(body=[Expr(value=Call(func=Attribute(value=Name(id=''logging'',
+      ctx=Load(), lineno=146, col_offset=12, end_lineno=146, end_col_offset=19), attr=''save'',
+      ctx=Load(), lineno=146, col_offset=12, end_lineno=146, end_col_offset=24), args=[Call(func=Attribute(value=Name(id=''logging'',
+      ctx=Load(), lineno=146, col_offset=25, end_lineno=146, end_col_offset=32), attr=''info'',
+      ctx=Load(), lineno=146, col_offset=25, end_lineno=146, end_col_offset=37), args=[JoinedStr(values=[Constant(value=''Failed
+      saving: '', lineno=146, col_offset=38, end_lineno=146, end_col_offset=72), FormattedValue(value=Name(id=''html_file_path'',
+      ctx=Load(), lineno=146, col_offset=56, end_lineno=146, end_col_offset=70), conversion=-1,
+      lineno=146, col_offset=38, end_lineno=146, end_col_offset=72)], lineno=146,
+      col_offset=38, end_lineno=146, end_col_offset=72)], keywords=[], lineno=146,
+      col_offset=25, end_lineno=146, end_col_offset=73)], keywords=[], lineno=146,
+      col_offset=12, end_lineno=146, end_col_offset=74), lineno=146, col_offset=12,
+      end_lineno=146, end_col_offset=74)], lineno=145, col_offset=8, end_lineno=146,
+      end_col_offset=74)], orelse=[], finalbody=[], lineno=142, col_offset=8, end_lineno=146,
+      end_col_offset=74)], orelse=[], lineno=90, col_offset=4, end_lineno=146, end_col_offset=74)],
+      decorator_list=[], returns=Constant(value=None, lineno=78, col_offset=44, end_lineno=78,
+      end_col_offset=48), lineno=78, col_offset=0, end_lineno=146, end_col_offset=74)'
+    function_docstring: "Convert JSON files within a given directory to HTML format.\n\
+      Args:\n    directory (str): The directory where the JSON files are located.\n\
+      Returns:\n    None    "
+    function_inputs:
+    - directory
+    function_defaults: []
+    function_returns:
+    - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    function_calls:
+    - text.replace(' ', '&nbsp;').replace
+    - text.replace
+    - Path(directory).rglob
+    - Path
+    - read_file
+    - json_file.with_suffix
+    - len
+    - dataset[0].keys
+    - escape
+    - str
+    - preserve_spacing
+    - value.replace
+    - open
+    - file.write
+    - logging.save
+    - logging.info
+    function_call_inputs:
+      text.replace(' ', '&nbsp;').replace:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+      text.replace:
+      - ''' '''
+      - '''&nbsp;'''
+      Path(directory).rglob:
+      - '''*.json'''
+      Path:
+      - directory
+      read_file:
+      - json_file
+      json_file.with_suffix:
+      - '''.html'''
+      len:
+      - dataset[0].keys()
+      dataset[0].keys: []
+      escape:
+      - str(entry[key])
+      str:
+      - entry[key]
+      preserve_spacing:
+      - value
+      value.replace:
+      - '''\n'''
+      - '''<br/>'''
+      open:
+      - html_file_path
+      - '''w'''
+      file.write:
+      - html_content
+      logging.save:
+      - 'logging.info(f''Failed saving: {html_file_path}'')'
+      logging.info:
+      - 'f''Failed saving: {html_file_path}'''
+    function_variables:
+    - column_width
+    - html_content
+    - column_count
+    - html_file
+    - html_file_path
+    - value
+    - dataset
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  preserve_spacing:
+    function_name: preserve_spacing
+    function_code: "def preserve_spacing(text: str, tab_width: int=4) -> str:\n  \
+      \  \"\"\"Preserve spaces and tabs in the provided text.\"\"\"\n    return text.replace('\
+      \ ', '&nbsp;').replace('\\t', '&nbsp;' * tab_width)"
+    function_ast: FunctionDef(name='preserve_spacing', args=arguments(posonlyargs=[],
+      args=[arg(arg='text', annotation=Name(id='str', ctx=Load(), lineno=86, col_offset=31,
+      end_lineno=86, end_col_offset=34), lineno=86, col_offset=25, end_lineno=86,
+      end_col_offset=34), arg(arg='tab_width', annotation=Name(id='int', ctx=Load(),
+      lineno=86, col_offset=47, end_lineno=86, end_col_offset=50), lineno=86, col_offset=36,
+      end_lineno=86, end_col_offset=50)], kwonlyargs=[], kw_defaults=[], defaults=[Constant(value=4,
+      lineno=86, col_offset=53, end_lineno=86, end_col_offset=54)]), body=[Expr(value=Constant(value='Preserve
+      spaces and tabs in the provided text.', lineno=87, col_offset=8, end_lineno=87,
+      end_col_offset=60), lineno=87, col_offset=8, end_lineno=87, end_col_offset=60),
+      Return(value=Call(func=Attribute(value=Call(func=Attribute(value=Name(id='text',
+      ctx=Load(), lineno=88, col_offset=15, end_lineno=88, end_col_offset=19), attr='replace',
+      ctx=Load(), lineno=88, col_offset=15, end_lineno=88, end_col_offset=27), args=[Constant(value='
+      ', lineno=88, col_offset=28, end_lineno=88, end_col_offset=31), Constant(value='&nbsp;',
+      lineno=88, col_offset=33, end_lineno=88, end_col_offset=41)], keywords=[], lineno=88,
+      col_offset=15, end_lineno=88, end_col_offset=42), attr='replace', ctx=Load(),
+      lineno=88, col_offset=15, end_lineno=88, end_col_offset=50), args=[Constant(value='\t',
+      lineno=88, col_offset=51, end_lineno=88, end_col_offset=55), BinOp(left=Constant(value='&nbsp;',
+      lineno=88, col_offset=57, end_lineno=88, end_col_offset=65), op=Mult(), right=Name(id='tab_width',
+      ctx=Load(), lineno=88, col_offset=68, end_lineno=88, end_col_offset=77), lineno=88,
+      col_offset=57, end_lineno=88, end_col_offset=77)], keywords=[], lineno=88, col_offset=15,
+      end_lineno=88, end_col_offset=78), lineno=88, col_offset=8, end_lineno=88, end_col_offset=78)],
+      decorator_list=[], returns=Name(id='str', ctx=Load(), lineno=86, col_offset=59,
+      end_lineno=86, end_col_offset=62), lineno=86, col_offset=4, end_lineno=88, end_col_offset=78)
+    function_docstring: Preserve spaces and tabs in the provided text.
+    function_inputs:
+    - text
+    - tab_width
+    function_defaults:
+    - '4'
+    function_returns:
+    - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    function_calls:
+    - text.replace(' ', '&nbsp;').replace
+    - text.replace
+    function_call_inputs:
+      text.replace(' ', '&nbsp;').replace:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+      text.replace:
+      - ''' '''
+      - '''&nbsp;'''
+    function_variables: []
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  combine_json_files:
+    function_name: combine_json_files
+    function_code: "def combine_json_files(directory: str) -> Dict[str, List[Dict]]:\n\
+      \    \"\"\"\n    Combine all JSON files in the output directory into 'instruct.json',\
+      \ and then remove duplicates.\n    Args:\n        directory (str): The directory\
+      \ where the output files are located.\n    Returns:\n        A dictionary containing\
+      \ the 'instruct_list' datasets.\n    \"\"\"\n\n    def remove_duplicate_dataset_entries(dataset:\
+      \ List[Dict], key1: str, key2: str) -> List[Dict]:\n        \"\"\"\n       \
+      \ Remove duplicate entries from the provided dataset based on the provided keys.\n\
+      \        Args:\n            dataset (List[Dict]): The dataset to remove duplicates\
+      \ from.\n            key1 (str): The first key to check for duplicates.\n  \
+      \          key2 (str): The second key to check for duplicates.\n        Returns:\n\
+      \            A dataset without duplicate entries.\n        \"\"\"\n        seen\
+      \ = set()\n        result = []\n        for item in dataset:\n            if\
+      \ (item[key1], item[key2]) not in seen:\n                seen.add((item[key1],\
+      \ item[key2]))\n                result.append(item)\n        return result\n\
+      \    instruct_data = []\n    for file_name in ['instruct.json']:\n        file_path\
+      \ = Path(directory) / file_name\n        combined_data = []\n        for json_file\
+      \ in Path(directory).rglob(f'*.{file_name}'):\n            json_file_data =\
+      \ read_file(json_file)\n            combined_data.extend(json_file_data)\n \
+      \           combined_data = remove_duplicate_dataset_entries(combined_data,\
+      \ 'instruction', 'output')\n            instruct_data = combined_data.copy()\n\
+      \            purpose_data = [item for item in combined_data if item['instruction'].startswith('1)\
+      \ Describe the purpose')]\n            graph_data = [item for item in combined_data\
+      \ if item['instruction'].startswith('What is the call code graph')]\n      \
+      \      code_output = []\n            graph_output = []\n            for item\
+      \ in purpose_data:\n                code_output.append({'instruction': 'Define\
+      \ the Python code file that is described as follows:\\n' + item['output'], 'output':\
+      \ item['input']})\n            for item in graph_data:\n                graph_output.append({'instruction':\
+      \ 'Define the call code graph for Python file:\\n' + item['input'], 'output':\
+      \ item['output']})\n            code_graph_output = code_output + graph_output\n\
+      \            write_file(code_graph_output, Path(directory) / 'training.json')\n\
+      \        write_file(combined_data, file_path)\n    convert_json_to_html(directory)\n\
+      \    return {'instruct_list': instruct_data}"
+    function_ast: 'FunctionDef(name=''combine_json_files'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''directory'', annotation=Name(id=''str'', ctx=Load(), lineno=149,
+      col_offset=34, end_lineno=149, end_col_offset=37), lineno=149, col_offset=23,
+      end_lineno=149, end_col_offset=37)], kwonlyargs=[], kw_defaults=[], defaults=[]),
+      body=[Expr(value=Constant(value="\n    Combine all JSON files in the output
+      directory into ''instruct.json'', and then remove duplicates.\n    Args:\n        directory
+      (str): The directory where the output files are located.\n    Returns:\n        A
+      dictionary containing the ''instruct_list'' datasets.\n    ", lineno=150, col_offset=4,
+      end_lineno=156, end_col_offset=7), lineno=150, col_offset=4, end_lineno=156,
+      end_col_offset=7), FunctionDef(name=''remove_duplicate_dataset_entries'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''dataset'', annotation=Subscript(value=Name(id=''List'', ctx=Load(),
+      lineno=158, col_offset=50, end_lineno=158, end_col_offset=54), slice=Name(id=''Dict'',
+      ctx=Load(), lineno=158, col_offset=55, end_lineno=158, end_col_offset=59), ctx=Load(),
+      lineno=158, col_offset=50, end_lineno=158, end_col_offset=60), lineno=158, col_offset=41,
+      end_lineno=158, end_col_offset=60), arg(arg=''key1'', annotation=Name(id=''str'',
+      ctx=Load(), lineno=158, col_offset=68, end_lineno=158, end_col_offset=71), lineno=158,
+      col_offset=62, end_lineno=158, end_col_offset=71), arg(arg=''key2'', annotation=Name(id=''str'',
+      ctx=Load(), lineno=158, col_offset=79, end_lineno=158, end_col_offset=82), lineno=158,
+      col_offset=73, end_lineno=158, end_col_offset=82)], kwonlyargs=[], kw_defaults=[],
+      defaults=[]), body=[Expr(value=Constant(value=''\n        Remove duplicate entries
+      from the provided dataset based on the provided keys.\n        Args:\n            dataset
+      (List[Dict]): The dataset to remove duplicates from.\n            key1 (str):
+      The first key to check for duplicates.\n            key2 (str): The second key
+      to check for duplicates.\n        Returns:\n            A dataset without duplicate
+      entries.\n        '', lineno=159, col_offset=8, end_lineno=167, end_col_offset=11),
+      lineno=159, col_offset=8, end_lineno=167, end_col_offset=11), Assign(targets=[Name(id=''seen'',
+      ctx=Store(), lineno=168, col_offset=8, end_lineno=168, end_col_offset=12)],
+      value=Call(func=Name(id=''set'', ctx=Load(), lineno=168, col_offset=15, end_lineno=168,
+      end_col_offset=18), args=[], keywords=[], lineno=168, col_offset=15, end_lineno=168,
+      end_col_offset=20), lineno=168, col_offset=8, end_lineno=168, end_col_offset=20),
+      Assign(targets=[Name(id=''result'', ctx=Store(), lineno=169, col_offset=8, end_lineno=169,
+      end_col_offset=14)], value=List(elts=[], ctx=Load(), lineno=169, col_offset=17,
+      end_lineno=169, end_col_offset=19), lineno=169, col_offset=8, end_lineno=169,
+      end_col_offset=19), For(target=Name(id=''item'', ctx=Store(), lineno=170, col_offset=12,
+      end_lineno=170, end_col_offset=16), iter=Name(id=''dataset'', ctx=Load(), lineno=170,
+      col_offset=20, end_lineno=170, end_col_offset=27), body=[If(test=Compare(left=Tuple(elts=[Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=171, col_offset=16, end_lineno=171, end_col_offset=20), slice=Name(id=''key1'',
+      ctx=Load(), lineno=171, col_offset=21, end_lineno=171, end_col_offset=25), ctx=Load(),
+      lineno=171, col_offset=16, end_lineno=171, end_col_offset=26), Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=171, col_offset=28, end_lineno=171, end_col_offset=32), slice=Name(id=''key2'',
+      ctx=Load(), lineno=171, col_offset=33, end_lineno=171, end_col_offset=37), ctx=Load(),
+      lineno=171, col_offset=28, end_lineno=171, end_col_offset=38)], ctx=Load(),
+      lineno=171, col_offset=15, end_lineno=171, end_col_offset=39), ops=[NotIn()],
+      comparators=[Name(id=''seen'', ctx=Load(), lineno=171, col_offset=47, end_lineno=171,
+      end_col_offset=51)], lineno=171, col_offset=15, end_lineno=171, end_col_offset=51),
+      body=[Expr(value=Call(func=Attribute(value=Name(id=''seen'', ctx=Load(), lineno=172,
+      col_offset=16, end_lineno=172, end_col_offset=20), attr=''add'', ctx=Load(),
+      lineno=172, col_offset=16, end_lineno=172, end_col_offset=24), args=[Tuple(elts=[Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=172, col_offset=26, end_lineno=172, end_col_offset=30), slice=Name(id=''key1'',
+      ctx=Load(), lineno=172, col_offset=31, end_lineno=172, end_col_offset=35), ctx=Load(),
+      lineno=172, col_offset=26, end_lineno=172, end_col_offset=36), Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=172, col_offset=38, end_lineno=172, end_col_offset=42), slice=Name(id=''key2'',
+      ctx=Load(), lineno=172, col_offset=43, end_lineno=172, end_col_offset=47), ctx=Load(),
+      lineno=172, col_offset=38, end_lineno=172, end_col_offset=48)], ctx=Load(),
+      lineno=172, col_offset=25, end_lineno=172, end_col_offset=49)], keywords=[],
+      lineno=172, col_offset=16, end_lineno=172, end_col_offset=50), lineno=172, col_offset=16,
+      end_lineno=172, end_col_offset=50), Expr(value=Call(func=Attribute(value=Name(id=''result'',
+      ctx=Load(), lineno=173, col_offset=16, end_lineno=173, end_col_offset=22), attr=''append'',
+      ctx=Load(), lineno=173, col_offset=16, end_lineno=173, end_col_offset=29), args=[Name(id=''item'',
+      ctx=Load(), lineno=173, col_offset=30, end_lineno=173, end_col_offset=34)],
+      keywords=[], lineno=173, col_offset=16, end_lineno=173, end_col_offset=35),
+      lineno=173, col_offset=16, end_lineno=173, end_col_offset=35)], orelse=[], lineno=171,
+      col_offset=12, end_lineno=173, end_col_offset=35)], orelse=[], lineno=170, col_offset=8,
+      end_lineno=173, end_col_offset=35), Return(value=Name(id=''result'', ctx=Load(),
+      lineno=174, col_offset=15, end_lineno=174, end_col_offset=21), lineno=174, col_offset=8,
+      end_lineno=174, end_col_offset=21)], decorator_list=[], returns=Subscript(value=Name(id=''List'',
+      ctx=Load(), lineno=158, col_offset=87, end_lineno=158, end_col_offset=91), slice=Name(id=''Dict'',
+      ctx=Load(), lineno=158, col_offset=92, end_lineno=158, end_col_offset=96), ctx=Load(),
+      lineno=158, col_offset=87, end_lineno=158, end_col_offset=97), lineno=158, col_offset=4,
+      end_lineno=174, end_col_offset=21), Assign(targets=[Name(id=''instruct_data'',
+      ctx=Store(), lineno=176, col_offset=4, end_lineno=176, end_col_offset=17)],
+      value=List(elts=[], ctx=Load(), lineno=176, col_offset=20, end_lineno=176, end_col_offset=22),
+      lineno=176, col_offset=4, end_lineno=176, end_col_offset=22), For(target=Name(id=''file_name'',
+      ctx=Store(), lineno=177, col_offset=8, end_lineno=177, end_col_offset=17), iter=List(elts=[Constant(value=''instruct.json'',
+      lineno=177, col_offset=22, end_lineno=177, end_col_offset=37)], ctx=Load(),
+      lineno=177, col_offset=21, end_lineno=177, end_col_offset=38), body=[Assign(targets=[Name(id=''file_path'',
+      ctx=Store(), lineno=178, col_offset=8, end_lineno=178, end_col_offset=17)],
+      value=BinOp(left=Call(func=Name(id=''Path'', ctx=Load(), lineno=178, col_offset=20,
+      end_lineno=178, end_col_offset=24), args=[Name(id=''directory'', ctx=Load(),
+      lineno=178, col_offset=25, end_lineno=178, end_col_offset=34)], keywords=[],
+      lineno=178, col_offset=20, end_lineno=178, end_col_offset=35), op=Div(), right=Name(id=''file_name'',
+      ctx=Load(), lineno=178, col_offset=38, end_lineno=178, end_col_offset=47), lineno=178,
+      col_offset=20, end_lineno=178, end_col_offset=47), lineno=178, col_offset=8,
+      end_lineno=178, end_col_offset=47), Assign(targets=[Name(id=''combined_data'',
+      ctx=Store(), lineno=179, col_offset=8, end_lineno=179, end_col_offset=21)],
+      value=List(elts=[], ctx=Load(), lineno=179, col_offset=24, end_lineno=179, end_col_offset=26),
+      lineno=179, col_offset=8, end_lineno=179, end_col_offset=26), For(target=Name(id=''json_file'',
+      ctx=Store(), lineno=180, col_offset=12, end_lineno=180, end_col_offset=21),
+      iter=Call(func=Attribute(value=Call(func=Name(id=''Path'', ctx=Load(), lineno=180,
+      col_offset=25, end_lineno=180, end_col_offset=29), args=[Name(id=''directory'',
+      ctx=Load(), lineno=180, col_offset=30, end_lineno=180, end_col_offset=39)],
+      keywords=[], lineno=180, col_offset=25, end_lineno=180, end_col_offset=40),
+      attr=''rglob'', ctx=Load(), lineno=180, col_offset=25, end_lineno=180, end_col_offset=46),
+      args=[JoinedStr(values=[Constant(value=''*.'', lineno=180, col_offset=47, end_lineno=180,
+      end_col_offset=63), FormattedValue(value=Name(id=''file_name'', ctx=Load(),
+      lineno=180, col_offset=52, end_lineno=180, end_col_offset=61), conversion=-1,
+      lineno=180, col_offset=47, end_lineno=180, end_col_offset=63)], lineno=180,
+      col_offset=47, end_lineno=180, end_col_offset=63)], keywords=[], lineno=180,
+      col_offset=25, end_lineno=180, end_col_offset=64), body=[Assign(targets=[Name(id=''json_file_data'',
+      ctx=Store(), lineno=181, col_offset=12, end_lineno=181, end_col_offset=26)],
+      value=Call(func=Name(id=''read_file'', ctx=Load(), lineno=181, col_offset=29,
+      end_lineno=181, end_col_offset=38), args=[Name(id=''json_file'', ctx=Load(),
+      lineno=181, col_offset=39, end_lineno=181, end_col_offset=48)], keywords=[],
+      lineno=181, col_offset=29, end_lineno=181, end_col_offset=49), lineno=181, col_offset=12,
+      end_lineno=181, end_col_offset=49), Expr(value=Call(func=Attribute(value=Name(id=''combined_data'',
+      ctx=Load(), lineno=182, col_offset=12, end_lineno=182, end_col_offset=25), attr=''extend'',
+      ctx=Load(), lineno=182, col_offset=12, end_lineno=182, end_col_offset=32), args=[Name(id=''json_file_data'',
+      ctx=Load(), lineno=182, col_offset=33, end_lineno=182, end_col_offset=47)],
+      keywords=[], lineno=182, col_offset=12, end_lineno=182, end_col_offset=48),
+      lineno=182, col_offset=12, end_lineno=182, end_col_offset=48), Assign(targets=[Name(id=''combined_data'',
+      ctx=Store(), lineno=183, col_offset=12, end_lineno=183, end_col_offset=25)],
+      value=Call(func=Name(id=''remove_duplicate_dataset_entries'', ctx=Load(), lineno=183,
+      col_offset=28, end_lineno=183, end_col_offset=60), args=[Name(id=''combined_data'',
+      ctx=Load(), lineno=183, col_offset=61, end_lineno=183, end_col_offset=74), Constant(value=''instruction'',
+      lineno=183, col_offset=76, end_lineno=183, end_col_offset=89), Constant(value=''output'',
+      lineno=183, col_offset=91, end_lineno=183, end_col_offset=99)], keywords=[],
+      lineno=183, col_offset=28, end_lineno=183, end_col_offset=100), lineno=183,
+      col_offset=12, end_lineno=183, end_col_offset=100), Assign(targets=[Name(id=''instruct_data'',
+      ctx=Store(), lineno=184, col_offset=12, end_lineno=184, end_col_offset=25)],
+      value=Call(func=Attribute(value=Name(id=''combined_data'', ctx=Load(), lineno=184,
+      col_offset=28, end_lineno=184, end_col_offset=41), attr=''copy'', ctx=Load(),
+      lineno=184, col_offset=28, end_lineno=184, end_col_offset=46), args=[], keywords=[],
+      lineno=184, col_offset=28, end_lineno=184, end_col_offset=48), lineno=184, col_offset=12,
+      end_lineno=184, end_col_offset=48), Assign(targets=[Name(id=''purpose_data'',
+      ctx=Store(), lineno=186, col_offset=12, end_lineno=186, end_col_offset=24)],
+      value=ListComp(elt=Name(id=''item'', ctx=Load(), lineno=186, col_offset=28,
+      end_lineno=186, end_col_offset=32), generators=[comprehension(target=Name(id=''item'',
+      ctx=Store(), lineno=186, col_offset=37, end_lineno=186, end_col_offset=41),
+      iter=Name(id=''combined_data'', ctx=Load(), lineno=186, col_offset=45, end_lineno=186,
+      end_col_offset=58), ifs=[Call(func=Attribute(value=Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=186, col_offset=62, end_lineno=186, end_col_offset=66), slice=Constant(value=''instruction'',
+      lineno=186, col_offset=67, end_lineno=186, end_col_offset=80), ctx=Load(), lineno=186,
+      col_offset=62, end_lineno=186, end_col_offset=81), attr=''startswith'', ctx=Load(),
+      lineno=186, col_offset=62, end_lineno=186, end_col_offset=92), args=[Constant(value=''1)
+      Describe the purpose'', lineno=186, col_offset=93, end_lineno=186, end_col_offset=118)],
+      keywords=[], lineno=186, col_offset=62, end_lineno=186, end_col_offset=119)],
+      is_async=0)], lineno=186, col_offset=27, end_lineno=186, end_col_offset=120),
+      lineno=186, col_offset=12, end_lineno=186, end_col_offset=120), Assign(targets=[Name(id=''graph_data'',
+      ctx=Store(), lineno=187, col_offset=12, end_lineno=187, end_col_offset=22)],
+      value=ListComp(elt=Name(id=''item'', ctx=Load(), lineno=187, col_offset=26,
+      end_lineno=187, end_col_offset=30), generators=[comprehension(target=Name(id=''item'',
+      ctx=Store(), lineno=187, col_offset=35, end_lineno=187, end_col_offset=39),
+      iter=Name(id=''combined_data'', ctx=Load(), lineno=187, col_offset=43, end_lineno=187,
+      end_col_offset=56), ifs=[Call(func=Attribute(value=Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=187, col_offset=60, end_lineno=187, end_col_offset=64), slice=Constant(value=''instruction'',
+      lineno=187, col_offset=65, end_lineno=187, end_col_offset=78), ctx=Load(), lineno=187,
+      col_offset=60, end_lineno=187, end_col_offset=79), attr=''startswith'', ctx=Load(),
+      lineno=187, col_offset=60, end_lineno=187, end_col_offset=90), args=[Constant(value=''What
+      is the call code graph'', lineno=187, col_offset=91, end_lineno=187, end_col_offset=120)],
+      keywords=[], lineno=187, col_offset=60, end_lineno=187, end_col_offset=121)],
+      is_async=0)], lineno=187, col_offset=25, end_lineno=187, end_col_offset=122),
+      lineno=187, col_offset=12, end_lineno=187, end_col_offset=122), Assign(targets=[Name(id=''code_output'',
+      ctx=Store(), lineno=188, col_offset=12, end_lineno=188, end_col_offset=23)],
+      value=List(elts=[], ctx=Load(), lineno=188, col_offset=26, end_lineno=188, end_col_offset=28),
+      lineno=188, col_offset=12, end_lineno=188, end_col_offset=28), Assign(targets=[Name(id=''graph_output'',
+      ctx=Store(), lineno=189, col_offset=12, end_lineno=189, end_col_offset=24)],
+      value=List(elts=[], ctx=Load(), lineno=189, col_offset=27, end_lineno=189, end_col_offset=29),
+      lineno=189, col_offset=12, end_lineno=189, end_col_offset=29), For(target=Name(id=''item'',
+      ctx=Store(), lineno=190, col_offset=16, end_lineno=190, end_col_offset=20),
+      iter=Name(id=''purpose_data'', ctx=Load(), lineno=190, col_offset=24, end_lineno=190,
+      end_col_offset=36), body=[Expr(value=Call(func=Attribute(value=Name(id=''code_output'',
+      ctx=Load(), lineno=191, col_offset=16, end_lineno=191, end_col_offset=27), attr=''append'',
+      ctx=Load(), lineno=191, col_offset=16, end_lineno=191, end_col_offset=34), args=[Dict(keys=[Constant(value=''instruction'',
+      lineno=191, col_offset=36, end_lineno=191, end_col_offset=49), Constant(value=''output'',
+      lineno=191, col_offset=130, end_lineno=191, end_col_offset=138)], values=[BinOp(left=Constant(value=''Define
+      the Python code file that is described as follows:\n'', lineno=191, col_offset=51,
+      end_lineno=191, end_col_offset=112), op=Add(), right=Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=191, col_offset=114, end_lineno=191, end_col_offset=118),
+      slice=Constant(value=''output'', lineno=191, col_offset=119, end_lineno=191,
+      end_col_offset=127), ctx=Load(), lineno=191, col_offset=114, end_lineno=191,
+      end_col_offset=128), lineno=191, col_offset=51, end_lineno=191, end_col_offset=128),
+      Subscript(value=Name(id=''item'', ctx=Load(), lineno=191, col_offset=140, end_lineno=191,
+      end_col_offset=144), slice=Constant(value=''input'', lineno=191, col_offset=145,
+      end_lineno=191, end_col_offset=152), ctx=Load(), lineno=191, col_offset=140,
+      end_lineno=191, end_col_offset=153)], lineno=191, col_offset=35, end_lineno=191,
+      end_col_offset=154)], keywords=[], lineno=191, col_offset=16, end_lineno=191,
+      end_col_offset=155), lineno=191, col_offset=16, end_lineno=191, end_col_offset=155)],
+      orelse=[], lineno=190, col_offset=12, end_lineno=191, end_col_offset=155), For(target=Name(id=''item'',
+      ctx=Store(), lineno=192, col_offset=16, end_lineno=192, end_col_offset=20),
+      iter=Name(id=''graph_data'', ctx=Load(), lineno=192, col_offset=24, end_lineno=192,
+      end_col_offset=34), body=[Expr(value=Call(func=Attribute(value=Name(id=''graph_output'',
+      ctx=Load(), lineno=193, col_offset=16, end_lineno=193, end_col_offset=28), attr=''append'',
+      ctx=Load(), lineno=193, col_offset=16, end_lineno=193, end_col_offset=35), args=[Dict(keys=[Constant(value=''instruction'',
+      lineno=193, col_offset=37, end_lineno=193, end_col_offset=50), Constant(value=''output'',
+      lineno=193, col_offset=117, end_lineno=193, end_col_offset=125)], values=[BinOp(left=Constant(value=''Define
+      the call code graph for Python file:\n'', lineno=193, col_offset=52, end_lineno=193,
+      end_col_offset=99), op=Add(), right=Subscript(value=Name(id=''item'', ctx=Load(),
+      lineno=193, col_offset=102, end_lineno=193, end_col_offset=106), slice=Constant(value=''input'',
+      lineno=193, col_offset=107, end_lineno=193, end_col_offset=114), ctx=Load(),
+      lineno=193, col_offset=102, end_lineno=193, end_col_offset=115), lineno=193,
+      col_offset=52, end_lineno=193, end_col_offset=115), Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=193, col_offset=127, end_lineno=193, end_col_offset=131),
+      slice=Constant(value=''output'', lineno=193, col_offset=132, end_lineno=193,
+      end_col_offset=140), ctx=Load(), lineno=193, col_offset=127, end_lineno=193,
+      end_col_offset=141)], lineno=193, col_offset=36, end_lineno=193, end_col_offset=142)],
+      keywords=[], lineno=193, col_offset=16, end_lineno=193, end_col_offset=143),
+      lineno=193, col_offset=16, end_lineno=193, end_col_offset=143)], orelse=[],
+      lineno=192, col_offset=12, end_lineno=193, end_col_offset=143), Assign(targets=[Name(id=''code_graph_output'',
+      ctx=Store(), lineno=194, col_offset=12, end_lineno=194, end_col_offset=29)],
+      value=BinOp(left=Name(id=''code_output'', ctx=Load(), lineno=194, col_offset=32,
+      end_lineno=194, end_col_offset=43), op=Add(), right=Name(id=''graph_output'',
+      ctx=Load(), lineno=194, col_offset=46, end_lineno=194, end_col_offset=58), lineno=194,
+      col_offset=32, end_lineno=194, end_col_offset=58), lineno=194, col_offset=12,
+      end_lineno=194, end_col_offset=58), Expr(value=Call(func=Name(id=''write_file'',
+      ctx=Load(), lineno=195, col_offset=12, end_lineno=195, end_col_offset=22), args=[Name(id=''code_graph_output'',
+      ctx=Load(), lineno=195, col_offset=23, end_lineno=195, end_col_offset=40), BinOp(left=Call(func=Name(id=''Path'',
+      ctx=Load(), lineno=195, col_offset=42, end_lineno=195, end_col_offset=46), args=[Name(id=''directory'',
+      ctx=Load(), lineno=195, col_offset=47, end_lineno=195, end_col_offset=56)],
+      keywords=[], lineno=195, col_offset=42, end_lineno=195, end_col_offset=57),
+      op=Div(), right=Constant(value=''training.json'', lineno=195, col_offset=60,
+      end_lineno=195, end_col_offset=75), lineno=195, col_offset=42, end_lineno=195,
+      end_col_offset=75)], keywords=[], lineno=195, col_offset=12, end_lineno=195,
+      end_col_offset=76), lineno=195, col_offset=12, end_lineno=195, end_col_offset=76)],
+      orelse=[], lineno=180, col_offset=8, end_lineno=195, end_col_offset=76), Expr(value=Call(func=Name(id=''write_file'',
+      ctx=Load(), lineno=197, col_offset=8, end_lineno=197, end_col_offset=18), args=[Name(id=''combined_data'',
+      ctx=Load(), lineno=197, col_offset=19, end_lineno=197, end_col_offset=32), Name(id=''file_path'',
+      ctx=Load(), lineno=197, col_offset=34, end_lineno=197, end_col_offset=43)],
+      keywords=[], lineno=197, col_offset=8, end_lineno=197, end_col_offset=44), lineno=197,
+      col_offset=8, end_lineno=197, end_col_offset=44)], orelse=[], lineno=177, col_offset=4,
+      end_lineno=197, end_col_offset=44), Expr(value=Call(func=Name(id=''convert_json_to_html'',
+      ctx=Load(), lineno=200, col_offset=4, end_lineno=200, end_col_offset=24), args=[Name(id=''directory'',
+      ctx=Load(), lineno=200, col_offset=25, end_lineno=200, end_col_offset=34)],
+      keywords=[], lineno=200, col_offset=4, end_lineno=200, end_col_offset=35), lineno=200,
+      col_offset=4, end_lineno=200, end_col_offset=35), Return(value=Dict(keys=[Constant(value=''instruct_list'',
+      lineno=201, col_offset=12, end_lineno=201, end_col_offset=27)], values=[Name(id=''instruct_data'',
+      ctx=Load(), lineno=201, col_offset=29, end_lineno=201, end_col_offset=42)],
+      lineno=201, col_offset=11, end_lineno=201, end_col_offset=43), lineno=201, col_offset=4,
+      end_lineno=201, end_col_offset=43)], decorator_list=[], returns=Subscript(value=Name(id=''Dict'',
+      ctx=Load(), lineno=149, col_offset=42, end_lineno=149, end_col_offset=46), slice=Tuple(elts=[Name(id=''str'',
+      ctx=Load(), lineno=149, col_offset=47, end_lineno=149, end_col_offset=50), Subscript(value=Name(id=''List'',
+      ctx=Load(), lineno=149, col_offset=52, end_lineno=149, end_col_offset=56), slice=Name(id=''Dict'',
+      ctx=Load(), lineno=149, col_offset=57, end_lineno=149, end_col_offset=61), ctx=Load(),
+      lineno=149, col_offset=52, end_lineno=149, end_col_offset=62)], ctx=Load(),
+      lineno=149, col_offset=47, end_lineno=149, end_col_offset=62), ctx=Load(), lineno=149,
+      col_offset=42, end_lineno=149, end_col_offset=63), lineno=149, col_offset=0,
+      end_lineno=201, end_col_offset=43)'
+    function_docstring: "Combine all JSON files in the output directory into 'instruct.json',\
+      \ and then remove duplicates.\nArgs:\n    directory (str): The directory where\
+      \ the output files are located.\nReturns:\n    A dictionary containing the 'instruct_list'\
+      \ datasets."
+    function_inputs:
+    - directory
+    function_defaults: []
+    function_returns:
+    - '{''instruct_list'': instruct_data}'
+    - result
+    function_calls:
+    - set
+    - seen.add
+    - result.append
+    - Path
+    - Path(directory).rglob
+    - read_file
+    - combined_data.extend
+    - remove_duplicate_dataset_entries
+    - combined_data.copy
+    - item['instruction'].startswith
+    - code_output.append
+    - graph_output.append
+    - write_file
+    - convert_json_to_html
+    function_call_inputs:
+      set: []
+      seen.add:
+      - (item[key1], item[key2])
+      result.append:
+      - item
+      Path:
+      - directory
+      Path(directory).rglob:
+      - f'*.{file_name}'
+      read_file:
+      - json_file
+      combined_data.extend:
+      - json_file_data
+      remove_duplicate_dataset_entries:
+      - combined_data
+      - '''instruction'''
+      - '''output'''
+      combined_data.copy: []
+      item['instruction'].startswith:
+      - '''What is the call code graph'''
+      code_output.append:
+      - '{''instruction'': ''Define the Python code file that is described as follows:\n''
+        + item[''output''], ''output'': item[''input'']}'
+      graph_output.append:
+      - '{''instruction'': ''Define the call code graph for Python file:\n'' + item[''input''],
+        ''output'': item[''output'']}'
+      write_file:
+      - combined_data
+      - file_path
+      convert_json_to_html:
+      - directory
+    function_variables:
+    - purpose_data
+    - graph_data
+    - json_file_data
+    - code_graph_output
+    - instruct_data
+    - graph_output
+    - combined_data
+    - result
+    - code_output
+    - file_path
+    - seen
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  remove_duplicate_dataset_entries:
+    function_name: remove_duplicate_dataset_entries
+    function_code: "def remove_duplicate_dataset_entries(dataset: List[Dict], key1:\
+      \ str, key2: str) -> List[Dict]:\n    \"\"\"\n        Remove duplicate entries\
+      \ from the provided dataset based on the provided keys.\n        Args:\n   \
+      \         dataset (List[Dict]): The dataset to remove duplicates from.\n   \
+      \         key1 (str): The first key to check for duplicates.\n            key2\
+      \ (str): The second key to check for duplicates.\n        Returns:\n       \
+      \     A dataset without duplicate entries.\n        \"\"\"\n    seen = set()\n\
+      \    result = []\n    for item in dataset:\n        if (item[key1], item[key2])\
+      \ not in seen:\n            seen.add((item[key1], item[key2]))\n           \
+      \ result.append(item)\n    return result"
+    function_ast: 'FunctionDef(name=''remove_duplicate_dataset_entries'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''dataset'', annotation=Subscript(value=Name(id=''List'', ctx=Load(),
+      lineno=158, col_offset=50, end_lineno=158, end_col_offset=54), slice=Name(id=''Dict'',
+      ctx=Load(), lineno=158, col_offset=55, end_lineno=158, end_col_offset=59), ctx=Load(),
+      lineno=158, col_offset=50, end_lineno=158, end_col_offset=60), lineno=158, col_offset=41,
+      end_lineno=158, end_col_offset=60), arg(arg=''key1'', annotation=Name(id=''str'',
+      ctx=Load(), lineno=158, col_offset=68, end_lineno=158, end_col_offset=71), lineno=158,
+      col_offset=62, end_lineno=158, end_col_offset=71), arg(arg=''key2'', annotation=Name(id=''str'',
+      ctx=Load(), lineno=158, col_offset=79, end_lineno=158, end_col_offset=82), lineno=158,
+      col_offset=73, end_lineno=158, end_col_offset=82)], kwonlyargs=[], kw_defaults=[],
+      defaults=[]), body=[Expr(value=Constant(value=''\n        Remove duplicate entries
+      from the provided dataset based on the provided keys.\n        Args:\n            dataset
+      (List[Dict]): The dataset to remove duplicates from.\n            key1 (str):
+      The first key to check for duplicates.\n            key2 (str): The second key
+      to check for duplicates.\n        Returns:\n            A dataset without duplicate
+      entries.\n        '', lineno=159, col_offset=8, end_lineno=167, end_col_offset=11),
+      lineno=159, col_offset=8, end_lineno=167, end_col_offset=11), Assign(targets=[Name(id=''seen'',
+      ctx=Store(), lineno=168, col_offset=8, end_lineno=168, end_col_offset=12)],
+      value=Call(func=Name(id=''set'', ctx=Load(), lineno=168, col_offset=15, end_lineno=168,
+      end_col_offset=18), args=[], keywords=[], lineno=168, col_offset=15, end_lineno=168,
+      end_col_offset=20), lineno=168, col_offset=8, end_lineno=168, end_col_offset=20),
+      Assign(targets=[Name(id=''result'', ctx=Store(), lineno=169, col_offset=8, end_lineno=169,
+      end_col_offset=14)], value=List(elts=[], ctx=Load(), lineno=169, col_offset=17,
+      end_lineno=169, end_col_offset=19), lineno=169, col_offset=8, end_lineno=169,
+      end_col_offset=19), For(target=Name(id=''item'', ctx=Store(), lineno=170, col_offset=12,
+      end_lineno=170, end_col_offset=16), iter=Name(id=''dataset'', ctx=Load(), lineno=170,
+      col_offset=20, end_lineno=170, end_col_offset=27), body=[If(test=Compare(left=Tuple(elts=[Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=171, col_offset=16, end_lineno=171, end_col_offset=20), slice=Name(id=''key1'',
+      ctx=Load(), lineno=171, col_offset=21, end_lineno=171, end_col_offset=25), ctx=Load(),
+      lineno=171, col_offset=16, end_lineno=171, end_col_offset=26), Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=171, col_offset=28, end_lineno=171, end_col_offset=32), slice=Name(id=''key2'',
+      ctx=Load(), lineno=171, col_offset=33, end_lineno=171, end_col_offset=37), ctx=Load(),
+      lineno=171, col_offset=28, end_lineno=171, end_col_offset=38)], ctx=Load(),
+      lineno=171, col_offset=15, end_lineno=171, end_col_offset=39), ops=[NotIn()],
+      comparators=[Name(id=''seen'', ctx=Load(), lineno=171, col_offset=47, end_lineno=171,
+      end_col_offset=51)], lineno=171, col_offset=15, end_lineno=171, end_col_offset=51),
+      body=[Expr(value=Call(func=Attribute(value=Name(id=''seen'', ctx=Load(), lineno=172,
+      col_offset=16, end_lineno=172, end_col_offset=20), attr=''add'', ctx=Load(),
+      lineno=172, col_offset=16, end_lineno=172, end_col_offset=24), args=[Tuple(elts=[Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=172, col_offset=26, end_lineno=172, end_col_offset=30), slice=Name(id=''key1'',
+      ctx=Load(), lineno=172, col_offset=31, end_lineno=172, end_col_offset=35), ctx=Load(),
+      lineno=172, col_offset=26, end_lineno=172, end_col_offset=36), Subscript(value=Name(id=''item'',
+      ctx=Load(), lineno=172, col_offset=38, end_lineno=172, end_col_offset=42), slice=Name(id=''key2'',
+      ctx=Load(), lineno=172, col_offset=43, end_lineno=172, end_col_offset=47), ctx=Load(),
+      lineno=172, col_offset=38, end_lineno=172, end_col_offset=48)], ctx=Load(),
+      lineno=172, col_offset=25, end_lineno=172, end_col_offset=49)], keywords=[],
+      lineno=172, col_offset=16, end_lineno=172, end_col_offset=50), lineno=172, col_offset=16,
+      end_lineno=172, end_col_offset=50), Expr(value=Call(func=Attribute(value=Name(id=''result'',
+      ctx=Load(), lineno=173, col_offset=16, end_lineno=173, end_col_offset=22), attr=''append'',
+      ctx=Load(), lineno=173, col_offset=16, end_lineno=173, end_col_offset=29), args=[Name(id=''item'',
+      ctx=Load(), lineno=173, col_offset=30, end_lineno=173, end_col_offset=34)],
+      keywords=[], lineno=173, col_offset=16, end_lineno=173, end_col_offset=35),
+      lineno=173, col_offset=16, end_lineno=173, end_col_offset=35)], orelse=[], lineno=171,
+      col_offset=12, end_lineno=173, end_col_offset=35)], orelse=[], lineno=170, col_offset=8,
+      end_lineno=173, end_col_offset=35), Return(value=Name(id=''result'', ctx=Load(),
+      lineno=174, col_offset=15, end_lineno=174, end_col_offset=21), lineno=174, col_offset=8,
+      end_lineno=174, end_col_offset=21)], decorator_list=[], returns=Subscript(value=Name(id=''List'',
+      ctx=Load(), lineno=158, col_offset=87, end_lineno=158, end_col_offset=91), slice=Name(id=''Dict'',
+      ctx=Load(), lineno=158, col_offset=92, end_lineno=158, end_col_offset=96), ctx=Load(),
+      lineno=158, col_offset=87, end_lineno=158, end_col_offset=97), lineno=158, col_offset=4,
+      end_lineno=174, end_col_offset=21)'
+    function_docstring: "Remove duplicate entries from the provided dataset based\
+      \ on the provided keys.\nArgs:\n    dataset (List[Dict]): The dataset to remove\
+      \ duplicates from.\n    key1 (str): The first key to check for duplicates.\n\
+      \    key2 (str): The second key to check for duplicates.\nReturns:\n    A dataset\
+      \ without duplicate entries."
+    function_inputs:
+    - dataset
+    - key1
+    - key2
+    function_defaults: []
+    function_returns:
+    - result
+    function_calls:
+    - set
+    - seen.add
+    - result.append
+    function_call_inputs:
+      set: []
+      seen.add:
+      - (item[key1], item[key2])
+      result.append:
+      - item
+    function_variables:
+    - seen
+    - result
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  create_code_graph:
+    function_name: create_code_graph
+    function_code: "def create_code_graph(file_details: Dict, base_name: str, output_subdir:\
+      \ Path) -> None:\n    \"\"\"\n    Generate graphs from the file_details and\
+      \ save them as PNG images.\n    Args:\n        file_details (dict): The details\
+      \ extracted from the Python file.\n        base_name (str): The base name of\
+      \ the output files.\n        output_subdir (Path): The subdirectory where the\
+      \ output files will be saved.\n    Returns:\n        None\n    \"\"\"\n    graph_type\
+      \ = 'entire_code_graph'\n    output_file = output_subdir / f'{base_name}.{graph_type}.png'\n\
+      \    G = nx.DiGraph()\n    G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])\n\
+      \    for edge in file_details['file_info'][graph_type]['edges']:\n        source,\
+      \ target = (edge['source'], edge['target'])\n        if source in G.nodes and\
+      \ target in G.nodes:\n            G.add_edge(source, target, **{k: v for k,\
+      \ v in edge.items() if k in ['target_inputs', 'target_returns']})\n    plt.figure(figsize=(20,\
+      \ 20))\n    pos = nx.spring_layout(G)\n    nx.draw(G, pos, with_labels=True,\
+      \ font_weight='bold', font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12)\n\
+      \    edge_labels = {}\n    for edge in G.edges(data=True):\n        label =\
+      \ []\n        if 'target_inputs' in edge[2] and edge[2]['target_inputs']:\n\
+      \            label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\"\
+      )\n        if 'target_returns' in edge[2] and edge[2]['target_returns']:\n \
+      \           label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\"\
+      )\n        edge_labels[edge[0], edge[1]] = '\\n'.join(label)\n    nx.draw_networkx_edge_labels(G,\
+      \ pos, edge_labels=edge_labels, font_size=6)\n    plt.savefig(output_file)\n\
+      \    plt.close()"
+    function_ast: 'FunctionDef(name=''create_code_graph'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''file_details'', annotation=Name(id=''Dict'', ctx=Load(), lineno=204,
+      col_offset=36, end_lineno=204, end_col_offset=40), lineno=204, col_offset=22,
+      end_lineno=204, end_col_offset=40), arg(arg=''base_name'', annotation=Name(id=''str'',
+      ctx=Load(), lineno=204, col_offset=53, end_lineno=204, end_col_offset=56), lineno=204,
+      col_offset=42, end_lineno=204, end_col_offset=56), arg(arg=''output_subdir'',
+      annotation=Name(id=''Path'', ctx=Load(), lineno=204, col_offset=73, end_lineno=204,
+      end_col_offset=77), lineno=204, col_offset=58, end_lineno=204, end_col_offset=77)],
+      kwonlyargs=[], kw_defaults=[], defaults=[]), body=[Expr(value=Constant(value=''\n    Generate
+      graphs from the file_details and save them as PNG images.\n    Args:\n        file_details
+      (dict): The details extracted from the Python file.\n        base_name (str):
+      The base name of the output files.\n        output_subdir (Path): The subdirectory
+      where the output files will be saved.\n    Returns:\n        None\n    '', lineno=205,
+      col_offset=4, end_lineno=213, end_col_offset=7), lineno=205, col_offset=4, end_lineno=213,
+      end_col_offset=7), Assign(targets=[Name(id=''graph_type'', ctx=Store(), lineno=214,
+      col_offset=4, end_lineno=214, end_col_offset=14)], value=Constant(value=''entire_code_graph'',
+      lineno=214, col_offset=17, end_lineno=214, end_col_offset=36), lineno=214, col_offset=4,
+      end_lineno=214, end_col_offset=36), Assign(targets=[Name(id=''output_file'',
+      ctx=Store(), lineno=215, col_offset=4, end_lineno=215, end_col_offset=15)],
+      value=BinOp(left=Name(id=''output_subdir'', ctx=Load(), lineno=215, col_offset=18,
+      end_lineno=215, end_col_offset=31), op=Div(), right=JoinedStr(values=[FormattedValue(value=Name(id=''base_name'',
+      ctx=Load(), lineno=215, col_offset=37, end_lineno=215, end_col_offset=46), conversion=-1,
+      lineno=215, col_offset=34, end_lineno=215, end_col_offset=65), Constant(value=''.'',
+      lineno=215, col_offset=34, end_lineno=215, end_col_offset=65), FormattedValue(value=Name(id=''graph_type'',
+      ctx=Load(), lineno=215, col_offset=49, end_lineno=215, end_col_offset=59), conversion=-1,
+      lineno=215, col_offset=34, end_lineno=215, end_col_offset=65), Constant(value=''.png'',
+      lineno=215, col_offset=34, end_lineno=215, end_col_offset=65)], lineno=215,
+      col_offset=34, end_lineno=215, end_col_offset=65), lineno=215, col_offset=18,
+      end_lineno=215, end_col_offset=65), lineno=215, col_offset=4, end_lineno=215,
+      end_col_offset=65), Assign(targets=[Name(id=''G'', ctx=Store(), lineno=218,
+      col_offset=4, end_lineno=218, end_col_offset=5)], value=Call(func=Attribute(value=Name(id=''nx'',
+      ctx=Load(), lineno=218, col_offset=8, end_lineno=218, end_col_offset=10), attr=''DiGraph'',
+      ctx=Load(), lineno=218, col_offset=8, end_lineno=218, end_col_offset=18), args=[],
+      keywords=[], lineno=218, col_offset=8, end_lineno=218, end_col_offset=20), lineno=218,
+      col_offset=4, end_lineno=218, end_col_offset=20), Expr(value=Call(func=Attribute(value=Name(id=''G'',
+      ctx=Load(), lineno=219, col_offset=4, end_lineno=219, end_col_offset=5), attr=''add_nodes_from'',
+      ctx=Load(), lineno=219, col_offset=4, end_lineno=219, end_col_offset=20), args=[Subscript(value=Subscript(value=Subscript(value=Name(id=''file_details'',
+      ctx=Load(), lineno=219, col_offset=21, end_lineno=219, end_col_offset=33), slice=Constant(value=''file_info'',
+      lineno=219, col_offset=34, end_lineno=219, end_col_offset=45), ctx=Load(), lineno=219,
+      col_offset=21, end_lineno=219, end_col_offset=46), slice=Name(id=''graph_type'',
+      ctx=Load(), lineno=219, col_offset=47, end_lineno=219, end_col_offset=57), ctx=Load(),
+      lineno=219, col_offset=21, end_lineno=219, end_col_offset=58), slice=Constant(value=''nodes'',
+      lineno=219, col_offset=59, end_lineno=219, end_col_offset=66), ctx=Load(), lineno=219,
+      col_offset=21, end_lineno=219, end_col_offset=67)], keywords=[], lineno=219,
+      col_offset=4, end_lineno=219, end_col_offset=68), lineno=219, col_offset=4,
+      end_lineno=219, end_col_offset=68), For(target=Name(id=''edge'', ctx=Store(),
+      lineno=220, col_offset=8, end_lineno=220, end_col_offset=12), iter=Subscript(value=Subscript(value=Subscript(value=Name(id=''file_details'',
+      ctx=Load(), lineno=220, col_offset=16, end_lineno=220, end_col_offset=28), slice=Constant(value=''file_info'',
+      lineno=220, col_offset=29, end_lineno=220, end_col_offset=40), ctx=Load(), lineno=220,
+      col_offset=16, end_lineno=220, end_col_offset=41), slice=Name(id=''graph_type'',
+      ctx=Load(), lineno=220, col_offset=42, end_lineno=220, end_col_offset=52), ctx=Load(),
+      lineno=220, col_offset=16, end_lineno=220, end_col_offset=53), slice=Constant(value=''edges'',
+      lineno=220, col_offset=54, end_lineno=220, end_col_offset=61), ctx=Load(), lineno=220,
+      col_offset=16, end_lineno=220, end_col_offset=62), body=[Assign(targets=[Tuple(elts=[Name(id=''source'',
+      ctx=Store(), lineno=221, col_offset=8, end_lineno=221, end_col_offset=14), Name(id=''target'',
+      ctx=Store(), lineno=221, col_offset=16, end_lineno=221, end_col_offset=22)],
+      ctx=Store(), lineno=221, col_offset=8, end_lineno=221, end_col_offset=22)],
+      value=Tuple(elts=[Subscript(value=Name(id=''edge'', ctx=Load(), lineno=221,
+      col_offset=25, end_lineno=221, end_col_offset=29), slice=Constant(value=''source'',
+      lineno=221, col_offset=30, end_lineno=221, end_col_offset=38), ctx=Load(), lineno=221,
+      col_offset=25, end_lineno=221, end_col_offset=39), Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=221, col_offset=41, end_lineno=221, end_col_offset=45), slice=Constant(value=''target'',
+      lineno=221, col_offset=46, end_lineno=221, end_col_offset=54), ctx=Load(), lineno=221,
+      col_offset=41, end_lineno=221, end_col_offset=55)], ctx=Load(), lineno=221,
+      col_offset=25, end_lineno=221, end_col_offset=55), lineno=221, col_offset=8,
+      end_lineno=221, end_col_offset=55), If(test=BoolOp(op=And(), values=[Compare(left=Name(id=''source'',
+      ctx=Load(), lineno=222, col_offset=11, end_lineno=222, end_col_offset=17), ops=[In()],
+      comparators=[Attribute(value=Name(id=''G'', ctx=Load(), lineno=222, col_offset=21,
+      end_lineno=222, end_col_offset=22), attr=''nodes'', ctx=Load(), lineno=222,
+      col_offset=21, end_lineno=222, end_col_offset=28)], lineno=222, col_offset=11,
+      end_lineno=222, end_col_offset=28), Compare(left=Name(id=''target'', ctx=Load(),
+      lineno=222, col_offset=33, end_lineno=222, end_col_offset=39), ops=[In()], comparators=[Attribute(value=Name(id=''G'',
+      ctx=Load(), lineno=222, col_offset=43, end_lineno=222, end_col_offset=44), attr=''nodes'',
+      ctx=Load(), lineno=222, col_offset=43, end_lineno=222, end_col_offset=50)],
+      lineno=222, col_offset=33, end_lineno=222, end_col_offset=50)], lineno=222,
+      col_offset=11, end_lineno=222, end_col_offset=50), body=[Expr(value=Call(func=Attribute(value=Name(id=''G'',
+      ctx=Load(), lineno=223, col_offset=11, end_lineno=223, end_col_offset=12), attr=''add_edge'',
+      ctx=Load(), lineno=223, col_offset=11, end_lineno=223, end_col_offset=21), args=[Name(id=''source'',
+      ctx=Load(), lineno=223, col_offset=22, end_lineno=223, end_col_offset=28), Name(id=''target'',
+      ctx=Load(), lineno=223, col_offset=30, end_lineno=223, end_col_offset=36)],
+      keywords=[keyword(value=DictComp(key=Name(id=''k'', ctx=Load(), lineno=223,
+      col_offset=41, end_lineno=223, end_col_offset=42), value=Name(id=''v'', ctx=Load(),
+      lineno=223, col_offset=44, end_lineno=223, end_col_offset=45), generators=[comprehension(target=Tuple(elts=[Name(id=''k'',
+      ctx=Store(), lineno=223, col_offset=50, end_lineno=223, end_col_offset=51),
+      Name(id=''v'', ctx=Store(), lineno=223, col_offset=53, end_lineno=223, end_col_offset=54)],
+      ctx=Store(), lineno=223, col_offset=50, end_lineno=223, end_col_offset=54),
+      iter=Call(func=Attribute(value=Name(id=''edge'', ctx=Load(), lineno=223, col_offset=58,
+      end_lineno=223, end_col_offset=62), attr=''items'', ctx=Load(), lineno=223,
+      col_offset=58, end_lineno=223, end_col_offset=68), args=[], keywords=[], lineno=223,
+      col_offset=58, end_lineno=223, end_col_offset=70), ifs=[Compare(left=Name(id=''k'',
+      ctx=Load(), lineno=223, col_offset=74, end_lineno=223, end_col_offset=75), ops=[In()],
+      comparators=[List(elts=[Constant(value=''target_inputs'', lineno=223, col_offset=80,
+      end_lineno=223, end_col_offset=95), Constant(value=''target_returns'', lineno=223,
+      col_offset=97, end_lineno=223, end_col_offset=113)], ctx=Load(), lineno=223,
+      col_offset=79, end_lineno=223, end_col_offset=114)], lineno=223, col_offset=74,
+      end_lineno=223, end_col_offset=114)], is_async=0)], lineno=223, col_offset=40,
+      end_lineno=223, end_col_offset=115), lineno=223, col_offset=38, end_lineno=223,
+      end_col_offset=115)], lineno=223, col_offset=11, end_lineno=223, end_col_offset=116),
+      lineno=223, col_offset=11, end_lineno=223, end_col_offset=116)], orelse=[],
+      lineno=222, col_offset=8, end_lineno=223, end_col_offset=116)], orelse=[], lineno=220,
+      col_offset=4, end_lineno=223, end_col_offset=116), Expr(value=Call(func=Attribute(value=Name(id=''plt'',
+      ctx=Load(), lineno=225, col_offset=4, end_lineno=225, end_col_offset=7), attr=''figure'',
+      ctx=Load(), lineno=225, col_offset=4, end_lineno=225, end_col_offset=14), args=[],
+      keywords=[keyword(arg=''figsize'', value=Tuple(elts=[Constant(value=20, lineno=225,
+      col_offset=24, end_lineno=225, end_col_offset=26), Constant(value=20, lineno=225,
+      col_offset=28, end_lineno=225, end_col_offset=30)], ctx=Load(), lineno=225,
+      col_offset=23, end_lineno=225, end_col_offset=31), lineno=225, col_offset=15,
+      end_lineno=225, end_col_offset=31)], lineno=225, col_offset=4, end_lineno=225,
+      end_col_offset=32), lineno=225, col_offset=4, end_lineno=225, end_col_offset=32),
+      Assign(targets=[Name(id=''pos'', ctx=Store(), lineno=226, col_offset=4, end_lineno=226,
+      end_col_offset=7)], value=Call(func=Attribute(value=Name(id=''nx'', ctx=Load(),
+      lineno=226, col_offset=10, end_lineno=226, end_col_offset=12), attr=''spring_layout'',
+      ctx=Load(), lineno=226, col_offset=10, end_lineno=226, end_col_offset=26), args=[Name(id=''G'',
+      ctx=Load(), lineno=226, col_offset=27, end_lineno=226, end_col_offset=28)],
+      keywords=[], lineno=226, col_offset=10, end_lineno=226, end_col_offset=29),
+      lineno=226, col_offset=4, end_lineno=226, end_col_offset=29), Expr(value=Call(func=Attribute(value=Name(id=''nx'',
+      ctx=Load(), lineno=227, col_offset=4, end_lineno=227, end_col_offset=6), attr=''draw'',
+      ctx=Load(), lineno=227, col_offset=4, end_lineno=227, end_col_offset=11), args=[Name(id=''G'',
+      ctx=Load(), lineno=227, col_offset=12, end_lineno=227, end_col_offset=13), Name(id=''pos'',
+      ctx=Load(), lineno=227, col_offset=15, end_lineno=227, end_col_offset=18)],
+      keywords=[keyword(arg=''with_labels'', value=Constant(value=True, lineno=227,
+      col_offset=32, end_lineno=227, end_col_offset=36), lineno=227, col_offset=20,
+      end_lineno=227, end_col_offset=36), keyword(arg=''font_weight'', value=Constant(value=''bold'',
+      lineno=227, col_offset=50, end_lineno=227, end_col_offset=56), lineno=227, col_offset=38,
+      end_lineno=227, end_col_offset=56), keyword(arg=''font_size'', value=Constant(value=8,
+      lineno=227, col_offset=70, end_lineno=227, end_col_offset=71), lineno=227, col_offset=58,
+      end_lineno=227, end_col_offset=71), keyword(arg=''node_shape'', value=Constant(value=''s'',
+      lineno=227, col_offset=84, end_lineno=227, end_col_offset=87), lineno=227, col_offset=73,
+      end_lineno=227, end_col_offset=87), keyword(arg=''node_size'', value=Constant(value=500,
+      lineno=227, col_offset=99, end_lineno=227, end_col_offset=102), lineno=227,
+      col_offset=89, end_lineno=227, end_col_offset=102), keyword(arg=''width'', value=Constant(value=1,
+      lineno=227, col_offset=110, end_lineno=227, end_col_offset=111), lineno=227,
+      col_offset=104, end_lineno=227, end_col_offset=111), keyword(arg=''arrowsize'',
+      value=Constant(value=12, lineno=227, col_offset=123, end_lineno=227, end_col_offset=125),
+      lineno=227, col_offset=113, end_lineno=227, end_col_offset=125)], lineno=227,
+      col_offset=4, end_lineno=227, end_col_offset=126), lineno=227, col_offset=4,
+      end_lineno=227, end_col_offset=126), Assign(targets=[Name(id=''edge_labels'',
+      ctx=Store(), lineno=228, col_offset=4, end_lineno=228, end_col_offset=15)],
+      value=Dict(keys=[], values=[], lineno=228, col_offset=18, end_lineno=228, end_col_offset=20),
+      lineno=228, col_offset=4, end_lineno=228, end_col_offset=20), For(target=Name(id=''edge'',
+      ctx=Store(), lineno=229, col_offset=8, end_lineno=229, end_col_offset=12), iter=Call(func=Attribute(value=Name(id=''G'',
+      ctx=Load(), lineno=229, col_offset=16, end_lineno=229, end_col_offset=17), attr=''edges'',
+      ctx=Load(), lineno=229, col_offset=16, end_lineno=229, end_col_offset=23), args=[],
+      keywords=[keyword(arg=''data'', value=Constant(value=True, lineno=229, col_offset=29,
+      end_lineno=229, end_col_offset=33), lineno=229, col_offset=24, end_lineno=229,
+      end_col_offset=33)], lineno=229, col_offset=16, end_lineno=229, end_col_offset=34),
+      body=[Assign(targets=[Name(id=''label'', ctx=Store(), lineno=230, col_offset=8,
+      end_lineno=230, end_col_offset=13)], value=List(elts=[], ctx=Load(), lineno=230,
+      col_offset=16, end_lineno=230, end_col_offset=18), lineno=230, col_offset=8,
+      end_lineno=230, end_col_offset=18), If(test=BoolOp(op=And(), values=[Compare(left=Constant(value=''target_inputs'',
+      lineno=231, col_offset=11, end_lineno=231, end_col_offset=26), ops=[In()], comparators=[Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=231, col_offset=30, end_lineno=231, end_col_offset=34), slice=Constant(value=2,
+      lineno=231, col_offset=35, end_lineno=231, end_col_offset=36), ctx=Load(), lineno=231,
+      col_offset=30, end_lineno=231, end_col_offset=37)], lineno=231, col_offset=11,
+      end_lineno=231, end_col_offset=37), Subscript(value=Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=231, col_offset=42, end_lineno=231, end_col_offset=46), slice=Constant(value=2,
+      lineno=231, col_offset=47, end_lineno=231, end_col_offset=48), ctx=Load(), lineno=231,
+      col_offset=42, end_lineno=231, end_col_offset=49), slice=Constant(value=''target_inputs'',
+      lineno=231, col_offset=50, end_lineno=231, end_col_offset=65), ctx=Load(), lineno=231,
+      col_offset=42, end_lineno=231, end_col_offset=66)], lineno=231, col_offset=11,
+      end_lineno=231, end_col_offset=66), body=[Expr(value=Call(func=Attribute(value=Name(id=''label'',
+      ctx=Load(), lineno=232, col_offset=12, end_lineno=232, end_col_offset=17), attr=''append'',
+      ctx=Load(), lineno=232, col_offset=12, end_lineno=232, end_col_offset=24), args=[JoinedStr(values=[Constant(value=''Inputs:
+      '', lineno=232, col_offset=25, end_lineno=232, end_col_offset=73), FormattedValue(value=Call(func=Attribute(value=Constant(value='',
+      '', lineno=232, col_offset=36, end_lineno=232, end_col_offset=40), attr=''join'',
+      ctx=Load(), lineno=232, col_offset=36, end_lineno=232, end_col_offset=45), args=[Subscript(value=Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=232, col_offset=46, end_lineno=232, end_col_offset=50), slice=Constant(value=2,
+      lineno=232, col_offset=51, end_lineno=232, end_col_offset=52), ctx=Load(), lineno=232,
+      col_offset=46, end_lineno=232, end_col_offset=53), slice=Constant(value=''target_inputs'',
+      lineno=232, col_offset=54, end_lineno=232, end_col_offset=69), ctx=Load(), lineno=232,
+      col_offset=46, end_lineno=232, end_col_offset=70)], keywords=[], lineno=232,
+      col_offset=36, end_lineno=232, end_col_offset=71), conversion=-1, lineno=232,
+      col_offset=25, end_lineno=232, end_col_offset=73)], lineno=232, col_offset=25,
+      end_lineno=232, end_col_offset=73)], keywords=[], lineno=232, col_offset=12,
+      end_lineno=232, end_col_offset=74), lineno=232, col_offset=12, end_lineno=232,
+      end_col_offset=74)], orelse=[], lineno=231, col_offset=8, end_lineno=232, end_col_offset=74),
+      If(test=BoolOp(op=And(), values=[Compare(left=Constant(value=''target_returns'',
+      lineno=233, col_offset=11, end_lineno=233, end_col_offset=27), ops=[In()], comparators=[Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=233, col_offset=31, end_lineno=233, end_col_offset=35), slice=Constant(value=2,
+      lineno=233, col_offset=36, end_lineno=233, end_col_offset=37), ctx=Load(), lineno=233,
+      col_offset=31, end_lineno=233, end_col_offset=38)], lineno=233, col_offset=11,
+      end_lineno=233, end_col_offset=38), Subscript(value=Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=233, col_offset=43, end_lineno=233, end_col_offset=47), slice=Constant(value=2,
+      lineno=233, col_offset=48, end_lineno=233, end_col_offset=49), ctx=Load(), lineno=233,
+      col_offset=43, end_lineno=233, end_col_offset=50), slice=Constant(value=''target_returns'',
+      lineno=233, col_offset=51, end_lineno=233, end_col_offset=67), ctx=Load(), lineno=233,
+      col_offset=43, end_lineno=233, end_col_offset=68)], lineno=233, col_offset=11,
+      end_lineno=233, end_col_offset=68), body=[Expr(value=Call(func=Attribute(value=Name(id=''label'',
+      ctx=Load(), lineno=234, col_offset=12, end_lineno=234, end_col_offset=17), attr=''append'',
+      ctx=Load(), lineno=234, col_offset=12, end_lineno=234, end_col_offset=24), args=[JoinedStr(values=[Constant(value=''\nReturns:
+      '', lineno=234, col_offset=25, end_lineno=234, end_col_offset=77), FormattedValue(value=Call(func=Attribute(value=Constant(value='',
+      '', lineno=234, col_offset=39, end_lineno=234, end_col_offset=43), attr=''join'',
+      ctx=Load(), lineno=234, col_offset=39, end_lineno=234, end_col_offset=48), args=[Subscript(value=Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=234, col_offset=49, end_lineno=234, end_col_offset=53), slice=Constant(value=2,
+      lineno=234, col_offset=54, end_lineno=234, end_col_offset=55), ctx=Load(), lineno=234,
+      col_offset=49, end_lineno=234, end_col_offset=56), slice=Constant(value=''target_returns'',
+      lineno=234, col_offset=57, end_lineno=234, end_col_offset=73), ctx=Load(), lineno=234,
+      col_offset=49, end_lineno=234, end_col_offset=74)], keywords=[], lineno=234,
+      col_offset=39, end_lineno=234, end_col_offset=75), conversion=-1, lineno=234,
+      col_offset=25, end_lineno=234, end_col_offset=77)], lineno=234, col_offset=25,
+      end_lineno=234, end_col_offset=77)], keywords=[], lineno=234, col_offset=12,
+      end_lineno=234, end_col_offset=78), lineno=234, col_offset=12, end_lineno=234,
+      end_col_offset=78)], orelse=[], lineno=233, col_offset=8, end_lineno=234, end_col_offset=78),
+      Assign(targets=[Subscript(value=Name(id=''edge_labels'', ctx=Load(), lineno=235,
+      col_offset=8, end_lineno=235, end_col_offset=19), slice=Tuple(elts=[Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=235, col_offset=21, end_lineno=235, end_col_offset=25), slice=Constant(value=0,
+      lineno=235, col_offset=26, end_lineno=235, end_col_offset=27), ctx=Load(), lineno=235,
+      col_offset=21, end_lineno=235, end_col_offset=28), Subscript(value=Name(id=''edge'',
+      ctx=Load(), lineno=235, col_offset=30, end_lineno=235, end_col_offset=34), slice=Constant(value=1,
+      lineno=235, col_offset=35, end_lineno=235, end_col_offset=36), ctx=Load(), lineno=235,
+      col_offset=30, end_lineno=235, end_col_offset=37)], ctx=Load(), lineno=235,
+      col_offset=20, end_lineno=235, end_col_offset=38), ctx=Store(), lineno=235,
+      col_offset=8, end_lineno=235, end_col_offset=39)], value=Call(func=Attribute(value=Constant(value=''\n'',
+      lineno=235, col_offset=42, end_lineno=235, end_col_offset=46), attr=''join'',
+      ctx=Load(), lineno=235, col_offset=42, end_lineno=235, end_col_offset=51), args=[Name(id=''label'',
+      ctx=Load(), lineno=235, col_offset=52, end_lineno=235, end_col_offset=57)],
+      keywords=[], lineno=235, col_offset=42, end_lineno=235, end_col_offset=58),
+      lineno=235, col_offset=8, end_lineno=235, end_col_offset=58)], orelse=[], lineno=229,
+      col_offset=4, end_lineno=235, end_col_offset=58), Expr(value=Call(func=Attribute(value=Name(id=''nx'',
+      ctx=Load(), lineno=236, col_offset=4, end_lineno=236, end_col_offset=6), attr=''draw_networkx_edge_labels'',
+      ctx=Load(), lineno=236, col_offset=4, end_lineno=236, end_col_offset=32), args=[Name(id=''G'',
+      ctx=Load(), lineno=236, col_offset=33, end_lineno=236, end_col_offset=34), Name(id=''pos'',
+      ctx=Load(), lineno=236, col_offset=36, end_lineno=236, end_col_offset=39)],
+      keywords=[keyword(arg=''edge_labels'', value=Name(id=''edge_labels'', ctx=Load(),
+      lineno=236, col_offset=53, end_lineno=236, end_col_offset=64), lineno=236, col_offset=41,
+      end_lineno=236, end_col_offset=64), keyword(arg=''font_size'', value=Constant(value=6,
+      lineno=236, col_offset=76, end_lineno=236, end_col_offset=77), lineno=236, col_offset=66,
+      end_lineno=236, end_col_offset=77)], lineno=236, col_offset=4, end_lineno=236,
+      end_col_offset=78), lineno=236, col_offset=4, end_lineno=236, end_col_offset=78),
+      Expr(value=Call(func=Attribute(value=Name(id=''plt'', ctx=Load(), lineno=237,
+      col_offset=4, end_lineno=237, end_col_offset=7), attr=''savefig'', ctx=Load(),
+      lineno=237, col_offset=4, end_lineno=237, end_col_offset=15), args=[Name(id=''output_file'',
+      ctx=Load(), lineno=237, col_offset=16, end_lineno=237, end_col_offset=27)],
+      keywords=[], lineno=237, col_offset=4, end_lineno=237, end_col_offset=28), lineno=237,
+      col_offset=4, end_lineno=237, end_col_offset=28), Expr(value=Call(func=Attribute(value=Name(id=''plt'',
+      ctx=Load(), lineno=238, col_offset=4, end_lineno=238, end_col_offset=7), attr=''close'',
+      ctx=Load(), lineno=238, col_offset=4, end_lineno=238, end_col_offset=13), args=[],
+      keywords=[], lineno=238, col_offset=4, end_lineno=238, end_col_offset=15), lineno=238,
+      col_offset=4, end_lineno=238, end_col_offset=15)], decorator_list=[], returns=Constant(value=None,
+      lineno=204, col_offset=82, end_lineno=204, end_col_offset=86), lineno=204, col_offset=0,
+      end_lineno=238, end_col_offset=15)'
+    function_docstring: "Generate graphs from the file_details and save them as PNG\
+      \ images.\nArgs:\n    file_details (dict): The details extracted from the Python\
+      \ file.\n    base_name (str): The base name of the output files.\n    output_subdir\
+      \ (Path): The subdirectory where the output files will be saved.\nReturns:\n\
+      \    None"
+    function_inputs:
+    - file_details
+    - base_name
+    - output_subdir
+    function_defaults: []
+    function_returns: []
+    function_calls:
+    - nx.DiGraph
+    - G.add_nodes_from
+    - G.add_edge
+    - edge.items
+    - plt.figure
+    - nx.spring_layout
+    - nx.draw
+    - G.edges
+    - label.append
+    - ''', ''.join'
+    - '''\n''.join'
+    - nx.draw_networkx_edge_labels
+    - plt.savefig
+    - plt.close
+    function_call_inputs:
+      nx.DiGraph: []
+      G.add_nodes_from:
+      - file_details['file_info'][graph_type]['nodes']
+      G.add_edge:
+      - source
+      - target
+      edge.items: []
+      plt.figure: []
+      nx.spring_layout:
+      - G
+      nx.draw:
+      - G
+      - pos
+      G.edges: []
+      label.append:
+      - 'f"\nReturns: {'', ''.join(edge[2][''target_returns''])}"'
+      ''', ''.join':
+      - edge[2]['target_returns']
+      '''\n''.join':
+      - label
+      nx.draw_networkx_edge_labels:
+      - G
+      - pos
+      plt.savefig:
+      - output_file
+      plt.close: []
+    function_variables:
+    - G
+    - edge_labels
+    - label
+    - graph_type
+    - output_file
+    - pos
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  save_python_data:
+    function_name: save_python_data
+    function_code: "def save_python_data(file_details: dict, instruct_list: list,\
+      \ relative_path: Path, output_dir: str) -> None:\n    \"\"\"\n    Save Python\
+      \ file details as a YAML file, the instruction data as a JSON file, and code\
+      \ graphs.\n    Args:\n        file_details (dict): The details extracted from\
+      \ the Python file.\n        instruct_list (list): The instruction data extracted\
+      \ from the Python file.\n        relative_path (Path): The relative path to\
+      \ the Python file.\n        output_dir (str): The directory where the output\
+      \ files will be saved.\n    Returns:\n        None\n    \"\"\"\n    output_subdir\
+      \ = Path(output_dir) / relative_path.parts[0]\n    output_subdir.mkdir(parents=True,\
+      \ exist_ok=True)\n    base_name = '.'.join((part for part in relative_path.parts))\n\
+      \    file_names = [f'{base_name}.instruct.json', f'{base_name}.details.yaml']\n\
+      \    contents = [instruct_list, file_details]\n    for file_name, content in\
+      \ zip(file_names, contents):\n        write_file(content, output_subdir / file_name)\n\
+      \    try:\n        create_code_graph(file_details, base_name, output_subdir)\n\
+      \    except:\n        logging.info(f'Error creating graph for {base_name}')"
+    function_ast: 'FunctionDef(name=''save_python_data'', args=arguments(posonlyargs=[],
+      args=[arg(arg=''file_details'', annotation=Name(id=''dict'', ctx=Load(), lineno=241,
+      col_offset=35, end_lineno=241, end_col_offset=39), lineno=241, col_offset=21,
+      end_lineno=241, end_col_offset=39), arg(arg=''instruct_list'', annotation=Name(id=''list'',
+      ctx=Load(), lineno=241, col_offset=56, end_lineno=241, end_col_offset=60), lineno=241,
+      col_offset=41, end_lineno=241, end_col_offset=60), arg(arg=''relative_path'',
+      annotation=Name(id=''Path'', ctx=Load(), lineno=241, col_offset=77, end_lineno=241,
+      end_col_offset=81), lineno=241, col_offset=62, end_lineno=241, end_col_offset=81),
+      arg(arg=''output_dir'', annotation=Name(id=''str'', ctx=Load(), lineno=241,
+      col_offset=95, end_lineno=241, end_col_offset=98), lineno=241, col_offset=83,
+      end_lineno=241, end_col_offset=98)], kwonlyargs=[], kw_defaults=[], defaults=[]),
+      body=[Expr(value=Constant(value=''\n    Save Python file details as a YAML file,
+      the instruction data as a JSON file, and code graphs.\n    Args:\n        file_details
+      (dict): The details extracted from the Python file.\n        instruct_list (list):
+      The instruction data extracted from the Python file.\n        relative_path
+      (Path): The relative path to the Python file.\n        output_dir (str): The
+      directory where the output files will be saved.\n    Returns:\n        None\n    '',
+      lineno=242, col_offset=4, end_lineno=251, end_col_offset=7), lineno=242, col_offset=4,
+      end_lineno=251, end_col_offset=7), Assign(targets=[Name(id=''output_subdir'',
+      ctx=Store(), lineno=252, col_offset=4, end_lineno=252, end_col_offset=17)],
+      value=BinOp(left=Call(func=Name(id=''Path'', ctx=Load(), lineno=252, col_offset=20,
+      end_lineno=252, end_col_offset=24), args=[Name(id=''output_dir'', ctx=Load(),
+      lineno=252, col_offset=25, end_lineno=252, end_col_offset=35)], keywords=[],
+      lineno=252, col_offset=20, end_lineno=252, end_col_offset=36), op=Div(), right=Subscript(value=Attribute(value=Name(id=''relative_path'',
+      ctx=Load(), lineno=252, col_offset=39, end_lineno=252, end_col_offset=52), attr=''parts'',
+      ctx=Load(), lineno=252, col_offset=39, end_lineno=252, end_col_offset=58), slice=Constant(value=0,
+      lineno=252, col_offset=59, end_lineno=252, end_col_offset=60), ctx=Load(), lineno=252,
+      col_offset=39, end_lineno=252, end_col_offset=61), lineno=252, col_offset=20,
+      end_lineno=252, end_col_offset=61), lineno=252, col_offset=4, end_lineno=252,
+      end_col_offset=61), Expr(value=Call(func=Attribute(value=Name(id=''output_subdir'',
+      ctx=Load(), lineno=253, col_offset=4, end_lineno=253, end_col_offset=17), attr=''mkdir'',
+      ctx=Load(), lineno=253, col_offset=4, end_lineno=253, end_col_offset=23), args=[],
+      keywords=[keyword(arg=''parents'', value=Constant(value=True, lineno=253, col_offset=32,
+      end_lineno=253, end_col_offset=36), lineno=253, col_offset=24, end_lineno=253,
+      end_col_offset=36), keyword(arg=''exist_ok'', value=Constant(value=True, lineno=253,
+      col_offset=47, end_lineno=253, end_col_offset=51), lineno=253, col_offset=38,
+      end_lineno=253, end_col_offset=51)], lineno=253, col_offset=4, end_lineno=253,
+      end_col_offset=52), lineno=253, col_offset=4, end_lineno=253, end_col_offset=52),
+      Assign(targets=[Name(id=''base_name'', ctx=Store(), lineno=254, col_offset=4,
+      end_lineno=254, end_col_offset=13)], value=Call(func=Attribute(value=Constant(value=''.'',
+      lineno=254, col_offset=16, end_lineno=254, end_col_offset=19), attr=''join'',
+      ctx=Load(), lineno=254, col_offset=16, end_lineno=254, end_col_offset=24), args=[GeneratorExp(elt=Name(id=''part'',
+      ctx=Load(), lineno=254, col_offset=25, end_lineno=254, end_col_offset=29), generators=[comprehension(target=Name(id=''part'',
+      ctx=Store(), lineno=254, col_offset=34, end_lineno=254, end_col_offset=38),
+      iter=Attribute(value=Name(id=''relative_path'', ctx=Load(), lineno=254, col_offset=42,
+      end_lineno=254, end_col_offset=55), attr=''parts'', ctx=Load(), lineno=254,
+      col_offset=42, end_lineno=254, end_col_offset=61), ifs=[], is_async=0)], lineno=254,
+      col_offset=24, end_lineno=254, end_col_offset=62)], keywords=[], lineno=254,
+      col_offset=16, end_lineno=254, end_col_offset=62), lineno=254, col_offset=4,
+      end_lineno=254, end_col_offset=62), Assign(targets=[Name(id=''file_names'',
+      ctx=Store(), lineno=257, col_offset=4, end_lineno=257, end_col_offset=14)],
+      value=List(elts=[JoinedStr(values=[FormattedValue(value=Name(id=''base_name'',
+      ctx=Load(), lineno=257, col_offset=21, end_lineno=257, end_col_offset=30), conversion=-1,
+      lineno=257, col_offset=18, end_lineno=257, end_col_offset=46), Constant(value=''.instruct.json'',
+      lineno=257, col_offset=18, end_lineno=257, end_col_offset=46)], lineno=257,
+      col_offset=18, end_lineno=257, end_col_offset=46), JoinedStr(values=[FormattedValue(value=Name(id=''base_name'',
+      ctx=Load(), lineno=257, col_offset=51, end_lineno=257, end_col_offset=60), conversion=-1,
+      lineno=257, col_offset=48, end_lineno=257, end_col_offset=75), Constant(value=''.details.yaml'',
+      lineno=257, col_offset=48, end_lineno=257, end_col_offset=75)], lineno=257,
+      col_offset=48, end_lineno=257, end_col_offset=75)], ctx=Load(), lineno=257,
+      col_offset=17, end_lineno=257, end_col_offset=76), lineno=257, col_offset=4,
+      end_lineno=257, end_col_offset=76), Assign(targets=[Name(id=''contents'', ctx=Store(),
+      lineno=258, col_offset=4, end_lineno=258, end_col_offset=12)], value=List(elts=[Name(id=''instruct_list'',
+      ctx=Load(), lineno=258, col_offset=16, end_lineno=258, end_col_offset=29), Name(id=''file_details'',
+      ctx=Load(), lineno=258, col_offset=31, end_lineno=258, end_col_offset=43)],
+      ctx=Load(), lineno=258, col_offset=15, end_lineno=258, end_col_offset=44), lineno=258,
+      col_offset=4, end_lineno=258, end_col_offset=44), For(target=Tuple(elts=[Name(id=''file_name'',
+      ctx=Store(), lineno=260, col_offset=8, end_lineno=260, end_col_offset=17), Name(id=''content'',
+      ctx=Store(), lineno=260, col_offset=19, end_lineno=260, end_col_offset=26)],
+      ctx=Store(), lineno=260, col_offset=8, end_lineno=260, end_col_offset=26), iter=Call(func=Name(id=''zip'',
+      ctx=Load(), lineno=260, col_offset=30, end_lineno=260, end_col_offset=33), args=[Name(id=''file_names'',
+      ctx=Load(), lineno=260, col_offset=34, end_lineno=260, end_col_offset=44), Name(id=''contents'',
+      ctx=Load(), lineno=260, col_offset=46, end_lineno=260, end_col_offset=54)],
+      keywords=[], lineno=260, col_offset=30, end_lineno=260, end_col_offset=55),
+      body=[Expr(value=Call(func=Name(id=''write_file'', ctx=Load(), lineno=261, col_offset=8,
+      end_lineno=261, end_col_offset=18), args=[Name(id=''content'', ctx=Load(), lineno=261,
+      col_offset=19, end_lineno=261, end_col_offset=26), BinOp(left=Name(id=''output_subdir'',
+      ctx=Load(), lineno=261, col_offset=28, end_lineno=261, end_col_offset=41), op=Div(),
+      right=Name(id=''file_name'', ctx=Load(), lineno=261, col_offset=44, end_lineno=261,
+      end_col_offset=53), lineno=261, col_offset=28, end_lineno=261, end_col_offset=53)],
+      keywords=[], lineno=261, col_offset=8, end_lineno=261, end_col_offset=54), lineno=261,
+      col_offset=8, end_lineno=261, end_col_offset=54)], orelse=[], lineno=260, col_offset=4,
+      end_lineno=261, end_col_offset=54), Try(body=[Expr(value=Call(func=Name(id=''create_code_graph'',
+      ctx=Load(), lineno=264, col_offset=8, end_lineno=264, end_col_offset=25), args=[Name(id=''file_details'',
+      ctx=Load(), lineno=264, col_offset=26, end_lineno=264, end_col_offset=38), Name(id=''base_name'',
+      ctx=Load(), lineno=264, col_offset=40, end_lineno=264, end_col_offset=49), Name(id=''output_subdir'',
+      ctx=Load(), lineno=264, col_offset=51, end_lineno=264, end_col_offset=64)],
+      keywords=[], lineno=264, col_offset=8, end_lineno=264, end_col_offset=65), lineno=264,
+      col_offset=8, end_lineno=264, end_col_offset=65)], handlers=[ExceptHandler(body=[Expr(value=Call(func=Attribute(value=Name(id=''logging'',
+      ctx=Load(), lineno=266, col_offset=8, end_lineno=266, end_col_offset=15), attr=''info'',
+      ctx=Load(), lineno=266, col_offset=8, end_lineno=266, end_col_offset=20), args=[JoinedStr(values=[Constant(value=''Error
+      creating graph for '', lineno=266, col_offset=21, end_lineno=266, end_col_offset=60),
+      FormattedValue(value=Name(id=''base_name'', ctx=Load(), lineno=266, col_offset=49,
+      end_lineno=266, end_col_offset=58), conversion=-1, lineno=266, col_offset=21,
+      end_lineno=266, end_col_offset=60)], lineno=266, col_offset=21, end_lineno=266,
+      end_col_offset=60)], keywords=[], lineno=266, col_offset=8, end_lineno=266,
+      end_col_offset=61), lineno=266, col_offset=8, end_lineno=266, end_col_offset=61)],
+      lineno=265, col_offset=4, end_lineno=266, end_col_offset=61)], orelse=[], finalbody=[],
+      lineno=263, col_offset=4, end_lineno=266, end_col_offset=61)], decorator_list=[],
+      returns=Constant(value=None, lineno=241, col_offset=103, end_lineno=241, end_col_offset=107),
+      lineno=241, col_offset=0, end_lineno=266, end_col_offset=61)'
+    function_docstring: "Save Python file details as a YAML file, the instruction\
+      \ data as a JSON file, and code graphs.\nArgs:\n    file_details (dict): The\
+      \ details extracted from the Python file.\n    instruct_list (list): The instruction\
+      \ data extracted from the Python file.\n    relative_path (Path): The relative\
+      \ path to the Python file.\n    output_dir (str): The directory where the output\
+      \ files will be saved.\nReturns:\n    None"
+    function_inputs:
+    - file_details
+    - instruct_list
+    - relative_path
+    - output_dir
+    function_defaults: []
+    function_returns: []
+    function_calls:
+    - Path
+    - output_subdir.mkdir
+    - '''.''.join'
+    - zip
+    - write_file
+    - create_code_graph
+    - logging.info
+    function_call_inputs:
+      Path:
+      - output_dir
+      output_subdir.mkdir: []
+      '''.''.join':
+      - (part for part in relative_path.parts)
+      zip:
+      - file_names
+      - contents
+      write_file:
+      - content
+      - output_subdir / file_name
+      create_code_graph:
+      - file_details
+      - base_name
+      - output_subdir
+      logging.info:
+      - f'Error creating graph for {base_name}'
+    function_variables:
+    - contents
+    - output_subdir
+    - file_names
+    - base_name
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+classes: {}

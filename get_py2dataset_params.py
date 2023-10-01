@@ -64,7 +64,7 @@ def get_default_questions() -> List[Dict]:
         },
         {
             "id": "internal_code_graph",
-            "text": "What are the structural relationships between the functions and classes defined in the Python file: '{filename}'?",
+            "text": "What is the call code graph of the Python file: '{filename}'?",
             "type": "file"
         },
         {
@@ -80,11 +80,6 @@ def get_default_questions() -> List[Dict]:
         {
             "id": "file_classes",
             "text": "What classes are defined in the Python file: '{filename}'?",
-            "type": "file"
-        },
-        {
-            "id": "file_control_flow",
-            "text": "What is the control flow of the Python file: '{filename}'?",
             "type": "file"
         },
         {
@@ -159,24 +154,9 @@ def get_default_questions() -> List[Dict]:
         },
         {   
             "id": "file_purpose",
-            "text": "What is the purpose and processing summary of the Python file: '{filename}'?",
+            "text": "1) Describe the purpose and processing summary of the Python file: '{filename}; 2) Provide an itemized detailed description of each applicable function, class, and method; 3) Explain what each of input, output, and variable do within the file.",
             "type": "file"
-        },
-        {
-            "id": "function_purpose",
-            "text": "What is the purpose and processing summary of the function: '{function_name}' and its variables: '{function_variables}' in the Python file: '{filename}'?",
-            "type": "function"
-        },
-        {
-            "id": "class_purpose",
-            "text": "What is the purpose and processing summary of the class: '{class_name}' and its variables: '{class_variables}' in the Python file: '{filename}'?",
-            "type": "class"
-        },
-        {
-            "id": "method_purpose",
-            "text": "What is the purpose and processing summary of the method: '{method_name}' defined in the class: '{class_name}' in the Python file: '{filename}'?",
-            "type": "method"
-        }   
+        }
     ]
     return questions
 
@@ -189,19 +169,22 @@ def get_default_model_config() -> Dict:
         Dict: The default model config dictionary
     """
     model_config = {
-        "prompt_template": "You are a genius mathematician and expert Python programmer. Please review the provided Python code context and use your intelligence and expertise to provide the best answer to the question below, which will be used to train people and AI models. \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:",
+        "prompt_template": "\n### Instruction:\nGiven this context:\n'{context}'\nPlease analyze this code you created provide a comprehensive response without duplicating the input code, include enough detail for me to implement the same logic, and include your reasoning step by step: {query}\n### Response:",
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_inference_function": "from_pretrained",
             "model_params": {
-                "model_path": "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML",  
-                "model_type": "starcoder",
+                "model_path": "TheBloke/WizardCoder-Python-13B-V1.0-GGUF",  
+                "model_type": "llama",
                 "local_files_only": False,
-                "lib": "avx2",
-                "threads": 16,
-                "batch_size": 16,
-                "max_new_tokens": 2048,
-                "gpu_layers": 0,
+                ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 32 threads, 64GB RAM)
+                #avx2 and gpu_layers are not compatible 
+                #"lib": "avx2",
+                "threads": 28,
+                "batch_size": 128,
+                "context_length": 8400,
+                "max_new_tokens": 8092,
+                "gpu_layers": 100,
                 "reset": True
                 }
             }

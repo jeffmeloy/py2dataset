@@ -13,11 +13,11 @@ py2dataset performs the following functions:
 - Obtain questions from the `py2dataset_questions.json` file or from the questions filename provided in the command line
 - Obtain a file listing of all of Python files within the provided directory and its subdirectories
 - Parse each Python file using the **Abstract Syntax Tree (AST)** and **visitor design pattern** to build a representation of the code structure, functions, classes, methods and variables
-- Generate information for the output datasets including question-answer pairs and instruction-input-output triplets using code snippets as context to answer the questions about the Python file characteristics
+- Generate information for the output datasets in instruction-input-output triplets using code snippets as context to answer the questions about the Python file characteristics
 - (Optional) Invoke a **language model** to generate responses to questions about the purpose of each file, function, class, method, and variable
-- Output `<filename>.qa.json` and `<filename>.instruct.json` datasets, and a `<filename>.details.yaml` containing the AST analysis to the local `./dataset` directory or the command line specified output directory 
-- (Optional) Create images of the **relationship graphs** between the functions and classes and save as image files in the same output directory
-- Combine the datasets for all individual Python files together to produce a final `qa.json` and `instruct.json` in the same output directory
+- Output `<filename>.instruct.json` datasets, and a `<filename>.details.yaml` containing the AST analysis to the local `./dataset` directory or the command line specified output directory 
+- Create image of the **code call graph** for the functions and classes within each python file and save in the same output directory
+- Combine the datasets for all individual Python files together to produce a final `instruct.json` and `instruct.html` the same output directory
 
 ## Installation 
 
@@ -46,20 +46,15 @@ Clone the repository and install dependencies:
 - `--questions_pathname` (str, optional): Path to the questions file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
 - `--model_config_pathname` (str, optional): Path to the model configuration file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
 - `--use_llm` (bool, optional): Use a Large Language Model for generating JSON answers. Defaults to False.
-- `--use_summary` (bool, optional): Use code summary to reduce dataset context length. Defaults to False.
-- `--graph` (bool, optional): Generate graphs for the code. Defaults to False.
-- `--html` (bool, optional): Generate HTML files from the JSON files. Defaults to False.
 - `--quiet` (bool, optional): Limit logging output. If provided, only warnings and errors will be logged. Defaults to False.
 
 ## Questions for datasets
 
 The following questions are answered by parsing the AST:
 - What are the dependencies of the Python file: '{filename}'?
-- What are the structural relationships between the functions and classes defined in the Python file: '{filename}'?
-- What are the structural relationships between the functions and classes defined and used in the Python file: '{filename}'?
+- What is the code call graph of the Python file: '{filename}'?
 - What functions are defined in the Python file: '{filename}'?
 - What classes are defined in the Python file: '{filename}'?
-- What is the control flow of the Python file: '{filename}'?
 - What are the inputs to the function: '{function_name}' in the Python file: '{filename}'?
 - What is the docstring of the function: '{function_name}' in the Python file: '{filename}'?
 - What calls are made in the function: '{function_name}' in the Python file: '{filename}'?
@@ -76,12 +71,7 @@ The following questions are answered by parsing the AST:
 - What are the returns from the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
 
 The following questions are answered using a language model if --use_llm: 
-- What is the purpose and processing summary of the Python file: '{filename}'?
-- What is the purpose and processing summary of the function: '{function_name}' defined in the Python file: '{filename}'?
-- What is the purpose and processing summary of the class: '{class_name}' defined in the Python file: '{filename}'?
-- What is the purpose and processing summary of the method: '{method_name}' defined in the class: '{class_name}' in the Python file: '{filename}'?
-- What is the purpose and usage of each of these variables: '{function_variables}' defined in the function: '{function_name}' in the Python file: '{filename}'?
-- What is the purpose and usage of each of these variables: '{class_variables}' defined in the class: '{class_name}' in the Python file: '{filename}'?
+- Describe the purpose and processing summary of the Python file: '{filename}; 2. Provide an itemized description of each applicable function, class, method with enough detail for me to implement the same logic; 3. Explain what each of input, output, and variable do within the file."
 
 ## Code Structure
 
@@ -98,21 +88,35 @@ The following questions are answered using a language model if --use_llm:
 Currently configured to use [ctransformers](https://github.com/marella/ctransformers) with the default configuration defined in py2dataset_model_config.yaml
 
     ```yaml
-    prompt_template: "You are a master mathematician and Python programmer. Provide a brief yet thorough answer to the given question considering the context. 
-                  \n### Instruction:\nGiven this context:\n'{context}'\nAnswer the following question and provide your reasoning: {query}\n### Response:"
+    prompt_template: "\n### Instruction:\nGiven this context:\n'{context}'\nPlease analyze this AI generated code and respond without duplicating the input code and include your reasoning step by step: {query}\n### Response:"
     inference_model:
     model_import_path: "ctransformers.AutoModelForCausalLM"
+    model_inference_function: "from_pretrained"
     model_params:
-        model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-        model_type: "starcoder"
+        model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
+        model_type: "llama"
         local_files_only: false
-        lib: "avx2"
-        threads: 30
-        batch_size: 32
-        max_new_tokens: 2048
-        #  Currently only LLaMA, MPT and Falcon models support the gpu_layers parameters.
-        gpu_layers: 64 
-        reset: True
+        
+        # other models that work with this prompt
+        #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
+        #model_type: "gpt_bigcode"
+        #local_files_only: false
+        #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
+        #model_type: "gpt_bigcode"
+        #local_files_only: false
+        #model_path: "TheBloke/Octocoder-GGML"
+        #model_type: "gpt_bigcode"
+        #local_files_only: false  
+
+        ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 32 threads, 64GB RAM)
+        #avx2 and gpu_layers are not compatible 
+        #lib: "avx2"
+        threads: 28
+        batch_size: 512
+        context_length: 8092
+        max_new_tokens: 8092
+        gpu_layers: 100
+        reset: true
     ```
 
 ## Output
@@ -120,29 +124,25 @@ Currently configured to use [ctransformers](https://github.com/marella/ctransfor
 For each Python file assessed, the script saves the following to the output directory:
 
 - `<filename>.details.yaml` - Python file details YAML file
-- `<filename>.qa.json` - Question-answer pairs JSON file
 - `<filename>.instruct.json` - Instructions JSON file
-- `<filename>.internal_code_graph.png` - Code relationship graph (optional)
 - `<filename>.entire_code_graph.png` - Code relationship graph (optional)
-- `<filename>.qa.json.html` - Question-answer pairs JSON file in .html format (optional)
 - `<filename>.instruct.json.html` - Instructions JSON file in .html format (optional)
 
 The script then creates composite datasets by combining the files above and saves the following to the output directory:
 
-- `qa.json` (complete qa dataset)
-- `qa_purpose.json` (dataset with only purpose responses)
-- `instruct.json` (complete instruct dataset)
-- `instruct_purpose.json` (dataset with only purpose responses)
-- `instruct_cleaned.json` (replace duplicate code elements with empty string)
-- `instruct_cleaned_purpose.json` (dataset with only purpose responses)
-- .html files will also be created for each of these, if --html  
+- `instruct.json` - complete instruct dataset
+- `instruct.html` - html formated file
+- `train.json` - instruction/output dataset
+                 a. instruction: Define the Python code that is described as follows: `file_purpose` / output: `Python file source code`
+                 b. instruction: Define the call code graph for this Python source code: `Python file source code` / output: `entire_code_graph` 
+- `train.html` - (optional, if use_llm) html formated file
 
 If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. If this directory does not exist, it will be created.
 
 The ./example_datasets directory provided contains the py2dataset output generated on itself. 
     
     ```bash
-    python .\py2dataset.py --start_path ..\ --output_dir .\example_datasets --graph --use_llm --\html
+    > python .\py2dataset.py --start_dir ..\ --use_llm
     ```
 ## Requirements
 
@@ -150,4 +150,5 @@ The ./example_datasets directory provided contains the py2dataset output generat
 - **networkx** library for defining code graphs
 - **ctransformers** library for large language model support
 - **yaml** library for configuration and output files
-- **matplotlib** (optional for saving code graphs)
+- **matplotlib** library for saving code graphs
+- **importlib** library for importing Python modules dynamically

@@ -5,13 +5,8 @@
         "type": "file"
     },
     {
-        "id": "internal_code_graph",
-        "text": "What are the structural relationships between the functions and classes defined in the Python file: '{filename}'?",
-        "type": "file"
-    },
-    {
         "id": "entire_code_graph",
-        "text": "What are the structural relationships between the functions and classes defined and used in the Python file: '{filename}'?",
+        "text": "What is the call code graph of the Python file: '{filename}'?",
         "type": "file"
     },
     {
@@ -22,11 +17,6 @@
     {
         "id": "file_classes",
         "text": "What classes are defined in the Python file: '{filename}'?",
-        "type": "file"
-    },
-    {
-        "id": "file_control_flow",
-        "text": "What is the control flow of the Python file: '{filename}'?",
         "type": "file"
     },
     {
@@ -76,7 +66,7 @@
     },
     {
         "id": "class_inheritance",
-        "text": "What is the Inheritance of the class: '{class_name}' in the Python file: '{filename}'?",
+        "text": "What is the inheritance of the class: '{class_name}' in the Python file: '{filename}'?",
         "type": "class"
     },
     {
@@ -101,22 +91,7 @@
     },
     {   
         "id": "file_purpose",
-        "text": "What is the purpose and processing summary of the Python file: '{filename}'?",
+        "text": "1) Describe the purpose and processing summary of the Python file: '{filename}; 2) Provide an itemized detailed description of each applicable function, class, and method; 3) Explain what each of input, output, and variable do within the file.",
         "type": "file"
-    },
-    {
-        "id": "function_purpose",
-        "text": "What is the purpose and processing summary of the function: '{function_name}' and its variables: '{function_variables}' in the Python file: '{filename}'?",
-        "type": "function"
-    },
-    {
-        "id": "class_purpose",
-        "text": "What is the purpose and processing summary of the class: '{class_name}' and its variables: '{class_variables}' in the Python file: '{filename}'?",
-        "type": "class"
-    },
-    {
-        "id": "method_purpose",
-        "text": "What is the purpose and processing summary of the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
-        "type": "method"
-    }
+    } 
 ]

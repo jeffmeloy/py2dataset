@@ -1,29 +1,28 @@
 """
-Use AST to extract details from a Python file and return it as a dictionary.
+Use AST to extract details from a Python file, determine the code call graph and return it as a dictionary.
 Requirements:
-[req01] The `ControlFlowVisitor` class shall:
-        a. Inherit from `ast.NodeVisitor`.
-        b. Implement the `generic_visit` method to visit nodes in the AST and extract corresponding control flow keywords.
-        c. Offer the `get_control_flow` method to retrieve a string representation of the program's control flow.
+[req01] The get_all_calls function shall:
+        a. Accept a node as an argument.
+        b. Recursively find all function calls in the subtree rooted at the node.
+        c. Return a list of all function calls in the subtree rooted at the node.
 [req02] The `CodeVisitor` class shall:
-        a. Inherit from `ast.NodeVisitor`.
-        b. Implement the `visit_FunctionDef` method to gather details about functions.
-        c. Implement the `visit_ClassDef` method to gather details about classes.
-        d. Implement the `extract_details` method to parse information about a given node.
-        e. Implement the `analyze` method to traverse the AST, list all nodes within the current file, and populate the 'file_info' attribute with comprehensive file details.
-[req03] The `get_control_flow` function shall:
-        a. Accept a string of source code as input.
-        b. Return control flow keywords found in the code, providing a high-level overview of the code's flow.
-[req04] The `code_graph` function shall:
-        a. Take the file summary and file details as input.
+        a. Accept the source code as input
+        b. Use the AST to extract details about the code.
+        c. Inherit from `ast.NodeVisitor`.
+        d. Implement the `visit_FunctionDef` method to gather details about functions.
+        e. Implement the `visit_ClassDef` method to gather details about classes.
+        f. Implement the `extract_details` method to parse information about a given node.
+        g. Implement the `analyze` method to traverse the AST, list all nodes within the current file, and populate the 'file_info' attribute with comprehensive file details.
+[req03] The `code_graph` function shall:
+        a. Accept the file summary and file details as input.
         b. Construct a dictionary with nodes and edges that illustrate code relationships.
         c. Define elements such as function nodes, class nodes, and method nodes.
         d. Specify edges to represent relationships like function calls, method calls, and class inheritance.
         e. Return a dictionary representation of the code graph, aiding in understanding the code's structure and inter-relationships.
-[req05] The `get_python_file_details` function shall:
+[req04] The `get_python_file_details` function shall:
         a. Accept a file path as an argument.
         b. Extract detailed information from the specified Python file using the AST and the `CodeVisitor` class.
-        c. Include both the internal file graph and the entire file graph in the returned details.
+        c. Include the entire file graph in the returned details.
         d. Return a dictionary encompassing the extracted file details.
 """
 import ast
@@ -33,69 +32,6 @@ import logging
 import networkx as nx
 from typing import Dict, List, Optional, Union
 
-
-class ControlFlowVisitor(ast.NodeVisitor):
-    """
-    Inherits from ast.NodeVisitor to visit nodes in the AST and extract control flow keywords to provide a high-level understanding of the program flow.
-    Attributes:
-        node_type_to_keyword (dict): A dictionary mapping AST node types to corresponding control flow keywords.
-        control_flow (list): A list storing the sequence of control flow keywords encountered in the AST.
-    Methods:
-        generic_visit(node: ast.AST) -> None:
-            Visit a node in the AST and extract the corresponding control flow keyword.
-        get_control_flow() -> str:
-            Return a string representation of the control flow of the program.
-    """
-    node_type_to_keyword = {
-        ast.If: "if",
-        ast.While: "while",
-        ast.For: "for",
-        ast.AsyncFor: "for",
-        ast.AsyncWith: "with",
-        ast.Try: "try",
-        ast.With: "with",
-        ast.ExceptHandler: "except",
-        ast.FunctionDef: "def",
-        ast.AsyncFunctionDef: "def",
-        ast.ClassDef: "class",
-        ast.Module: "module",
-    }
-    def __init__(self):
-        """
-        Initialize a new instance of the class.
-        Args:
-            None
-        Returns:
-            None
-        """
-        self.control_flow = []
-    
-    def generic_visit(self, node):
-        """
-        Visit a node in the AST and extract the corresponding control flow keyword.
-        Args:
-            node: ast.AST: The node to visit.
-        Returns:
-            None
-        """
-        keyword = self.node_type_to_keyword.get(type(node))
-        if keyword:
-            if isinstance(node, ast.FunctionDef):
-                self.control_flow.append(keyword + ' ' + node.name)
-            else:
-                self.control_flow.append(keyword)
-        super().generic_visit(node)
-    
-    def get_control_flow(self):
-        """
-        Return a string representation of the control flow of the program.
-        Args:
-            None
-        Returns:
-            str: The control flow of the program.
-        """
-        return ' -> '.join(self.control_flow)
-
 def get_all_calls(node):
     """
     Recursively find all function calls in the subtree rooted at `node`.
@@ -104,11 +40,11 @@ def get_all_calls(node):
     Returns:
         list: A list of all function calls in the subtree rooted at `node`.
     """
-    calls = []
+    calls = {}
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.Call):
-            calls.append(child)
-        calls.extend(get_all_calls(child))
+            calls[ast.unparse(child.func)] = [ast.unparse(arg) for arg in child.args]
+        calls.update(get_all_calls(child))
     return calls
 
 class CodeVisitor(ast.NodeVisitor):
@@ -181,6 +117,7 @@ class CodeVisitor(ast.NodeVisitor):
             Dict[str, Union[str, List[str]]]: The details extracted from the node.
         """
         node_walk = list(ast.walk(node))
+        call_data = get_all_calls(node)
         details = {
             f"{node_type}_name": node.name, 
             f"{node_type}_code": ast.unparse(node),
@@ -189,13 +126,14 @@ class CodeVisitor(ast.NodeVisitor):
             f"{node_type}_inputs": [arg.arg for arg in node.args.args] if node_type in ['function', 'method'] else None,
             f"{node_type}_defaults": [ast.unparse(d) for d in node.args.defaults] if node_type in ['function', 'method'] else None,
             f"{node_type}_returns": [ast.unparse(subnode.value) if subnode.value is not None else "None" for subnode in node_walk if isinstance(subnode, ast.Return)],
-            f"{node_type}_calls": list({ast.unparse(n.func) for n in get_all_calls(node)}),
+            f"{node_type}_calls": list(call_data.keys()),
+            f"{node_type}_call_inputs": call_data, 
             f"{node_type}_variables": list({ast.unparse(target) for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets if isinstance(target, ast.Name)}),
             f"{node_type}_decorators": list({ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list else set()),
             f"{node_type}_annotations": list({ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation is not None}),
             f"{node_type}_properties": list({ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx, ast.Store)}),
         }  
-        if node_type == 'class' or node_type == 'method':
+        if node_type in ['class', 'method']:
             if node_type == 'method' and self.current_class: # find attributes defined as self.attribute
                 attributes = [target.attr for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'self']
                 if attributes: # if this class already has some attributes, add to them
@@ -228,41 +166,24 @@ class CodeVisitor(ast.NodeVisitor):
             "file_dependencies": list({alias.name for subnode in node_walk if isinstance(subnode, ast.Import) for alias in subnode.names} | {subnode.module for subnode in node_walk if isinstance(subnode, ast.ImportFrom)}),
             "file_functions": list(self.functions.keys()),
             "file_classes": list(self.classes.keys()),
-            "file_control_flow": get_control_flow(self.code),
         }
         
         # add file_summary to file_info
-        function_defs = [{func_name: {"inputs": details["function_inputs"], "calls": details["function_calls"], "returns": details["function_returns"]}} for func_name, details in self.functions.items()]
+        function_defs = [{func_name: {"inputs": details["function_inputs"], "calls": details["function_calls"], "call_inputs": details["function_call_inputs"], "returns": details["function_returns"]}} for func_name, details in self.functions.items()]
         class_defs = []
         for class_name, class_details in self.classes.items():
             method_defs = {}
             for method_name, details in class_details.items():
                 if method_name.startswith('class_method_'):
-                    method_defs[method_name[len('class_method_'):]] = {"inputs": details["method_inputs"], "calls": details["method_calls"], "returns": details["method_returns"]}
+                    method_defs[method_name[len('class_method_'):]] = {"inputs": details["method_inputs"], "calls": details["method_calls"], "call_inputs": details["method_call_inputs"], "returns": details["method_returns"]}
             class_defs.append({class_name: {"method_defs": method_defs}})
         self.file_info["file_summary"] = { 'dependencies': self.file_info["file_dependencies"], 'function_defs' : function_defs, 'class_defs' : class_defs}
 
-
-def get_control_flow(code: str) -> str:
-    """
-    Extract control flow keywords from source code.
-    Args:
-        code: str: The source code to extract from.
-    Returns:
-        str: The control flow keywords in the code.
-    """
-    visitor = ControlFlowVisitor()
-    tree = ast.parse(code)
-    visitor.visit(tree)
-    return visitor.get_control_flow()
-
-
-def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = True) -> Dict[str, Union[List[str], Dict[str, List[str]]]]:
+def code_graph(file_summary: Dict[str, Union[Dict, str]]) -> Dict[str, Union[List[str], Dict[str, List[str]]]]:
     """
     Create a dictionary representation of file details.
     Args:
         file_summary: Dict[str, Union[Dict, str]]: The details extracted from the file.
-        internal_only: bool: If True, only include function calls where both the caller and called function are within the file.
     Returns:
         dict: A dictionary with nodes and edges representing the relationships in the code.
     """
@@ -283,23 +204,23 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = 
                 G.add_edge(class_name, qualified_method_name) # Add edge from class to method
 
     # Helper function to extract edge data from target details
-    def get_edge_data_from_details(target_details: dict) -> dict:
+    def get_edge_data_from_details(target_details: dict, source_details: dict, target: str) -> dict:
         edge_data = {}
         if target_details:
-            if 'inputs' in target_details: # If the target details contain inputs, add them to the edge data.
-                edge_data['target_inputs'] = target_details['inputs']
-            if 'returns' in target_details:  # If the target details contain returns, add them to the edge data.
-                edge_data['target_returns'] = list(set(target_details['returns']))
+            edge_data['target_inputs'] = target_details.get('inputs')
+            edge_data['target_returns'] = list(set(target_details.get('returns', [])))
+        if source_details and 'call_inputs' in source_details and target in source_details['call_inputs']:
+            edge_data['target_inputs'] = source_details['call_inputs'][target]     
         return edge_data
 
     # Helper function to add edge with data
     def add_edge_with_data(source: str, target: str, init_method: Optional[str] = None) -> None:
-        target_details = class_method_details_lookup.get(init_method) or function_details_lookup.get(target) or class_method_details_lookup.get(target)
-        edge_data = get_edge_data_from_details(target_details)
-        G.add_edge(source, target, **edge_data)
+        target_details = class_method_details_lookup.get(init_method or target) or function_details_lookup.get(target)
+        source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source)
+        G.add_edge(source, target, **get_edge_data_from_details(target_details, source_details, target))
 
     # Helper function to add edges for function or class method calls
-    def add_edges_for_calls(source_name, calls, internal_only=True):
+    def add_edges_for_calls(source_name, calls):
         class_names = [list(class_def.keys())[0] for class_def in file_summary['class_defs']]
         for called in calls:
             called_class_name = called.split('.')[0]
@@ -321,7 +242,7 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = 
                 if init_method_name in class_method_details_lookup:
                     init_method = init_method_name
                 add_edge_with_data(source_name, called, init_method)
-            elif not internal_only:
+            else:
                 G.add_node(called)
                 add_edge_with_data(source_name, called)
 
@@ -329,25 +250,22 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]], internal_only: bool = 
     for function_name in function_details_lookup.keys():
         G.add_node(function_name)
     for func_name, details in function_details_lookup.items():
-        add_edges_for_calls(func_name, details['calls'], internal_only)
+        add_edges_for_calls(func_name, details['calls'])
 
     # Add edges for method calls
     for qualified_method_name, details in class_method_details_lookup.items():
-        add_edges_for_calls(qualified_method_name, details['calls'], internal_only)
+        add_edges_for_calls(qualified_method_name, details['calls'])
 
     # Add edge data to edges and create node and edges to return
     for edge in G.edges:
         source, target = edge
         target_details = function_details_lookup.get(target) or class_method_details_lookup.get(target)
-        edge_data = get_edge_data_from_details(target_details)
+        source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source)
+        edge_data = get_edge_data_from_details(target_details, source_details, target)
         G[source][target].update(edge_data)
     nodes = list(G.nodes)
     edges = [{"source": edge[0], "target": edge[1], **edge[2]} for edge in G.edges.data()]
-
-    return {
-        "nodes": nodes,
-        "edges": edges,
-    }
+    return {"nodes": nodes, "edges": edges}
 
 
 def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
@@ -362,20 +280,13 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
         with open(file_path, "r", encoding="utf-8", errors='ignore') as f:
             code = f.read()
             tree = ast.parse(code)
-    except PermissionError or SyntaxError:
+    except:
         logging.warning(f"Permission denied or syntax error in file: {file_path}")
         return None 
-    
+
     visitor = CodeVisitor(code)
     visitor.analyze(tree)
-    file_details = {
-        'file_info': visitor.file_info, 
-        'functions': visitor.functions, 
-        'classes': visitor.classes
-        }
-    
-    # add graphs and clean up file_summary
-    file_details['file_info']['internal_code_graph'] = code_graph(file_details['file_info']['file_summary'])
-    file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary'], internal_only=False)
+    file_details = {'file_info': visitor.file_info, 'functions': visitor.functions, 'classes': visitor.classes}
+    file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary'])
     file_details['file_info']['file_summary'] = json.dumps(file_details['file_info']['file_summary']).replace('\"','')
     return file_details

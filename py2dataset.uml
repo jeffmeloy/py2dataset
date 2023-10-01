@@ -8,9 +8,6 @@
 - `--questions_pathname` (str, optional): Path to the questions file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
 - `--model_config_pathname` (str, optional): Path to the model configuration file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
 - `--use_llm` (bool, optional): Use a Large Language Model for generating JSON answers. Defaults to False.
-- `--use_summary` (bool, optional): Use code summary to reduce dataset context length. Defaults to False.
-- `--graph` (bool, optional): Generate graphs for the code. Defaults to False.
-- `--html` (bool, optional): Generate HTML files from the JSON files. Defaults to False.
 - `--quiet` (bool, optional): Limit logging output. If provided, only warnings and errors will be logged. Defaults to False.;
 
 :py2dataset.py:
@@ -33,12 +30,8 @@ if (use_llm and purpose question) then (yes)
 else (no)
 :Parse the AST obtained data to answer question;
 endif
-
-:Construct qa.json data
-- question = current question
-- answer = answer to current question
-        
-Construct instruct.json data
+     
+:Construct instruct.json data
 - instruction = current question
 - input = code element
 - output = answer to current question;
@@ -48,26 +41,23 @@ Repeat while (More questions?) is (yes)
 
 :save_py2dataset_output.py:
 save datasets and code file details
-- <filename>.qa.json
 - <filename>.instruct.json
 - <filename>.details.yaml';
 
-if (graph is True) then (yes)
-:Save code graphs
-- <filename>.internal.png
+:Save code graph
 - <filename>.external.png;
-endif
 
 Repeat while (More Python Files?) is (yes)
 ->no;
 
 :Combine all qa and instruct JSON files and create other datasets
-- `qa.json` (complete qa dataset)
-- `qa_purpose.json` (dataset with only purpose responses)
-- `instruct.json` (complete instruct dataset)
-- `instruct_purpose.json` (dataset with only purpose responses)
-- `instruct_cleaned.json` (replace duplicate code elements with empty string)
-- `instruct_cleaned_purpose.json` (dataset with only purpose responses);
+- `instruct.json` complete instruct dataset
+- `instruct.html` html formated file
+- `train.json` instruction/output dataset
+    a. instruction: Define the Python code that is described as follows: `file_purpose` / output: `Python file source code`
+    b. instruction: Define the call code graph for this Python source code: `Python file source code` / output: `entire_code_graph` 
+- `train.html` html formated file;
+
 :End;
 
 @enduml
