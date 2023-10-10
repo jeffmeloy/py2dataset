@@ -41,6 +41,7 @@ import yaml
 import importlib
 from typing import Dict, List 
 from pathlib import Path
+from transformers import AutoTokenizer
 
 # Setting up a basic logger
 logging.basicConfig(level=logging.INFO)
@@ -59,104 +60,99 @@ def get_default_questions() -> List[Dict]:
     questions = [
         {
             "id": "file_dependencies",
-            "text": "What are the dependencies of the Python file: '{filename}'?",
-            "type": "file"
-        },
-        {
-            "id": "internal_code_graph",
-            "text": "What is the call code graph of the Python file: '{filename}'?",
+            "text": "Dependencies of Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "entire_code_graph",
-            "text": "What are the structural relationships between the functions and classes defined and used in the Python file: '{filename}'?",
+            "text": "Call code graph of Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "file_functions",
-            "text": "What functions are defined in the Python file: '{filename}'?",
+            "text": "Functions defined in Python file: '{filename}'?",
             "type": "file"
         },      
         {
             "id": "file_classes",
-            "text": "What classes are defined in the Python file: '{filename}'?",
+            "text": "Classes defined in Python file: '{filename}'?",
             "type": "file"
         },
         {
             "id": "function_inputs",
-            "text": "What are the inputs to the function: '{function_name}' in the Python file: '{filename}'?",
+            "text": "Inputs to function: '{function_name}' in Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_docstring",
-            "text": "What is the docstring of the function: '{function_name}' in the Python file: '{filename}'?",
+            "text": "Docstring of function: '{function_name}' in Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_calls",
-            "text": "What calls are made in the function: '{function_name}' in the Python file: '{filename}'?",
+            "text": "Calls made in function: '{function_name}' in Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "function_variables",
-            "text": "What variables are defined in the function: '{function_name}' in the Python file: '{filename}'?",
+            "text": "Variables defined in function: '{function_name}' in Python file: '{filename}'?",
             "type": "function"
         }, 
         {
             "id": "function_returns",
-            "text": "What are the returned items from the function: '{function_name}' in the Python file: '{filename}'?",
+            "text": "Returned items from function: '{function_name}' in Python file: '{filename}'?",
             "type": "function"
         },
         {
             "id": "class_methods",
-            "text": "What are the methods defined within the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Methods defined in class: '{class_name}' in Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_docstring",
-            "text": "What is the docstring of the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Docstring of class: '{class_name}' in Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_attributes",
-            "text": "What are the attributes of the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Attributes of class: '{class_name}' in Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_variables",
-            "text": "What variables are defined in the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Variables defined in class: '{class_name}' in Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "class_inheritance",
-            "text": "What is the Inheritance of the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Inheritance of class: '{class_name}' in Python file: '{filename}'?",
             "type": "class"
         },
         {
             "id": "method_inputs",
-            "text": "What are the inputs to method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Inputs to method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_docstring",
-            "text": "What is the docstring of the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Docstring of method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_calls",
-            "text": "What calls are made in the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Calls made in method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
             "type": "method"
         },
         {
             "id": "method_returns",
-            "text": "What are the returns from the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?",
+            "text": "Returns from method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
             "type": "method"
         },
         {   
             "id": "file_purpose",
-            "text": "1) Describe the purpose and processing summary of the Python file: '{filename}; 2) Provide an itemized detailed description of each applicable function, class, and method; 3) Explain what each of input, output, and variable do within the file.",
+            "text": "1) DESCRIBE the purpose and processing summary of Python file: '{filename}'; 2) PROVIDE an itemized and detailed description of each applicable function, class, and method; 3) EXPLAIN what each input, output, and variable does in the code.",
             "type": "file"
-        }
+        } 
     ]
     return questions
 
@@ -182,7 +178,7 @@ def get_default_model_config() -> Dict:
                 #"lib": "avx2",
                 "threads": 28,
                 "batch_size": 128,
-                "context_length": 8400,
+                "context_length": 14000,
                 "max_new_tokens": 8092,
                 "gpu_layers": 100,
                 "reset": True
@@ -237,6 +233,7 @@ def instantiate_model(model_config: Dict) -> object:
         module_name, class_name = model_config['model_import_path'].rsplit('.', 1)
         ModelClass = getattr(importlib.import_module(module_name), class_name)
         model_params = model_config['model_params']
+        model_path = model_params['model_path']
         inference_function_name = model_config['model_inference_function']
         if inference_function_name != "": 
             inference_function = getattr(ModelClass, inference_function_name)
@@ -246,7 +243,7 @@ def instantiate_model(model_config: Dict) -> object:
         return model
     except ImportError or AttributeError or Exception as e:
         logging.info(f"Failed to instantiate the model. Error: {e}")    
-        return None
+        return None, None
 
 
 def get_model(model_config_pathname: str) -> tuple[object, str]:
@@ -266,7 +263,8 @@ def get_model(model_config_pathname: str) -> tuple[object, str]:
     except:
         logging.info(f'Model config file not valid: {model_config_pathname} Using default model config')
         model_config = get_default_model_config()
-    return instantiate_model(model_config['inference_model']), model_config['prompt_template']
+    model_config['model'] = instantiate_model(model_config['inference_model'])
+    return model_config
 
 
 def write_questions_file(output_dir: str='') -> None:

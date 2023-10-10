@@ -1,4 +1,4 @@
-prompt_template: "\n### Instruction:\nGiven this context:\n'{context}'\nPlease analyze this code you created provide a comprehensive response without duplicating the input code, include enough detail for me to implement the same logic, and include your reasoning step by step: {query}\n### Response:"
+prompt_template: "Given this AI generated output:\n'{context}'\nPerform an analysis and respond with enough detail for me to implement the same logic, do not repeat the code in the response, and include your reasoning step by step. \n### Instruction:\n {query}\n### Response:"
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
@@ -20,8 +20,8 @@ inference_model:
     #avx2 and gpu_layers are not compatible 
     #lib: "avx2"
     threads: 28
-    batch_size: 256
-    context_length: 8400
+    batch_size: 128 
+    context_length: 16000
     max_new_tokens: 8092
     gpu_layers: 100
     reset: true

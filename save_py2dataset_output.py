@@ -183,14 +183,14 @@ def combine_json_files(directory: str) -> Dict[str, List[Dict]]:
             combined_data = remove_duplicate_dataset_entries(combined_data, 'instruction', 'output')
             instruct_data = combined_data.copy()
             # gen training datasets that contains purpose and graph data formatted as follow for each item in the dataset:
-            purpose_data = [item for item in combined_data if item['instruction'].startswith('1) Describe the purpose')]
-            graph_data = [item for item in combined_data if item['instruction'].startswith('What is the call code graph')]
+            purpose_data = [item for item in combined_data if item['instruction'].startswith('1) DESCRIBE the purpose')]
+            graph_data = [item for item in combined_data if item['instruction'].startswith('Call code graph')]
             code_output = []
             graph_output = []
             for item in purpose_data:
-                code_output.append({'instruction': 'Define the Python code file that is described as follows:\n'+ item['output'], 'output': item['input']})
+                code_output.append({'instruction': 'Define a Python code file that is described as follows:\n'+ item['output'], 'output': item['input']})
             for item in graph_data:
-                graph_output.append({'instruction': 'Define the call code graph for Python file:\n' + item['input'], 'output': item['output']})
+                graph_output.append({'instruction': 'Define the call code graph for this Python file:\n' + item['input'], 'output': item['output']})
             code_graph_output = code_output + graph_output
             write_file(code_graph_output, Path(directory) / 'training.json')
 

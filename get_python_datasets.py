@@ -2,22 +2,24 @@
 Generates JSON format question-answer pairs and instructions for a Python file
 Requirements:
 [req01] The `DatasetGenerator` class shall:
-        a. Accept a Python file path (str), file details (Dict), base name (str), list of questions (List[Dict]), use_llm flag (bool), language model (object), and prompt (str) as input during instantiation.
-        b. Initialize and store the Python file path, file details, base name, list of questions, use_llm flag, language model, and prompt as class attributes.
+        a. Accept a Python file path (str), file details (Dict), base name (str), list of questions (List[Dict]), and model configuration (Dict) as input during instantiation.
+        b. Initialize and store the Python file path, file details, base name, list of questions, language model, and use_llm flag as class attributes.
         c. Provide the `clean_and_get_unique_elements` method to clean an input string (str) and return a string of unique elements.
-        d. Provide the `add_to_list` method to add a response (str) to a list (List[Dict]).
-        e. Provide the `get_response_from_llm` method to retrieve a response from the language model.
-        f. Provide the `process_question` method to process a question and add the generated response to the instruct_list.
-        g. Provide the `process_question_type` method to process questions related to a file, function, class, or method.
-        h. Provide the `generate` method to generate responses for all questions in the list and return the instruct_list.
+        d. Provide the `get_response_from_llm` method to retrieve a response from the language model based on a query and context.
+        e. Provide the `process_question` method to process a question based on its type and generate a corresponding response to add to the instruct_list.
+        f. Provide the `process_question_type` method to process questions related to a file, function, class, or method.
+        g. Provide the `generate` method to generate responses for all questions in the list and return the instruct_list.
+        h. Internally manage a question mapping to correlate question types to keys in file details.
+
 [req02] The `get_python_datasets` function shall:
-        a. Accept a Python file path (str), file details (Dict), base name (str), list of questions (List[Dict]), use_llm flag (bool), language model (object), and prompt (str) as input.
-        b. Create an instance of the `DatasetGenerator` class using the provided input.
+        a. Accept a Python file path (str), file details (Dict), base name (str), list of questions (List[Dict]), and model configuration (Dict) as input.
+        b. Instantiate an object of the `DatasetGenerator` class using the provided input.
         c. Generate question-answer pairs and instructions using the `generate` method of the `DatasetGenerator` instance.
         d. Return the generated `instruct_list`.
 """
 import logging
 import re
+import math
 from typing import Dict, List, Tuple
 
 # Set up logging
@@ -26,6 +28,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
 
 class DatasetGenerator:
     """
@@ -54,13 +57,13 @@ class DatasetGenerator:
         generate() -> Tuple[List[Dict], List[Dict]]:
             Generate responses for all the questions and return the instruct_list.
     """
-    def __init__(self, file_path: str, file_details: Dict, base_name: str, questions: List[Dict], llm: object, prompt: str) -> None:
+    def __init__(self, file_path: str, file_details: Dict, base_name: str, questions: List[Dict], model_config: Dict) -> None:
         self.file_path = file_path
         self.file_details = file_details
         self.base_name = base_name
         self.questions = questions
-        self.llm = llm
-        self.prompt = prompt
+        self.model_config = model_config
+        self.llm = model_config['model']
         if self.llm is None:
             self.use_llm = False
         else:
@@ -86,26 +89,6 @@ class DatasetGenerator:
                                for element in re.sub(r'\s+', ' ', input_str).split(','))
         return ', '.join(cleaned_elements)
 
-    @staticmethod
-    def add_to_list(list_to_update: List[Dict], query: str, response: str, additional_field=None) -> List[Dict]:
-        """
-        Adds response to instruct list.
-        Args:
-            list_to_update (List[Dict]): The list to be updated.
-            query (str): The query to be added.
-            response (str): The response to be added.
-            additional_field (str): The additional field to be added.
-        Returns:
-            List[Dict]: The updated list.
-        """
-        if response and response.strip() and response != 'None':
-            list_to_update.append(
-                {'instruction': query, 'input' : additional_field, 'output': response}
-                if additional_field else
-                {'question': query, 'answer': response}
-            )
-        return list_to_update
-
     def get_response_from_llm(self, query: str, context: str) -> str:
         """
         Get language model response to query for given context.
@@ -115,19 +98,39 @@ class DatasetGenerator:
         Returns:
             str: The generated response.
         """
-        # Update the context with the selected instructions from the instruct_list
-        excluded_instructions = ["What is the call code graph", "What is the docstring"]
-        filtered_instruct_list = [item for item in self.instruct_list if not any(item['instruction'].startswith(prefix) for prefix in excluded_instructions)]
-        past_instructs = "\n".join([f"Instruction: {item['instruction']} \nOutput: {item['output']}" for item in filtered_instruct_list])
-        full_context = context + "\n" + "Here's some detail about this code:" + "\n" + past_instructs
+
+        def get_context_and_prompt(query, context, code_qa):
+            full_context = f"{context}\nCODE Q and A:\n{code_qa}"
+            prompt = self.model_config['prompt_template'].format(context=full_context, query=query)
+            context_size = len(self.llm.tokenize(prompt))
+            return full_context, prompt, context_size
+
+        max_context_length = self.model_config['inference_model']['model_params']['context_length']
+        excluded_instructions = ["Call code graph", "Docstring"]
+        code_qa = "\n".join([f"Q: {item['instruction']} \nA: {item['output']}" for item in self.instruct_list if not any(item['instruction'].startswith(prefix) for prefix in excluded_instructions)])
+
+        # manage context length for LLM using different strategies starting with the longest and most comprehensive
+        context_strategies = [
+            lambda: '```python\n' + str(context) + '\n```',
+            lambda: '```python\n' + str(self.file_details['file_info']['file_code_simplified']) + '\n```',
+            lambda: self.get_string_from_info(self.file_details['file_info'], 'file_summary'),
+            lambda: ''
+        ]
+        for strategy in context_strategies:
+            context = strategy()
+            full_context, prompt, context_size = get_context_and_prompt(query, context, code_qa)
+            if context_size <= 0.70 * max_context_length:
+                break
+        else:
+            logger.error(f'Failed to generate model response, adjust context_length > {math.ceil(context_size/0.70)} in py2dataset_model_config.yaml')
+            return ''
 
         try:
-            prompt = self.prompt.format(context=full_context, query=query)
-            logging.info(f'Query: {query}')
-            response = self.llm(prompt)
+            response = re.sub(r'\n\s*\n', '\n\n', self.llm(prompt))
             logging.info(f'Response: {response}')
         except:
             logger.error('Failed to generate model response')
+            response = ''
         return response
 
     def process_question(self, question_type: str, question_id: str, query: str, context: str, info: Dict) -> None:
@@ -142,10 +145,12 @@ class DatasetGenerator:
         Returns:
             None
         """
-        if question_id.endswith('code_graph'):
+        if question_id.endswith('code_graph') or question_id.endswith('docstring'):
             response = info.get(question_id, {})
         else:
             response = self.get_response_from_llm(query, context) if self.use_llm and question_id.endswith('purpose') else self.clean_and_get_unique_elements(str(info.get(question_id, '')))
+        if question_type == 'file':
+            context = self.file_details['file_info']['file_code']
         if response and response != 'None':
             response_str = str(response).strip()
             if response_str:
@@ -170,8 +175,8 @@ class DatasetGenerator:
         """
         if question_type == 'file':
             query = question_text.format(filename=self.base_name)
-            context = self.file_details['file_info']['file_code']
             info = self.file_details['file_info']
+            context = self.file_details['file_info']['file_code']
             self.process_question(question_type, question_id, query, context, info)
         elif question_type == 'method':  
             for class_name, class_info in self.file_details['classes'].items():
@@ -200,6 +205,7 @@ class DatasetGenerator:
                 self.process_question(question_type, question_id, query, context, info)
 
     def generate(self) -> Tuple[List[Dict], List[Dict]]:
+
         """
         Generate responses for all the questions and returns the instruct_list.
         Args:
@@ -213,7 +219,7 @@ class DatasetGenerator:
 
 
 def get_python_datasets(file_path: str, file_details: Dict, base_name: str, questions: List[Dict], 
-                        llm: object, prompt: str) -> Tuple[List[Dict], List[Dict]]:
+                        model_config: Dict) -> Tuple[List[Dict], List[Dict]]:
     """
     Extract information from a Python file and return it in JSON format.
     Args:
@@ -226,5 +232,5 @@ def get_python_datasets(file_path: str, file_details: Dict, base_name: str, ques
     Returns:
         Tuple[List[Dict], List[Dict]]: Extracted information in JSON format.
     """
-    generator = DatasetGenerator(file_path, file_details, base_name, questions, llm, prompt)
+    generator = DatasetGenerator(file_path, file_details, base_name, questions, model_config)
     return generator.generate()

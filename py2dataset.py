@@ -1,25 +1,29 @@
 """
 For each Python file within given directory, generate, save, and return datasets that include responses to questions about the code.
 Requirements:
-[req00] The extract_python_data function shall:
-    a. Accept parameters for the Python file path, base name, model configuration pathname, questions dictionary, and use of LLM.
-    b. Use the 'get_python_file_details' function to get the Python file details.
-    c. If the use_llm parameter is True, instantiate the LLM using the 'get_model' function.
+[req00] The process_single_file function shall:
+    a. Accept parameters for the Python file path, starting directory, model configuration pathname, questions dictionary, use of LLM, and output directory.
+    b. If the use_llm parameter is True, use the 'get_model' function to instantiate the model configuration for the LLM.
+    c. Use the 'get_python_file_details' function to get the Python file details.
     d. Use the 'get_python_datasets' function to get the instruct.json datasets.
-    e. Return the file details and instruct.json dataset.
+    e. Use the 'save_python_data' function to save the file details and instruct.json dataset.
+
 [req01] The process_python_directories function shall:
     a. Accept parameters for the starting directory, output directory, model configuration pathname, questions dictionary, and use of LLM.
-    b. Search for all Python files within the given directory and its subdirectories using a glob pattern.
-    c. For each Python file, call the extract_python_data function to get the file details and instruct.json dataset.
-    d. For valid Python file datasets, call the save_python_data function to save the file details and instruct.json dataset.
-    e. Combine all of the instruct.json files together using the 'combine_json_files' function.
-    f. Return the combined datasets.
+    b. Search for all Python files within the given directory and its subdirectories using the rglob method with a pattern that excludes files starting with "_".
+    c. For each valid Python file, spawn a new child process using 'process_single_file' function to get the file details and instruct.json dataset.
+    d. After processing all files, combine all of the instruct.json files together using the 'combine_json_files' function.
+    e. Return the combined datasets.
+
 [req02] The py2dataset function shall:
-    a. Accept parameters for the starting directory, output directory, questions pathname, model configuration pathname, quiet mode, and use of LLM.
-    b. Determine the starting directory based on provided or default values.
-    c. Adjust the logging level based on the quiet flag.
-    d. Call the process_python_directories function to process the Python files and generate datasets.
-    e. Return the datasets.
+    a. Accept parameters for the starting directory, output directory, questions pathname, model configuration pathname, use of LLM, and quiet mode.
+    b. Adjust the logging level based on the quiet flag.
+    c. If no valid starting directory is provided, use the current working directory.
+    d. Use the 'get_output_dir' function to get the output directory.
+    e. Use the 'get_questions' function to get the questions dictionary.
+    f. Call the process_python_directories function to process the Python files and generate datasets.
+    g. Return the datasets.
+
 [req03] The main function shall:
     a. Accept and process command-line arguments.
     b. Determine the parameters for the py2dataset function based on the processed command-line arguments.
@@ -37,28 +41,6 @@ from get_python_file_details import get_python_file_details
 from get_python_datasets import get_python_datasets
 from get_py2dataset_params import get_questions, get_model, get_output_dir
 from save_py2dataset_output import combine_json_files, save_python_data
-
-def extract_python_data(file_path: str, base_name: str, questions: Dict, llm: object, prompt: str) -> Tuple[Union[Dict, Tuple], List[Dict], List[Dict]]:
-    """
-    Extracts data from a Python file.
-    Args:
-        file_path (str): Path to the Python file.
-        base_name (str): Base name of the Python file.
-        questions (Dict): Questions dictionary to answer about the Python file.
-        llm (object): Large Language Model object. If None, use the default prompt.
-        prompt (str): Prompt to use for the Large Language Model.
-    Returns:
-        Tuple[Union[Dict, Tuple], List[Dict], List[Dict]]: File details dictionary or tuple of file details and None, instruct.json dataset.
-    """
-    file_details, instruct_list = None, None    
-    # use AST to get python file details
-    file_details = get_python_file_details(file_path)
-    if file_details is None or isinstance(file_details, tuple):
-        return file_details, instruct_list
-
-    # get lists for instruct.json for python file
-    instruct_list = get_python_datasets(file_path, file_details, base_name, questions, llm, prompt)  
-    return file_details, instruct_list
 
 
 def process_single_file(pythonfile_path, start_dir, model_config_pathname, questions, use_llm, output_dir):
@@ -78,16 +60,22 @@ def process_single_file(pythonfile_path, start_dir, model_config_pathname, quest
     relative_path = pythonfile_path.relative_to(start_dir)
     base_name = '.'.join(part for part in relative_path.parts)
 
-    #instantiate llm and prompt if use_llm is True 
-    #do this for each file to aviod multiprocessing pickling problem
-    llm, prompt = get_model(model_config_pathname) if use_llm else (None, '')
+    #instantiate llm and prompt if use_llm is True for each file to aviod multiprocessing pickling problem
+    model_config = get_model(model_config_pathname) if use_llm else (None, '', 0)
 
-    # get and save file_details and instruct_list
-    file_details, instruct_list = extract_python_data(pythonfile_path, base_name, questions, llm, prompt)
+    # use AST to get python file details
+    file_details = None
+    instruct_list = None 
+    file_details = get_python_file_details(pythonfile_path)
     if file_details is None or isinstance(file_details, tuple):
-        return
-    save_python_data(file_details, instruct_list, relative_path, output_dir)
+        return 
 
+    # get lists for instruct.json for python file
+    instruct_list = get_python_datasets(pythonfile_path, file_details, base_name, questions, model_config)
+    if instruct_list is None:
+        return
+
+    save_python_data(file_details, instruct_list, relative_path, output_dir)
 
 def process_python_directories(start_dir: str, output_dir: str, model_config_pathname: str, questions: Dict, 
                                use_llm: bool) -> Dict[str, List[Dict]]:
@@ -150,6 +138,7 @@ def py2dataset(start_dir: str = '', output_dir: str = '', questions_pathname: st
     datasets = process_python_directories(start_dir, output_dir, model_config_pathname, questions, use_llm)
     return datasets
 
+
 def main():
     """
     Command-line entry point for processing Python files and generating datasets.
@@ -160,6 +149,7 @@ def main():
         --model_config_pathname (str, optional): Path to the model configuration file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
         --use_llm (bool, optional): Use a Large Language Model for generating JSON answers. Defaults to False.
         --quiet (bool, optional): Limit logging output. If provided, only warnings and errors will be logged. Defaults to False.
+        --_context (bool, optional): add the context from the AST to the code as context use_llm is true to get better responses, at the expense of more memory usage.  
     """
     arg_string = ' '.join(sys.argv[1:])
     start_dir = ''
