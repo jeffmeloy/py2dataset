@@ -7,24 +7,17 @@ Requirements:
     c. Use the 'get_python_file_details' function to get the Python file details.
     d. Use the 'get_python_datasets' function to get the instruct.json datasets.
     e. Use the 'save_python_data' function to save the file details and instruct.json dataset.
-
-[req01] The process_python_directories function shall:
-    a. Accept parameters for the starting directory, output directory, model configuration pathname, questions dictionary, and use of LLM.
-    b. Search for all Python files within the given directory and its subdirectories using the rglob method with a pattern that excludes files starting with "_".
-    c. For each valid Python file, spawn a new child process using 'process_single_file' function to get the file details and instruct.json dataset.
-    d. After processing all files, combine all of the instruct.json files together using the 'combine_json_files' function.
-    e. Return the combined datasets.
-
-[req02] The py2dataset function shall:
+[req01] The py2dataset function shall:
     a. Accept parameters for the starting directory, output directory, questions pathname, model configuration pathname, use of LLM, and quiet mode.
     b. Adjust the logging level based on the quiet flag.
     c. If no valid starting directory is provided, use the current working directory.
     d. Use the 'get_output_dir' function to get the output directory.
     e. Use the 'get_questions' function to get the questions dictionary.
-    f. Call the process_python_directories function to process the Python files and generate datasets.
-    g. Return the datasets.
-
-[req03] The main function shall:
+    f. Search for all Python files within the given directory and its subdirectories using the rglob method with a pattern that excludes files starting with "_".
+    g. For each valid Python file, spawn a new child process using 'process_single_file' function to get the file details and instruct.json dataset.
+    h. After processing all files, combine all of the instruct.json files together using the 'combine_json_files' function.
+    i. Return the datasets.
+[req02] The main function shall:
     a. Accept and process command-line arguments.
     b. Determine the parameters for the py2dataset function based on the processed command-line arguments.
     c. Call the py2dataset function with the derived parameters.
@@ -42,8 +35,7 @@ from get_python_datasets import get_python_datasets
 from get_py2dataset_params import get_questions, get_model, get_output_dir
 from save_py2dataset_output import combine_json_files, save_python_data
 
-
-def process_single_file(pythonfile_path, start_dir, model_config_pathname, questions, use_llm, output_dir):
+def process_single_file(pythonfile_path: str, start_dir: str, model_config_pathname: str, questions: Dict, use_llm: bool, output_dir: str, model_config: Dict, single_process: bool = False):
     """
     Process a single Python file to generate question-answer pairs and instructions.
     Args:
@@ -53,15 +45,18 @@ def process_single_file(pythonfile_path, start_dir, model_config_pathname, quest
         questions (Dict): Questions dictionary to answer about the Python file.
         use_llm (bool): If True, use a Large Language Model for generating JSON answers.
         output_dir (str): Directory to write the output files.
+        model_config (Dict): Model configuration dictionary for the LLM.
+        single_process (bool, optional): If True, only a single process will be used to process Python files. Defaults to False.
     Returns:
         none
     """
     logging.info(f'Processing: {pythonfile_path}')
     relative_path = pythonfile_path.relative_to(start_dir)
     base_name = '.'.join(part for part in relative_path.parts)
-
-    #instantiate llm and prompt if use_llm is True for each file to aviod multiprocessing pickling problem
-    model_config = get_model(model_config_pathname) if use_llm else (None, '', 0)
+    
+    if single_process == False:
+        #instantiate llm and prompt if use_llm is True for each file to aviod multiprocessing pickling problem
+        model_config = get_model(model_config_pathname) if use_llm else (None, '', 0)
 
     # use AST to get python file details
     file_details = None
@@ -77,37 +72,8 @@ def process_single_file(pythonfile_path, start_dir, model_config_pathname, quest
 
     save_python_data(file_details, instruct_list, relative_path, output_dir)
 
-def process_python_directories(start_dir: str, output_dir: str, model_config_pathname: str, questions: Dict, 
-                               use_llm: bool) -> Dict[str, List[Dict]]:
-    """
-    Processes all Python files in the provided directory and subdirectories.
-    Args:
-        start_dir (str): Starting directory to search for Python files.
-        output_dir (str): Directory to write the output files.
-        model_config_pathname (str): Path to the model configuration file.
-        questions (Dict): Questions dictionary to answer about each Python file.
-        use_llm (bool): If True, use the LLM model to generate answers for JSON..
-    Returns:
-        Dict[str, List[Dict]]: Datasets dictionary.
-    """
-    datasets = {}
-    for pythonfile_path in Path(start_dir).rglob('[!_]*.py'):
-
-        if pythonfile_path.is_dir():
-            continue
-
-        # spawn a new child process to manage python memory leaks
-        proc = Process(target=process_single_file, args=(pythonfile_path, start_dir, model_config_pathname, questions, use_llm, output_dir))
-        proc.start()
-        proc.join()
-        
-    # combine all of the instruct.json files together
-    datasets = combine_json_files(output_dir)   
-    return datasets
-
-
 def py2dataset(start_dir: str = '', output_dir: str = '', questions_pathname: str = '', model_config_pathname: str = '', 
-               use_llm: bool = False, quiet: bool = False) -> Dict[str, List[Dict]]:
+               use_llm: bool = False, quiet: bool = False, single_process: bool = False) -> Dict[str, List[Dict]]:
     """
     Process Python files to generate question-answer pairs and instructions.
     Args:
@@ -117,6 +83,8 @@ def py2dataset(start_dir: str = '', output_dir: str = '', questions_pathname: st
         model_config_pathname (str, optional): Path to the model configuration file.
         use_llm (bool, optional): If True, use a Large Language Model for generating JSON answers. Defaults to False.
         quiet (bool, optional): Limit logging output. Defaults to False.
+        single_process(bool, optional): If True, only a single process will be used to process Python files. Defaults to False. 
+                                        Set to True to instantiate LLM once before processing all files.
     Returns:
         Dict[str, List[Dict]]: Datasets dictionary.
     """
@@ -131,13 +99,28 @@ def py2dataset(start_dir: str = '', output_dir: str = '', questions_pathname: st
         logging.info('No valid start path provided. Using current working directory.')
         start_dir = os.getcwd()    
     start_dir = os.path.abspath(start_dir)
-    
     output_dir = get_output_dir(output_dir)
     questions = get_questions(questions_pathname)
 
-    datasets = process_python_directories(start_dir, output_dir, model_config_pathname, questions, use_llm)
-    return datasets
+    # if single_process is True load model config here. 
+    if single_process:
+        model_config = get_model(model_config_pathname) if use_llm else (None, '', 0)
 
+    for pythonfile_path in Path(start_dir).rglob('[!_]*.py'):
+            if pythonfile_path.is_dir():
+                continue
+            if single_process:
+                process_single_file(pythonfile_path, start_dir, model_config_pathname, questions, use_llm, output_dir, model_config, single_process)
+                continue
+            # spawn a new child process to manage python memory leaks
+            model_config = None
+            proc = Process(target=process_single_file, args=(pythonfile_path, start_dir, model_config_pathname, questions, use_llm, output_dir, model_config))
+            proc.start()
+            proc.join()
+
+    # combine all of the instruct.json files together
+    datasets = combine_json_files(output_dir)   
+    return datasets
 
 def main():
     """
@@ -149,7 +132,7 @@ def main():
         --model_config_pathname (str, optional): Path to the model configuration file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
         --use_llm (bool, optional): Use a Large Language Model for generating JSON answers. Defaults to False.
         --quiet (bool, optional): Limit logging output. If provided, only warnings and errors will be logged. Defaults to False.
-        --_context (bool, optional): add the context from the AST to the code as context use_llm is true to get better responses, at the expense of more memory usage.  
+        --single_process (bool, optional): If provided, only a single process will be used to process Python files. Defaults to False. 
     """
     arg_string = ' '.join(sys.argv[1:])
     start_dir = ''
@@ -158,6 +141,7 @@ def main():
     model_config_pathname = ''
     use_llm = False
     quiet = False
+    single_process = False
 
     if '--start_dir' in arg_string:    
         start_dir = arg_string.split('--start_dir ')[1].split(' ')[0]
@@ -177,8 +161,11 @@ def main():
     if '--quiet' in arg_string:
         quiet = True
         arg_string = arg_string.replace('--quiet', '')
+    if '--single_process' in arg_string:
+        single_process = True
+        arg_string = arg_string.replace('--single_process', '')
 
-    py2dataset(start_dir, output_dir, questions_pathname, model_config_pathname, use_llm, quiet)
+    py2dataset(start_dir, output_dir, questions_pathname, model_config_pathname, use_llm, quiet, single_process)
 
 if __name__ == "__main__":
     main()
