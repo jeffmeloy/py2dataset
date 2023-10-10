@@ -51,27 +51,27 @@ Clone the repository and install dependencies:
 ## Questions for datasets
 
 The following questions are answered by parsing the AST:
-- What are the dependencies of the Python file: '{filename}'?
-- What is the code call graph of the Python file: '{filename}'?
-- What functions are defined in the Python file: '{filename}'?
-- What classes are defined in the Python file: '{filename}'?
-- What are the inputs to the function: '{function_name}' in the Python file: '{filename}'?
-- What is the docstring of the function: '{function_name}' in the Python file: '{filename}'?
-- What calls are made in the function: '{function_name}' in the Python file: '{filename}'?
-- What variables are defined in the function: '{function_name}' in the Python file: '{filename}'?
-- What are the returned items from the function: '{function_name}' in the Python file: '{filename}'?
-- What are the methods defined within the class: '{class_name}' in the Python file: '{filename}'?
-- What is the docstring of the class: '{class_name}' in the Python file: '{filename}'?
-- What are the attributes of the class: '{class_name}' in the Python file: '{filename}'?
-- What variables are defined in the class: '{class_name}' in the Python file: '{filename}'?
-- What is the Inheritance of the class: '{class_name}' in the Python file: '{filename}'?
-- What are the inputs to method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
-- What is the docstring of the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
-- What calls are made in the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
-- What are the returns from the method: '{method_name}' in the class: '{class_name}' in the Python file: '{filename}'?
+- Dependencies of Python file: '{filename}'?
+- Call code graph of Python file: '{filename}'?
+- Functions defined in Python file: '{filename}'?
+- Classes defined in Python file: '{filename}'?
+- Inputs to function: '{function_name}' in Python file: '{filename}'?
+- Docstring of function: '{function_name}' in Python file: '{filename}'?
+- Calls made in function: '{function_name}' in Python file: '{filename}'?
+- Variables defined in function: '{function_name}' in Python file: '{filename}'?
+- Returned items from function: '{function_name}' in Python file: '{filename}'?
+- Methods defined in class: '{class_name}' in Python file: '{filename}'?
+- Docstring of class: '{class_name}' in Python file: '{filename}'?
+- Attributes of class: '{class_name}' in Python file: '{filename}'?
+- Variables defined in class: '{class_name}' in Python file: '{filename}'?
+- Inheritance of class: '{class_name}' in Python file: '{filename}'?
+- Inputs to method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
+- Docstring of method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
+- Calls made in method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
+- Returns from method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
 
 The following questions are answered using a language model if --use_llm: 
-- Describe the purpose and processing summary of the Python file: '{filename}; 2. Provide an itemized description of each applicable function, class, method with enough detail for me to implement the same logic; 3. Explain what each of input, output, and variable do within the file."
+- 1. Describe the purpose and processing summary of the Python file: '{filename}; 2. Provide an itemized description of each applicable function, class, method with enough detail for me to implement the same logic; 3. Explain what each of input, output, and variable does within the file."
 
 ## Code Structure
 
@@ -88,35 +88,35 @@ The following questions are answered using a language model if --use_llm:
 Currently configured to use [ctransformers](https://github.com/marella/ctransformers) with the default configuration defined in py2dataset_model_config.yaml
 
     ```yaml
-    prompt_template: "\n### Instruction:\nGiven this context:\n'{context}'\nPlease analyze this AI generated code and respond without duplicating the input code and include your reasoning step by step: {query}\n### Response:"
+    prompt_template: "Given this AI generated output:\n'{context}'\nPerform an analysis and respond with enough detail for me to implement the same logic, do not repeat the code in the response, and include your reasoning step by step. \n### Instruction:\n {query}\n### Response:"
     inference_model:
-    model_import_path: "ctransformers.AutoModelForCausalLM"
-    model_inference_function: "from_pretrained"
-    model_params:
-        model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
-        model_type: "llama"
-        local_files_only: false
-        
-        # other models that work with this prompt
-        #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-        #model_type: "gpt_bigcode"
-        #local_files_only: false
-        #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
-        #model_type: "gpt_bigcode"
-        #local_files_only: false
-        #model_path: "TheBloke/Octocoder-GGML"
-        #model_type: "gpt_bigcode"
-        #local_files_only: false  
+        model_import_path: "ctransformers.AutoModelForCausalLM"
+        model_inference_function: "from_pretrained"
+        model_params:
+            model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
+            model_type: "llama"
+            local_files_only: false
+            
+            # other models that work with this prompt
+            #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
+            #model_type: "gpt_bigcode"
+            #local_files_only: false
+            #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
+            #model_type: "gpt_bigcode"
+            #local_files_only: false
+            #model_path: "TheBloke/Octocoder-GGML"
+            #model_type: "gpt_bigcode"
+            #local_files_only: false  
 
-        ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 32 threads, 64GB RAM)
-        #avx2 and gpu_layers are not compatible 
-        #lib: "avx2"
-        threads: 28
-        batch_size: 512
-        context_length: 8092
-        max_new_tokens: 8092
-        gpu_layers: 100
-        reset: true
+            ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 32 threads, 64GB RAM)
+            #avx2 and gpu_layers are not compatible 
+            #lib: "avx2"
+            threads: 28
+            batch_size: 512
+            context_length: 8092
+            max_new_tokens: 8092
+            gpu_layers: 100
+            reset: true
     ```
 
 ## Output
