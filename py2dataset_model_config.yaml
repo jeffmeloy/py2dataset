@@ -1,4 +1,4 @@
-prompt_template: "Given this AI generated output:\n'{context}'\nPerform an analysis and respond with enough detail for me to implement the same logic, do not repeat the code in the response, and include your reasoning step by step. \n### Instruction:\n {query}\n### Response:"
+prompt_template: "Given this AI generated Context:\n'{context}'\n\nPlease provide a very detailed and comprehensive Response to the Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:"
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
@@ -21,7 +21,7 @@ inference_model:
     #lib: "avx2"
     threads: 28
     batch_size: 128 
-    context_length: 16000
+    context_length: 14000
     max_new_tokens: 8092
     gpu_layers: 100
     reset: true

@@ -47,6 +47,7 @@ Clone the repository and install dependencies:
 - `--model_config_pathname` (str, optional): Path to the model configuration file. If not provided, defaults defined in 'get_py2dataset_params.py' will be used.
 - `--use_llm` (bool, optional): Use a Large Language Model for generating JSON answers. Defaults to False.
 - `--quiet` (bool, optional): Limit logging output. If provided, only warnings and errors will be logged. Defaults to False.
+- `--single_process` (bool, optional): If provided, only a single process will be used to process Python files. Defaults to False.
 
 ## Questions for datasets
 
@@ -71,7 +72,7 @@ The following questions are answered by parsing the AST:
 - Returns from method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
 
 The following questions are answered using a language model if --use_llm: 
-- 1. Describe the purpose and processing summary of the Python file: '{filename}; 2. Provide an itemized description of each applicable function, class, method with enough detail for me to implement the same logic; 3. Explain what each of input, output, and variable does within the file."
+- 1.Describe the purpose and processing summary of the Python file: '{filename}; 2.Provide an itemized description of each applicable function, class, and method; 3.Explain what each of input, output, and variable does within the file."
 
 ## Code Structure
 

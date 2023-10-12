@@ -28,18 +28,14 @@ Requirements:
         c. Save the instruction data as JSON files.
         d. Generate and save code graphs.
 """
-import sys
-import os
-import re
 import json
 import logging
-import yaml
-import matplotlib.pyplot as plt
-import networkx as nx
 from html import escape
 from pathlib import Path
-from typing import Dict, List, Union
-
+from typing import Dict, List
+import matplotlib.pyplot as plt
+import networkx as nx
+import yaml
 
 def read_file(file_path: Path) -> Dict:
     """
@@ -53,9 +49,9 @@ def read_file(file_path: Path) -> Dict:
     with file_path.open() as f:
         if file_type == 'json':
             return json.load(f)
-        elif file_type == 'yaml':
-            return yaml.load(f)
-
+        if file_type == 'yaml':
+            return yaml.load(f, Loader=yaml.SafeLoader)
+        return {}
 
 def write_file(data: Dict, file_path: Path) -> None:
     """
@@ -92,7 +88,6 @@ def convert_json_to_html(directory: str) -> None:
         if not dataset:
             continue
 
-        html_file = json_file.with_suffix('.html')
         html_content = """
         <html>
         <head>
@@ -139,22 +134,23 @@ def convert_json_to_html(directory: str) -> None:
         </html>
         """
         html_file_path = json_file.with_suffix('.html')
-        try:   
+        try:
             with open(html_file_path, 'w', encoding='utf-8') as file:
                 file.write(html_content)
-        except:
-            logging.save(logging.info(f'Failed saving: {html_file_path}'))
+        except Exception:
+            logging.info(f'Failed saving: {html_file_path}')
 
 
 def combine_json_files(directory: str) -> Dict[str, List[Dict]]:
     """
-    Combine all JSON files in the output directory into 'instruct.json', and then remove duplicates.
+    Combine all JSON files in the output directory into 'instruct.json', and 
+    then remove duplicates.
     Args:
         directory (str): The directory where the output files are located.
     Returns:
         A dictionary containing the 'instruct_list' datasets.
     """
-   
+
     def remove_duplicate_dataset_entries(dataset: List[Dict], key1: str, key2: str) -> List[Dict]:
         """
         Remove duplicate entries from the provided dataset based on the provided keys.
@@ -182,15 +178,17 @@ def combine_json_files(directory: str) -> Dict[str, List[Dict]]:
             combined_data.extend(json_file_data)
             combined_data = remove_duplicate_dataset_entries(combined_data, 'instruction', 'output')
             instruct_data = combined_data.copy()
-            # gen training datasets that contains purpose and graph data formatted as follow for each item in the dataset:
+            # gen training datasets that contains purpose and graph data formatted for each item:
             purpose_data = [item for item in combined_data if item['instruction'].startswith('1) DESCRIBE the purpose')]
             graph_data = [item for item in combined_data if item['instruction'].startswith('Call code graph')]
             code_output = []
             graph_output = []
             for item in purpose_data:
-                code_output.append({'instruction': 'Define a Python code file that is described as follows:\n'+ item['output'], 'output': item['input']})
+                instruction = 'Define a Python code file that is described as follows:\n'+ item['output']
+                code_output.append({'instruction': instruction, 'output': item['input']})
             for item in graph_data:
-                graph_output.append({'instruction': 'Define the call code graph for this Python file:\n' + item['input'], 'output': item['output']})
+                instruction = 'Define the call code graph for this Python file:\n' + item['input']
+                graph_output.append({'instruction': instruction, 'output': item['output']})
             code_graph_output = code_output + graph_output
             write_file(code_graph_output, Path(directory) / 'training.json')
 
@@ -220,7 +218,7 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
     for edge in file_details['file_info'][graph_type]['edges']:
         source, target = edge['source'], edge['target']
         if source in G.nodes and target in G.nodes:
-           G.add_edge(source, target, **{k: v for k, v in edge.items() if k in ['target_inputs', 'target_returns']})
+            G.add_edge(source, target, **{k: v for k, v in edge.items() if k in ['target_inputs', 'target_returns']})
     # Draw graphs
     plt.figure(figsize=(20, 20))
     pos = nx.spring_layout(G)
@@ -262,5 +260,5 @@ def save_python_data(file_details: dict, instruct_list: list, relative_path: Pat
 
     try:
         create_code_graph(file_details, base_name, output_subdir)
-    except:
-        logging.info(f'Error creating graph for {base_name}')
+    except Exception as e:
+        logging.info(f'Error creating graph for {base_name}: {e}')

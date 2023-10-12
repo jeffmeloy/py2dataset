@@ -37,11 +37,10 @@ Requirements:
 import os
 import json
 import logging
-import yaml
 import importlib
-from typing import Dict, List 
+from typing import Dict, List
 from pathlib import Path
-from transformers import AutoTokenizer
+import yaml
 
 # Setting up a basic logger
 logging.basicConfig(level=logging.INFO)
@@ -72,7 +71,7 @@ def get_default_questions() -> List[Dict]:
             "id": "file_functions",
             "text": "Functions defined in Python file: '{filename}'?",
             "type": "file"
-        },      
+        },
         {
             "id": "file_classes",
             "text": "Classes defined in Python file: '{filename}'?",
@@ -97,7 +96,7 @@ def get_default_questions() -> List[Dict]:
             "id": "function_variables",
             "text": "Variables defined in function: '{function_name}' in Python file: '{filename}'?",
             "type": "function"
-        }, 
+        },
         {
             "id": "function_returns",
             "text": "Returned items from function: '{function_name}' in Python file: '{filename}'?",
@@ -148,11 +147,11 @@ def get_default_questions() -> List[Dict]:
             "text": "Returns from method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
             "type": "method"
         },
-        {   
+        {
             "id": "file_purpose",
             "text": "1) DESCRIBE the purpose and processing summary of Python file: '{filename}'; 2) PROVIDE an itemized and detailed description of each applicable function, class, and method; 3) EXPLAIN what each input, output, and variable does in the code.",
             "type": "file"
-        } 
+        }
     ]
     return questions
 
@@ -174,7 +173,7 @@ def get_default_model_config() -> Dict:
                 "model_type": "llama",
                 "local_files_only": False,
                 ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 32 threads, 64GB RAM)
-                #avx2 and gpu_layers are not compatible 
+                #avx2 and gpu_layers are not compatible
                 #"lib": "avx2",
                 "threads": 28,
                 "batch_size": 128,
@@ -215,7 +214,7 @@ def get_questions(questions_pathname: str) -> List[Dict]:
         with open(questions_pathname, 'r') as f:
             questions = json.load(f)
         logging.info(f'Using questions from file: {questions_pathname}')
-    except: # get default questions if can't read questions_pathname file 
+    except (FileNotFoundError, json.decoder.JSONDecodeError):
         logging.info(f'Questions file not valid: {questions_pathname} Using default questions')
         questions = get_default_questions()
     return questions
@@ -233,17 +232,16 @@ def instantiate_model(model_config: Dict) -> object:
         module_name, class_name = model_config['model_import_path'].rsplit('.', 1)
         ModelClass = getattr(importlib.import_module(module_name), class_name)
         model_params = model_config['model_params']
-        model_path = model_params['model_path']
         inference_function_name = model_config['model_inference_function']
-        if inference_function_name != "": 
+        if inference_function_name != "":
             inference_function = getattr(ModelClass, inference_function_name)
             model = inference_function(model_params.pop('model_path'), **model_params)
-        else: 
+        else:
             model = ModelClass(model_params.pop('model_path'), **model_params)
         return model
-    except ImportError or AttributeError or Exception as e:
-        logging.info(f"Failed to instantiate the model. Error: {e}")    
-        return None, None
+    except (ImportError, AttributeError, Exception) as e:
+        logging.info(f"Failed to instantiate the model. Error: {e}")
+        return None
 
 
 def get_model(model_config_pathname: str) -> tuple[object, str]:

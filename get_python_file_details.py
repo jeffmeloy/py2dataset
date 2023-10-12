@@ -1,42 +1,41 @@
 """
-Use AST to extract details from a Python file, determine the code call graph and return it as a dictionary.
+Return file_details dictionary for python source code.
 Requirements:
+[req00] The `remove_docs_and_comments` function shall:
+        a. Accept a Python code string as an argument.
+        b. Remove docstrings and comments from the provided code.
+        c. Return the sanitized code string.
 [req01] The get_all_calls function shall:
         a. Accept a node of type ast.AST as an argument.
         b. Recursively find all function calls in the subtree rooted at the node.
-        c. Return a dictionary of all function calls in the subtree rooted at the node with the function names as keys and their respective arguments as values.
+        c. Return a dictionary of all function calls in the subtree rooted at the node.
 [req02] The `CodeVisitor` class shall:
         a. Accept the source code as input when instantiated.
         b. Use the AST to extract details about the code.
         c. Inherit from `ast.NodeVisitor`.
-        d. Implement the `visit_FunctionDef` method to gather details about functions.
-        e. Implement the `visit_ClassDef` method to gather details about classes.
-        f. Implement the `extract_details` method to parse information about a given node and return a dictionary containing relevant details.
-        g. Implement the `analyze` method to traverse the AST, list all nodes within the current file, and populate the 'file_info' attribute with comprehensive file details.
+        d. Implement `visit_FunctionDef` method to gather details about functions.
+        e. Implement `visit_ClassDef` method to gather details about classes.
+        f. Implement `extract_details` method to parse information about a given node.
+        g. Implement `analyze` method to traverse the AST and 'file_info'. 
         h. Maintain a current class context using the attribute 'current_class'.
 [req03] The `code_graph` function shall:
         a. Accept the file summary as input.
-        b. Construct a directed graph with nodes and edges that illustrate code relationships using the networkx library.
+        b. Construct a directed graph with nodes and edges using networkx library.
         c. Define elements such as function nodes, class nodes, and method nodes.
-        d. Specify edges to represent relationships like function calls, method calls, and class inheritance.
-        e. Return a dictionary representation of the code graph, aiding in understanding the code's structure and inter-relationships.
+        d. Specify edges to represent relationships. 
+        e. Return a dictionary representation of the code call graph. 
 [req04] The `get_python_file_details` function shall:
         a. Accept a file path as an argument.
-        b. Extract detailed information from the specified Python file using the AST and the `CodeVisitor` class.
+        b. Extract info from Python file using the AST and the `CodeVisitor` class.
         c. Include the entire code graph in the returned details.
-        d. Return a dictionary encompassing the extracted file details or None if there's an issue reading the file or parsing its content.
-[req05] The `remove_docs_and_comments` function shall:
-        a. Accept a Python code string as an argument.
-        b. Remove docstrings and comments from the provided code.
-        c. Return the sanitized code string.
+        d. Return a dictionary encompassing the extracted file details. 
 """
 import ast
-import re
 import json
-import astor
 import logging
-import networkx as nx
 from typing import Dict, List, Optional, Union
+import networkx as nx
+import astor
 
 def remove_docs_and_comments(code: str) -> str:
     """
@@ -61,7 +60,7 @@ def get_all_calls(node: ast.AST) -> Dict[str, List[str]]:
     Args:
         node (ast.AST): The node to start the search from.
     Returns:
-        Dict[str, List[str]]: A dictionary with function calls as keys and their arguments as values.
+        Dict[str, List[str]]: Dictionary with function calls as keys and arguments as values.
     """
     calls = {}
     for child in ast.iter_child_nodes(node):
@@ -102,7 +101,7 @@ class CodeVisitor(ast.NodeVisitor):
         self.classes: Dict[str, Dict[str, Union[str, List[str]]]] = {}
         self.file_info: Dict[str, Union[str, List[str]]] = {}
         self.current_class: str = None
-    
+
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """
         Extract details about a function.
@@ -130,7 +129,7 @@ class CodeVisitor(ast.NodeVisitor):
         self.current_class = node.name  # set current_class to indicate inside a class
         self.generic_visit(node) # continue AST traversal to the next node
         self.current_class = None  # reset current_class when finished with this class
-    
+
     def extract_details(self, node: ast.AST, node_type: str) -> Dict[str, Union[str, List[str]]]:
         """
         Extract details about a node.
@@ -156,7 +155,7 @@ class CodeVisitor(ast.NodeVisitor):
             f'{node_type}_decorators': list({ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list else set()),
             f'{node_type}_annotations': list({ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation is not None}),
             f'{node_type}_properties': list({ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx, ast.Store)}),
-        }  
+        }
         if node_type in ['class', 'method']:
             if node_type == 'method' and self.current_class: # find attributes defined as self.attribute
                 attributes = [target.attr for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'self']
@@ -187,7 +186,7 @@ class CodeVisitor(ast.NodeVisitor):
             'file_functions': list(self.functions.keys()),
             'file_classes': list(self.classes.keys()),
         }
-        
+
         # add file_summary to file_info
         function_defs = [{func_name: {'inputs': details['function_inputs'], 'calls': details['function_calls'], 'call_inputs': details['function_call_inputs'], 'returns': details['function_returns']}} for func_name, details in self.functions.items()]
         class_defs = []
@@ -198,7 +197,7 @@ class CodeVisitor(ast.NodeVisitor):
                     method_defs[method_name[len('class_method_'):]] = {'inputs': details['method_inputs'], 'calls': details['method_calls'], 'call_inputs': details['method_call_inputs'], 'returns': details['method_returns']}
             class_defs.append({class_name: {'method_defs': method_defs}})
         self.file_info['file_summary'] = { 'dependencies': self.file_info['file_dependencies'], 'function_defs' : function_defs, 'class_defs' : class_defs}
-        
+
         file_code_simplified = remove_docs_and_comments(ast.unparse(node))
         self.file_info['file_code_simplified'] = file_code_simplified
 
@@ -224,7 +223,7 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]]) -> Dict[str, Union[Lis
             for method_name, method_details in class_details['method_defs'].items():
                 qualified_method_name = f'{class_name}.{method_name}' # Create method fully qualified name
                 G.add_node(qualified_method_name) # Add method as a graph node
-                class_method_details_lookup[qualified_method_name] = method_details  # Store method details 
+                class_method_details_lookup[qualified_method_name] = method_details  # Store method details
                 G.add_edge(class_name, qualified_method_name) # Add edge from class to method
 
     # Helper function to extract edge data from target details
@@ -234,7 +233,7 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]]) -> Dict[str, Union[Lis
             edge_data['target_inputs'] = target_details.get('inputs')
             edge_data['target_returns'] = list(set(target_details.get('returns', [])))
         if source_details and 'call_inputs' in source_details and target in source_details['call_inputs']:
-            edge_data['target_inputs'] = source_details['call_inputs'][target]     
+            edge_data['target_inputs'] = source_details['call_inputs'][target]
         return edge_data
 
     # Helper function to add edge with data
@@ -255,8 +254,8 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]]) -> Dict[str, Union[Lis
                     add_edge_with_data(source_name, fully_qualified_name)
                     continue
             if (
-                called in function_details_lookup or 
-                called in class_method_details_lookup or 
+                called in function_details_lookup or
+                called in class_method_details_lookup or
                 f"{source_name.split('.')[0]}.{called}" in class_method_details_lookup
             ):
                 add_edge_with_data(source_name, called)
@@ -271,7 +270,7 @@ def code_graph(file_summary: Dict[str, Union[Dict, str]]) -> Dict[str, Union[Lis
                 add_edge_with_data(source_name, called)
 
     # Add function nodes to graph and edges for function calls
-    for function_name in function_details_lookup.keys():
+    for function_name in function_details_lookup:
         G.add_node(function_name)
     for func_name, details in function_details_lookup.items():
         add_edges_for_calls(func_name, details['calls'])
@@ -304,9 +303,9 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
         with open(file_path, "r", encoding="utf-8", errors='ignore') as f:
             code = f.read()
             tree = ast.parse(code)
-    except:
-        logging.warning(f"Permission denied or syntax error in file: {file_path}")
-        return None 
+    except (PermissionError, SyntaxError) as e:
+        logging.warning(f"{e} error in file: {file_path}")
+        return None
 
     visitor = CodeVisitor(code)
     visitor.analyze(tree)
