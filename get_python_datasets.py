@@ -88,7 +88,7 @@ class DatasetGenerator:
         self.base_name = base_name
         self.questions = questions
         self.model_config = model_config
-        self.llm = model_config['model']
+        self.llm = model_config['model'] if 'model' in model_config else None 
         if self.llm is None:
             self.use_llm = False
         else:
