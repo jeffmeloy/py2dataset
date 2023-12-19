@@ -1,6 +1,5 @@
 ctransformers
-importlib
+networkx
 matplotlib
-networkx 
-pyyaml
-astor
+PyYAML
+GitPython

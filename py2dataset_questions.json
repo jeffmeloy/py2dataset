@@ -1,12 +1,12 @@
 [
     {
         "id": "file_dependencies",
-        "text": "Dependencies of Python file: `{filename}`?",
+        "text": "Dependencies in Python file: `{filename}`?",
         "type": "file"
     },
     {
         "id": "entire_code_graph",
-        "text": "Call code graph of Python file: `{filename}`?",
+        "text": "Call code graph in Python file: `{filename}`?",
         "type": "file"
     },
     {
@@ -21,77 +21,77 @@
     },
     {
         "id": "function_inputs",
-        "text": "Inputs to function: `{function_name}` in Python file: `{filename}`?",
+        "text": "Inputs to `{function_name}` in Python file: `{filename}`?",
         "type": "function"
     },
     {
         "id": "function_docstring",
-        "text": "Docstring of function: `{function_name}` in Python file: `{filename}`?",
+        "text": "Docstring of `{function_name}` in Python file: `{filename}`?",
         "type": "function"
     },
     {
         "id": "function_calls",
-        "text": "Calls made in function: `{function_name}` in Python file: `{filename}`?",
+        "text": "Calls made in `{function_name}` in Python file: `{filename}`?",
         "type": "function"
     },
     {
         "id": "function_variables",
-        "text": "Variables defined in function: `{function_name}` in Python file: `{filename}`?",
+        "text": "Variables defined in `{function_name}` in Python file: `{filename}`?",
         "type": "function"
     }, 
     {
         "id": "function_returns",
-        "text": "Returned items from function: `{function_name}` in Python file: `{filename}`?",
+        "text": "Returns from `{function_name}` in Python file: `{filename}`?",
         "type": "function"
     },
     {
         "id": "class_methods",
-        "text": "Methods defined in class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Methods defined in `{class_name}` in Python file: `{filename}`?",
         "type": "class"
     },
     {
         "id": "class_docstring",
-        "text": "Docstring of class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Docstring of `{class_name}` in Python file: `{filename}`?",
         "type": "class"
     },
     {
         "id": "class_attributes",
-        "text": "Attributes of class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Attributes of `{class_name}` in Python file: `{filename}`?",
         "type": "class"
     },
     {
         "id": "class_variables",
-        "text": "Variables defined in class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Variables defined in `{class_name}` in Python file: `{filename}`?",
         "type": "class"
     },
     {
         "id": "class_inheritance",
-        "text": "Inheritance of class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Inheritance of `{class_name}` in Python file: `{filename}`?",
         "type": "class"
     },
     {
         "id": "method_inputs",
-        "text": "Inputs to method: `{method_name}` in class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Inputs to `{method_name}` in Python file: `{filename}`?",
         "type": "method"
     },
     {
         "id": "method_docstring",
-        "text": "Docstring of method: `{method_name}` in class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Docstring of `{method_name}` in Python file: `{filename}`?",
         "type": "method"
     },
     {
         "id": "method_calls",
-        "text": "Calls made in method: `{method_name}` in class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Calls made in `{method_name}` in Python file: `{filename}`?",
         "type": "method"
     },
     {
         "id": "method_returns",
-        "text": "Returns from method: `{method_name}` in class: `{class_name}` in Python file: `{filename}`?",
+        "text": "Returns from `{method_name}` in Python file: `{filename}`?",
         "type": "method"
     },
     {   
         "id": "file_purpose",
-        "text": "1) DESCRIBE the purpose and processing summary of Python file: `{filename}`; 2) PROVIDE an itemized and detailed description of each applicable function, class, and method; 3) EXPLAIN what each input, output, and variable does in the code.",
+        "text": "1) Describe the Purpose and Processing summary of Python file: `{filename}`; 2) Summarize the Significance of applicable Function, Class, and Method; 3) Explain what each Input, Output, and Variable does in the code.",
         "type": "file"
     } 
 ]

@@ -1,4 +1,4 @@
-prompt_template: "Given this AI generated Context:\n'{context}'\n\nPlease provide a very detailed and comprehensive Response to the Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:"
+prompt_template: "Provide complete structured response for a formal software audit. Given this Context:\n'{context}'\n\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:"
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
@@ -6,6 +6,12 @@ inference_model:
     model_path: "./models/wizardcoder-python-13b-v1.0.Q4_0.gguf"
     model_type: "llama"
     local_files_only: true
+    #model_path: "./models/nous-capybara-7b-v1.9.Q5_K_M.gguf"
+    #model_type: "mistral"
+    #local_files_only: true
+    #model_path: "./models/zephyr-7b-alpha.Q5_K_M.gguf"
+    #model_type: "mistral"
+    #local_files_only: true
     #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
     #model_type: "gpt_bigcode"
     #local_files_only: false
@@ -19,9 +25,9 @@ inference_model:
     ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 32 threads, 64GB RAM)
     #avx2 and gpu_layers are not compatible 
     #lib: "avx2"
-    threads: 28
-    batch_size: 128 
-    context_length: 14000
-    max_new_tokens: 8092
+    threads: 16
+    batch_size: 256 
+    context_length: 13000
+    max_new_tokens: 13000
     gpu_layers: 100
     reset: true

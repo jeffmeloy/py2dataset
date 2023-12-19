@@ -1,24 +1,24 @@
 """
-For each Python file within given directory, generate, save, and return datasets
-that include responses to questions about the code.
+For each Python file within a given directory, this module is designed to generate, save, 
+and return datasets that include responses to questions about the code. 
 Requirements:
-[req00] The process_single_file function shall:
+[req00] The process_single_python_file function shall:
     a. Accept parameters for Python file path, start directory, model config 
-    pathname, questions dict, use of LLM, and output dir.
+       pathname, questions dict, use of LLM, and output dir.
     b. If 'use_llm' is True, use 'get_model' to instantiate LLM model config.
     c. Use 'get_python_file_details' to retrieve Python file info.
     d. Use 'get_python_datasets' to acquire instruct.json datasets.
     e. Use 'save_python_data' to store file details and instruct.json data.
 [req01] The py2dataset function shall:
     a. Accept parameters for start directory, output dir, questions path, model
-    config path, use of LLM, and quiet mode.
+       config path, use of LLM, and quiet mode.
     b. Adjust logging level based on 'quiet'.
     c. Use current working dir if no valid start dir is provided.
     d. Get output dir with 'get_output_dir'.
     e. Retrieve questions dict with 'get_questions'.
     f. Search for Python files using 'rglob', excluding those starting with "_".
-    g. For each Python file, spawn a child process with 'process_single_file'
-    to get file details and instruct.json data, if single_process is False.
+    g. For each Python file, spawn a child process with 'process_single_python_file'
+       to get file details and instruct.json data, if single_process is False.
     h. Combine instruct.json files with 'combine_json_files'.
     i. Return datasets.
 [req02] The main function shall:
@@ -26,176 +26,349 @@ Requirements:
     b. Determine py2dataset parameters based on processed arguments.
     c. Call py2dataset with derived parameters.
 """
-import os
 import sys
+import argparse
 import logging
 from pathlib import Path
 from typing import Dict, List
 from multiprocessing import Process
+import subprocess
+import os
+import git
+import shlex
 
 from get_python_file_details import get_python_file_details
 from get_python_datasets import get_python_datasets
-from get_py2dataset_params import get_questions, get_model, get_output_dir
-from save_py2dataset_output import combine_json_files, save_python_data
+from get_params import (
+    get_questions,
+    get_model,
+    get_output_dir,
+    get_start_dir,
+)
+from save_output import combine_json_files, save_python_data
 
-def process_single_file(pythonfile_path: str, start_dir: str, model_config_pathname: str,
-                        questions: Dict, use_llm: bool, output_dir: str,
-                        model_config: Dict = None, single_process: bool = False) -> None:
+
+def process_single_python_file(
+    python_file_path: str,
+    start_dir: str,
+    model_config_path: str,
+    questions_dict: Dict,
+    use_llm: bool,
+    output_dir: str,
+    model_config: Dict = None,
+    single_process_mode: bool = False,
+    detailed_analysis: bool = False,
+) -> None:
     """
-    Process a single Python file to generate question-answer pairs and instructions.
+    Processes a single Python file to generate question-answer pairs and instructions.
+
     Args:
-        pythonfile_path (str): Path to the Python file.
+        python_file_path (str): Path to the Python file.
         start_dir (str): Starting directory to search for Python files.
-        model_config_pathname (str): Path to the model configuration file.
-        questions (Dict): Questions dictionary to answer about the Python file.
+        model_config_path (str): Path to the model configuration file.
+        questions_dict (Dict): Dictionary of questions to answer about the Python file.
         use_llm (bool): If True, use a Large Language Model for generating JSON answers.
-        output_dir (str): Directory to write the output files.
-        model_config (Dict): Model configuration dictionary for the LLM.
-        single_process (bool, optional): Set True to use single process. Defaults to False.
-    Returns:
-        none
+        output_dir (str): Directory to save the output files.
+        model_config (Dict): Configuration dictionary for the LLM.
+        single_process_mode (bool): Use a single process if True. Defaults to False.
+        detailed_analysis (bool): Perform detailed analysis if True. Defaults to False.
     """
-    logging.info(f'Processing: {pythonfile_path}')
-    relative_path = pythonfile_path.relative_to(start_dir)
-    base_name = '.'.join(part for part in relative_path.parts)
+    logging.info(f"Processing file: {python_file_path}")
 
-    if not single_process:
-        # Instantiate llm and prompt if use_llm is True for each file to avoid
-        # multiprocessing pickling problem
-        model_config = get_model(model_config_pathname) if use_llm else (None, '', 0)
+    # need to define relative path as the having at least one parent directory
+    # e.g relative patch should be equal to <last start_directory directory> / file name without path from python_file_path
+    # Get the last directory in start_dir
+    parent_dir = os.path.dirname(start_dir)
+    relative_path = os.path.relpath(python_file_path, parent_dir)
+    relative_path = Path(relative_path)
+    base_name = ".".join(relative_path.parts)
 
-    # Use AST to get python file details
-    file_details = get_python_file_details(pythonfile_path)
-    if file_details is None or isinstance(file_details, tuple):
+    if not single_process_mode and use_llm:
+        model_config = get_model(model_config_path)
+
+    file_details = get_python_file_details(python_file_path)
+    if not file_details:
+        logging.error(f"Failed to get file details for {python_file_path}")
         return
 
-    # Get lists for instruct.json for python file
-    instruct_list = get_python_datasets(
-        pythonfile_path,
+    instruct_data = get_python_datasets(
+        python_file_path,
         file_details,
         base_name,
-        questions,
-        model_config
+        questions_dict,
+        model_config,
+        detailed_analysis,
+    )
+
+    if instruct_data:
+        save_python_data(
+            file_details, instruct_data, base_name, relative_path, output_dir
         )
-    if instruct_list is None:
-        return
+    else:
+        logging.error(f"Failed to get instruct data for {python_file_path}")
 
-    save_python_data(file_details, instruct_list, relative_path, output_dir)
 
-def py2dataset(start_dir: str = '', output_dir: str = '', questions_pathname: str = '',
-               model_config_pathname: str = '', use_llm: bool = False, quiet: bool = False,
-               single_process: bool = False) -> Dict[str, List[Dict]]:
+def py2dataset(
+    start_dir: str = "",
+    output_dir: str = "",
+    questions_pathname: str = "",
+    model_config_pathname: str = "",
+    use_llm: bool = False,
+    quiet: bool = False,
+    single_process: bool = False,
+    detailed: bool = False,
+    html: bool = False,
+) -> Dict[str, List[Dict]]:
     """
-    Process Python files to generate question-answer pairs and instructions.
+    Generates datasets by processing Python files within a specified directory.
     Args:
-        start_dir (str, optional): Starting directory for Python files.
-        Defaults to current working directory.
-        output_dir (str, optional): Directory to write the output files.
-        questions_pathname (str, optional): Path to the questions file.
-        model_config_pathname (str, optional): Path to the model
-        configuration file.
-        use_llm (bool, optional): If True, use a Large Language Model
-        for generating JSON answers. Defaults to False.
-        quiet (bool, optional): Limit logging output. Defaults to False.
-        single_process(bool, optional): If True, only a single process 
-        will be used to process Python files. Defaults to False. Set to True to
-        instantiate LLM once before processing all files.
+        start_dir (str): Starting directory for Python files. Defaults to current directory.
+        output_dir (str): Directory to save the output files.
+        questions_pathname (str): Path and filename of the questions file.
+        model_config_pathname (str): Path and filename of the model configuration file.
+        use_llm (bool): If True, use a Large Language Model for generating answers. Defaults to False.
+        quiet_mode (bool): Reduce logging output if True. Defaults to False.
+        single_process (bool): Use a single process for file processing if use_llm. Defaults to False.
+        detailed (bool): Include detailed analysis if True. Defaults to False.
+        html (bool): Generate HTML outputs if True. Defaults to False.
     Returns:
-        Dict[str, List[Dict]]: Datasets dictionary.
+        Dict[str, List[Dict]]: Dictionary of generated datasets.
     """
     if quiet:
         logging.getLogger().setLevel(logging.WARNING)
     else:
         logging.getLogger().setLevel(logging.INFO)
-    sys.setrecursionlimit(3000)  # Increase the recursion limit for AST
 
-    # If start dir is empty or not a valid directory, use current working directory
-    if not start_dir:
-        logging.info('No valid start path provided. Using current working directory.')
-        start_dir = os.getcwd()
-    start_dir = os.path.abspath(start_dir)
+    sys.setrecursionlimit(3000)  # Set recursion limit higher for AST parsing
+
+    start_dir = get_start_dir(start_dir)
     output_dir = get_output_dir(output_dir)
-    questions = get_questions(questions_pathname)
+    questions_dict = get_questions(questions_pathname)
 
-    # If single_process is True, load model config here
-    if single_process:
-        model_config = get_model(model_config_pathname) if use_llm else (None, '', 0)
+    # Load model configuration if LLM is used and single process mode is enabled
+    model_config = (
+        get_model(model_config_pathname) if use_llm and single_process else None
+    )
 
-    for pythonfile_path in Path(start_dir).rglob('[!_]*.py'):
-        if pythonfile_path.is_dir():
-            continue
-        if single_process:
-            process_single_file(
-                pythonfile_path,
+    if not use_llm:
+        single_process = True
+
+    # Process each Python file in the directory
+    for python_file_path in Path(start_dir).rglob("[!_]*.py"):
+        # if use_llm is false or single_process is true then process the file within the current process
+
+        if not use_llm and single_process:
+            process_single_python_file(
+                python_file_path,
                 start_dir,
                 model_config_pathname,
-                questions,
+                questions_dict,
                 use_llm,
                 output_dir,
                 model_config,
-                single_process)
-            continue
-        # Spawn a new child process to manage python memory leaks
-        proc = Process(
-            target=process_single_file,
-            args=(
-                pythonfile_path,
-                start_dir,
-                model_config_pathname,
-                questions,
-                use_llm,
-                output_dir)
+                single_process,
+                detailed,
             )
-        proc.start()
-        proc.join()
+        else:
+            # Spawn new process for each file to manage memory and performance
+            proc = Process(
+                target=process_single_python_file,
+                args=(
+                    python_file_path,
+                    start_dir,
+                    model_config_pathname,
+                    questions_dict,
+                    use_llm,
+                    output_dir,
+                    None,
+                    single_process,
+                    detailed,
+                ),
+            )
+            proc.start()
+            proc.join()
 
-    # Combine all of the instruct.json files together
-    datasets = combine_json_files(output_dir)
-    return datasets
+    # Combine all the individual datasets into a single dictionary
+    return combine_json_files(output_dir, html)
+
+
+def clone_github_repo(url: str) -> str:
+    """
+    Clone repository or pull the latest changes and return local repository path.
+    Args:
+        url (str): The url of the github repository.
+    Returns:
+        str: The path to the cloned repository.
+    """
+    # Check valid Git repository
+    try:
+        command = f"git ls-remote {shlex.quote(url)}"
+        subprocess.run(
+            command,
+            shell=True,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        print(f"Invalid or inaccessible repository: {url}")
+        return ""
+
+    # Proceed with cloning or fetching
+    repo_name = url.split("/")[-1]
+    githubrepos_dir = os.path.join(os.getcwd(), "githubrepos")
+    os.makedirs(githubrepos_dir, exist_ok=True)
+    path = os.path.join(githubrepos_dir, repo_name)
+    if not os.path.exists(path):
+        git.Repo.clone_from(url, path)
+    else:
+        repo = git.Repo(path)
+        with repo.git.custom_environment(
+            GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+        ):
+            repo.git.fetch()
+            default_branch = repo.head.reference.tracking_branch().remote_head
+            repo.git.reset("--hard", default_branch)
+    return path
+
 
 def main():
     """
     Command-line entry point for processing Python files and generating datasets.
+    Optional command-line arguments:
+    --start (str, optional): Starting directory for Python files or GitHub repository Python files. Defaults to current working directory.
+    --output_dir (str, optional): Directory to write the output files. Defaults to ./dataset/.
+    --questions_pathname (str, optional): Path and filename of the questions file. Defaults to ./py2dataset_questions.json.
+    --model_config_pathname (str, optional): Path and filename of the model configuration file. Defaults to ./py2dataset_model_config.yaml.
+    --use_llm (bool, optional): Use llm for generating JSON answers. Defaults to False.
+    --quiet (bool, optional): Limit logging output. Defaults to False.
+    --single_process (bool, optional): If True, only a single process will be used to process Python files. Defaults to False.
+    --detailed (bool, optional): Include detailed analysis if True. Defaults to False.
+    --html (bool, optional): Generate HTML output if True. Defaults to False.
+    --I (str, optional): Interactive mode. Defaults to False.
     """
-    arg_string = ' '.join(sys.argv[1:])
-    start_dir = ''
-    output_dir = ''
-    questions_pathname = ''
-    model_config_pathname = ''
-    use_llm = False
-    quiet = False
-    single_process = False
 
-    if '--start_dir' in arg_string:
-        start_dir = arg_string.split('--start_dir ')[1].split(' ')[0]
-        arg_string = arg_string.replace(f'--start_dir {start_dir}', '')
-    if '--output_dir' in arg_string:
-        output_dir = arg_string.split('--output_dir ')[1].split(' ')[0]
-        arg_string = arg_string.replace(f'--output_dir {output_dir}', '')
-    if '--model_config_pathname' in arg_string:
-        model_config_pathname = arg_string.split('--model_config_pathname ')[1].split(' ')[0]
-        arg_string = arg_string.replace(f'--model_config_pathname {model_config_pathname}', '')
-    if '--questions_pathname' in arg_string:
-        questions_pathname = arg_string.split('--questions_pathname ')[1].split(' ')[0]
-        arg_string = arg_string.replace(f'--questions_pathname {questions_pathname}', '')
-    if '--use_llm' in arg_string:
-        use_llm = True
-        arg_string = arg_string.replace('--use_llm', '')
-    if '--quiet' in arg_string:
-        quiet = True
-        arg_string = arg_string.replace('--quiet', '')
-    if '--single_process' in arg_string:
-        single_process = True
-        arg_string = arg_string.replace('--single_process', '')
+    class PathArgument(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            cleaned_value = values.strip('"').strip("'")
+            setattr(namespace, self.dest, cleaned_value)
 
+    def get_bool_from_input(input_str: str, current_value: bool) -> bool:
+        """
+        Get a boolean value from user input or retain the current value if the input is invalid.
+        """
+        return (
+            True
+            if input_str.lower() in ["t", "true"]
+            else False
+            if input_str.lower() in ["f", "false"]
+            else current_value
+        )
+
+    # parse each command line entry
+    parser = argparse.ArgumentParser(
+        description="Process Python files to generate datasets."
+    )
+    parser.add_argument(
+        "--start",
+        default=".",
+        action=PathArgument,
+        help="Starting directory for Python files. Defaults to current working directory.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        default="./dataset/",
+        action=PathArgument,
+        help="Directory to write the output files. Defaults to ./dataset/.",
+    )
+    parser.add_argument(
+        "--questions_pathname",
+        default="./py2dataset_questions.json",
+        action=PathArgument,
+        help="Path and filename of the questions file. Defaults to ./py2dataset_questions.json.",
+    )
+    parser.add_argument(
+        "--model_config_pathname",
+        default="./py2dataset_model_config.yaml",
+        action=PathArgument,
+        help="Path and filename of the model configuration file. Defaults to ./py2dataset_model_config.yaml.",
+    )
+    parser.add_argument(
+        "--use_llm",
+        action="store_true",
+        help="Use LLM for generating JSON answers. Defaults to False.",
+    )
+    parser.add_argument("--quiet", action="store_true", help="Limit logging output.")
+    parser.add_argument(
+        "--single_process",
+        action="store_true",
+        help="Use a single process for processing Python files. Defaults to False.",
+    )
+    parser.add_argument(
+        "--detailed", action="store_true", help="Include detailed analysis if True."
+    )
+    parser.add_argument(
+        "--html", action="store_true", help="Generate HTML output if True."
+    )
+    parser.add_argument(
+        "--I",
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Interactive mode.",
+    )
+    args = parser.parse_args()
+
+    # Interactive mode adjustments
+    if args.interactive:
+        print("Input new value or press enter to keep current value.")
+        pathname_params = [
+            "start",
+            "output_dir",
+            "questions_pathname",
+            "model_config_pathname",
+        ]
+        bool_params = ["use_llm", "quiet", "single_process", "detailed", "html"]
+        for param in pathname_params:
+            setattr(
+                args,
+                param,
+                input(f"{param} [{getattr(args, param)}]: ") or getattr(args, param),
+            )
+        for param in bool_params:
+            setattr(
+                args,
+                param,
+                get_bool_from_input(
+                    input(f"{param} [{getattr(args, param)}] (t or f): "),
+                    getattr(args, param),
+                ),
+            )
+
+    # Validate the start directory
+    if not (os.path.isdir(args.start) or args.start.startswith("https://github.com/")):
+        print(
+            f"Invalid start directory '{args.start}'. Using current working directory."
+        )
+        args.start = os.getcwd()
+
+    # if the start directory is a github repository, clone it and change the start directory to the local repository
+    if args.start.startswith("https://github.com/"):
+        args.start = clone_github_repo(args.start)
+
+    # Call py2dataset with args
     py2dataset(
-        start_dir,
-        output_dir,
-        questions_pathname,
-        model_config_pathname,
-        use_llm,
-        quiet,
-        single_process)
+        start_dir=args.start,
+        output_dir=args.output_dir,
+        questions_pathname=args.questions_pathname,
+        model_config_pathname=args.model_config_pathname,
+        use_llm=args.use_llm,
+        quiet=args.quiet,
+        single_process=args.single_process,
+        detailed=args.detailed,
+        html=args.html,
+    )
+
 
 if __name__ == "__main__":
     main()
