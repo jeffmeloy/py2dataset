@@ -3,14 +3,12 @@ inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
   model_params:
-    model_path: "./models/wizardcoder-python-13b-v1.0.Q4_0.gguf"
+    model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
+    model_file: "wizardcoder-python-13b-v1.0.Q5_K_S.gguf"
     model_type: "llama"
-    local_files_only: true
-    #model_path: "./models/nous-capybara-7b-v1.9.Q5_K_M.gguf"
-    #model_type: "mistral"
-    #local_files_only: true
-    #model_path: "./models/zephyr-7b-alpha.Q5_K_M.gguf"
-    #model_type: "mistral"
+    local_files_only: false
+    #model_path: "./models/wizardcoder-python-13b-v1.0.Q4_0.gguf"
+    #model_type: "llama"
     #local_files_only: true
     #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
     #model_type: "gpt_bigcode"
