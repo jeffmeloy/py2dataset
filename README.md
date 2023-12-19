@@ -41,16 +41,16 @@ Clone the repository and install dependencies:
     ```
 
 **Optional arguments:**
-- `--start <starting directory>`: Starting directory for Python files or GitHub repository Python files. Defaults to current working directory.
-- `--output_dir <output directory>`: Directory to write the output files. Defaults to ./dataset/.
-- `--questions_pathname <question file pathname>`: Path and filename of the questions file. Defaults to ./py2dataset_questions.json.
-- `--model_config_pathname <model configuration file pathname>`: Path and filename of the model configuration file. Defaults to ./py2dataset_model_config.yaml.
-- `--use_llm`: Use llm for generating JSON answers. Defaults to False.
-- `--quiet`: Limit logging output. Defaults to False.
-- `--single_process`: Use a single process to process Python files. Defaults to False.
-- `--detailed`: Include detailed analysis. Defaults to False.
-- `--html`: Generate HTML output. Defaults to False.
-- `--I`: Interactive mode. Defaults to False.
+- `--start <starting directory>`: Starting directory or GitHub repository Python files. Default: current working directory.
+- `--output_dir <output directory>`: Directory to write the output files. Default: ./dataset/.
+- `--questions_pathname <question file pathname>`: path & filename of questions file. Default: ./py2dataset_questions.json.
+- `--model_config_pathname <model configuration file pathname>`: Path and filename of the model configuration file. Default: ./py2dataset_model_config.yaml.
+- `--use_llm`: Use llm for generating JSON answers. Default: False.
+- `--quiet`: Limit logging output. Default: False.
+- `--single_process`: Use a single process to process Python files. Default: False.
+- `--detailed`: Include detailed analysis. Default: False.
+- `--html`: Generate HTML output. Default: False.
+- `--I`: Interactive mode. Default: False.
 
 ## Questions for datasets
 
