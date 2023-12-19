@@ -1,0 +1,2034 @@
+file_info:
+  file_code: "\"\"\"\nUtility functions for reading the input and saving the output\
+    \ of the py2dataset script.\nRequirements:\n[req01] The `read_file` function shall:\n\
+    \        a. Accept a file path as an argument.\n        b. Read and return the\
+    \ contents of a JSON or YAML file as a dictionary.\n[req02] The `write_file` function\
+    \ shall:\n        a. Accept a dictionary and a file path as arguments.\n     \
+    \   b. Write the dictionary to a file in either JSON or YAML format.\n[req03]\
+    \ The `convert_json_to_html` function shall:\n        a. Convert JSON files within\
+    \ a given directory to HTML format.\n        b. Save each converted file with\
+    \ a .html extension.\n        c. Preserve spacing and tabs for the 'input' field.\n\
+    [req04] The `combine_json_files` function shall:\n        a. Accept a directory\
+    \ path as an argument.\n        b. Merge all JSON files in the directory.\n  \
+    \      c. Remove duplicates from the combined JSON files.\n        d. Write the\
+    \ combined data to 'instruct.json' files.\n        e. Convert the merged JSON\
+    \ files to HTML format.\n        f. Return the 'instruct_list' datasets.\n[req05]\
+    \ The `create_code_graph` function shall:\n        a. Accept details of a Python\
+    \ file, a base name, and an output directory as arguments.\n        b. Generate\
+    \ code graphs based on the provided file details.\n        c. Save the graphs\
+    \ as PNG images in the specified output directory.\n[req06] The `save_python_data`\
+    \ function shall:\n        a. Accept details of a Python file, a base name, and\
+    \ an output directory as arguments.\n        b. Save the details of the Python\
+    \ file as a YAML file.\n        c. Save the instruction data as JSON files.\n\
+    \        d. Generate and save code graphs.\n\"\"\"\nimport json\nimport logging\n\
+    from html import escape\nfrom pathlib import Path\nfrom typing import Dict, List\n\
+    import matplotlib.pyplot as plt\nimport networkx as nx\nimport yaml\n\n\ndef read_file(file_path:\
+    \ Path) -> Dict:\n    \"\"\"\n    Reads a JSON or YAML file and returns its contents\
+    \ as a dictionary.\n    Args:\n        file_path (Path): The path to the file.\n\
+    \    Returns:\n        The contents of the file as a dictionary.\n    \"\"\"\n\
+    \    file_type = file_path.suffix[1:]\n    with file_path.open() as f:\n     \
+    \   if file_type == \"json\":\n            return json.load(f)\n        if file_type\
+    \ == \"yaml\":\n            return yaml.load(f, Loader=yaml.SafeLoader)\n    \
+    \    return {}\n\n\ndef write_file(data: Dict, file_path: Path) -> None:\n   \
+    \ \"\"\"\n    Writes a dictionary to a JSON or YAML file.\n    Args:\n       \
+    \ data (Dict): The data to write to the file.\n        file_path (Path): The path\
+    \ to the file.\n    Returns:\n        None\n    \"\"\"\n    file_type = file_path.suffix[1:]\n\
+    \    with file_path.open(\"w\") as f:\n        if file_type == \"json\":\n   \
+    \         json.dump(data, f, indent=4)\n        elif file_type == \"yaml\":\n\
+    \            yaml.SafeDumper.ignore_aliases = lambda *args: True\n           \
+    \ yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)\n\n\ndef convert_json_to_html(directory:\
+    \ str) -> None:\n    \"\"\"\n    Convert JSON files within a given directory to\
+    \ HTML format.\n    Args:\n        directory (str): The directory where the JSON\
+    \ files are located.\n    Returns:\n        None\n    \"\"\"\n\n    def preserve_spacing(text:\
+    \ str, tab_width: int = 4) -> str:\n        \"\"\"Preserve spaces and tabs in\
+    \ the provided text.\"\"\"\n        return text.replace(\" \", \"&nbsp;\").replace(\"\
+    \\t\", \"&nbsp;\" * tab_width)\n\n    for json_file in Path(directory).rglob(\"\
+    *.json\"):\n        try:\n            dataset = read_file(json_file)\n       \
+    \     if not dataset:\n                continue\n        except Exception:\n \
+    \           continue\n\n        html_content = \"\"\"\n        <html>\n      \
+    \  <head>\n            <style>\n                table {border-collapse: collapse;\
+    \ width: 100%; table-layout: fixed;}\n                th, td {\n             \
+    \       border: 1px solid black;\n                    padding: 8px;\n        \
+    \            text-align: left;\n                    white-space: pre-line;\n \
+    \                   vertical-align: top;\n                    word-wrap: break-word;\n\
+    \                }\n            </style>\n        </head>\n        <body>\n  \
+    \          <table>\n                <thead>\n                    <tr>\n      \
+    \  \"\"\"\n        column_count = len(dataset[0].keys())\n        column_width\
+    \ = (\n            100 / column_count\n        )  # Calculate the width for each\
+    \ column based on the number of columns\n        for key in dataset[0].keys():\n\
+    \            html_content += f\"<th style='width: {column_width}%;'>{key}</th>\"\
+    \n        html_content += \"\"\"\n                    </tr>\n                </thead>\n\
+    \                <tbody>\n        \"\"\"\n        html_rows = []  # List to store\
+    \ each row's HTML content\n        for entry in dataset:\n            row_parts\
+    \ = [\"<tr>\"]\n            for key in entry:\n                # Convert \\n to\
+    \ HTML line breaks\n                value = escape(str(entry[key]))\n        \
+    \        value = preserve_spacing(value)\n                value = value.replace(\"\
+    \\n\", \"<br/>\")\n                row_parts.append(f\"<td>{value}</td>\")\n \
+    \           row_parts.append(\"</tr>\")\n            html_rows.append(\"\".join(row_parts))\
+    \  # Join all parts of the row and append to the list\n\n        # After the loop,\
+    \ join all rows\n        html_content += \"\".join(html_rows)\n\n        html_content\
+    \ += \"\"\"\n                </tbody>\n            </table>\n        </body>\n\
+    \        </html>\n        \"\"\"\n        html_file_path = json_file.with_suffix(\"\
+    .html\")\n        try:\n            with open(html_file_path, \"w\", encoding=\"\
+    utf-8\") as file:\n                file.write(html_content)\n        except Exception:\n\
+    \            logging.info(f\"Failed saving: {html_file_path}\")\n\n\ndef convert_json_to_markdown(directory:\
+    \ str) -> None:\n    \"\"\"\n    Convert JSON files within a given directory to\
+    \ Markdown format.\n    Args:\n        directory (str): The directory where the\
+    \ JSON files are located.\n    Returns:\n        None\n    \"\"\"\n\n    def escape_markdown(text:\
+    \ str) -> str:\n        \"\"\"Escape Markdown special characters in the provided\
+    \ text.\"\"\"\n        markdown_special_chars = \"\\\\`*_{}[]()#+-.!\"\n     \
+    \   for char in markdown_special_chars:\n            text = text.replace(char,\
+    \ f\"\\\\{char}\")\n        return text\n\n    for json_file in Path(directory).rglob(\"\
+    *.json\"):\n        dataset = read_file(json_file)\n        if not dataset:\n\
+    \            continue\n\n        markdown_content = \"# Data Report\\n\\n\"\n\
+    \        # Create Markdown table headers\n        headers = dataset[0].keys()\n\
+    \        markdown_content += \"| \" + \" | \".join(headers) + \" |\\n\"\n    \
+    \    markdown_content += \"| \" + \" | \".join([\"---\"] * len(headers)) + \"\
+    \ |\\n\"\n\n        # Create Markdown table rows\n        for entry in dataset:\n\
+    \            row = \"| \" + \" | \".join(escape_markdown(str(entry[key])) for\
+    \ key in headers) + \" |\\n\"\n            markdown_content += row\n\n       \
+    \ markdown_file_path = json_file.with_suffix(\".md\")\n        try:\n        \
+    \    with open(markdown_file_path, \"w\", encoding=\"utf-8\") as file:\n     \
+    \           file.write(markdown_content)\n        except Exception as e:\n   \
+    \         logging.error(f\"Failed to save Markdown file {markdown_file_path}:\
+    \ {e}\")\n            \n\ndef combine_json_files(directory: str, html: bool =\
+    \ False) -> Dict[str, List[Dict]]:\n    \"\"\"\n    Combine all JSON files in\
+    \ the output directory into 'instruct.json', and\n    then remove duplicates.\n\
+    \    Args:\n        directory (str): The directory where the output files are\
+    \ located.\n    Returns:\n        A dictionary containing the 'instruct_list'\
+    \ datasets.\n    \"\"\"\n    logging.info(f\"Combining JSON files in {directory}\"\
+    )\n\n    def remove_duplicate_dataset_entries(\n        dataset: List[Dict], key1:\
+    \ str, key2: str\n    ) -> List[Dict]:\n        \"\"\"\n        Remove duplicate\
+    \ entries from the provided dataset based on the provided keys.\n        Args:\n\
+    \            dataset (List[Dict]): The dataset to remove duplicates from.\n  \
+    \          key1 (str): The first key to check for duplicates.\n            key2\
+    \ (str): The second key to check for duplicates.\n        Returns:\n         \
+    \   A dataset without duplicate entries.\n        \"\"\"\n        seen = set()\n\
+    \        result = []\n        for item in dataset:\n            if (item[key1],\
+    \ item[key2]) not in seen:\n                seen.add((item[key1], item[key2]))\n\
+    \                result.append(item)\n        return result\n\n    instruct_data\
+    \ = []\n    for file_name in [\"instruct.json\"]:\n        file_path = Path(directory)\
+    \ / file_name\n        combined_data = []\n        for json_file in Path(directory).rglob(f\"\
+    *.{file_name}\"):\n            try:\n                json_file_data = read_file(json_file)\n\
+    \                combined_data.extend(json_file_data)\n                combined_data\
+    \ = remove_duplicate_dataset_entries(\n                    combined_data, \"instruction\"\
+    , \"output\"\n                )\n                instruct_data = combined_data.copy()\n\
+    \                purpose_data = [\n                    item\n                \
+    \    for item in combined_data\n                    if item[\"instruction\"].startswith(\"\
+    1) Describe the Purpose\")\n                ]\n\n                code_output =\
+    \ []\n                for item in purpose_data:\n                    instruction\
+    \ = (\n                        \"Define a Python code file that is described as\
+    \ follows:\\n\"\n                        + item[\"output\"]\n                \
+    \    )\n                    code_output.append(\n                        {\"instruction\"\
+    : instruction, \"output\": item[\"input\"]}\n                    )\n         \
+    \       write_file(code_output, Path(directory) / \"training.json\")\n       \
+    \     except Exception as e:\n                logging.info(f\"Error processing:\
+    \ {json_file}: {e}\")\n\n        write_file(combined_data, file_path)\n\n    #\
+    \ Save html / markdown file for each json file in the output directory\n    #\
+    \ convert_json_to_markdown(directory)\n    if html:\n        logging.info(\"Converting\
+    \ JSON files to HTML\")\n        convert_json_to_html(directory)\n    \n    return\
+    \ {\"instruct_list\": instruct_data}\n    \n\ndef create_code_graph(file_details:\
+    \ Dict, base_name: str, output_subdir: Path) -> None:\n    \"\"\"\n    Generate\
+    \ graphs from the file_details and save them as PNG images.\n    Args:\n     \
+    \   file_details (dict): The details extracted from the Python file.\n       \
+    \ base_name (str): The base name of the output files.\n        output_subdir (Path):\
+    \ The subdirectory where the output files will be saved.\n    Returns:\n     \
+    \   None\n    \"\"\"\n    graph_type = \"entire_code_graph\"\n    output_file\
+    \ = output_subdir / f\"{base_name}.{graph_type}.png\"\n\n    # Create graphs,\
+    \ add nodes, and add edges\n    G = nx.DiGraph()\n    G.add_nodes_from(file_details[\"\
+    file_info\"][graph_type][\"nodes\"])\n    for edge in file_details[\"file_info\"\
+    ][graph_type][\"edges\"]:\n        source, target = edge[\"source\"], edge[\"\
+    target\"]\n        if source in G.nodes and target in G.nodes:\n            G.add_edge(\n\
+    \                source,\n                target,\n                **{\n     \
+    \               k: v\n                    for k, v in edge.items()\n         \
+    \           if k in [\"target_inputs\", \"target_returns\"]\n                },\n\
+    \            )\n    # Draw graphs\n    plt.figure(figsize=(20, 20))\n    pos =\
+    \ nx.spring_layout(G)\n    nx.draw(\n        G,\n        pos,\n        with_labels=True,\n\
+    \        font_weight=\"bold\",\n        font_size=8,\n        node_shape=\"s\"\
+    ,\n        node_size=500,\n        width=1,\n        arrowsize=12,\n    )\n  \
+    \  edge_labels = {}\n    for edge in G.edges(data=True):\n        label = []\n\
+    \        if \"target_inputs\" in edge[2] and edge[2][\"target_inputs\"]:\n   \
+    \         label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\")\n \
+    \       if \"target_returns\" in edge[2] and edge[2][\"target_returns\"]:\n  \
+    \          label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\"\
+    )\n        edge_labels[(edge[0], edge[1])] = \"\\n\".join(label)\n    nx.draw_networkx_edge_labels(G,\
+    \ pos, edge_labels=edge_labels, font_size=6)\n    plt.savefig(output_file)  #\
+    \ Save the figure\n    plt.close()  # Close the figure\n\n\ndef save_python_data(\n\
+    \    file_details: dict, instruct_list: list, base_name: str, relative_path: Path,\
+    \ output_dir: str\n) -> None:\n    \"\"\"\n    Save Python file details as a YAML\
+    \ file, the instruction data as a JSON file, and code graphs.\n    Args:\n   \
+    \     file_details (dict): The details extracted from the Python file.\n     \
+    \   instruct_list (list): The instruction data extracted from the Python file.\n\
+    \        relative_path (Path): The relative path to the Python file.\n       \
+    \ output_dir (str): The directory where the output files will be saved.\n    Returns:\n\
+    \        None\n    \"\"\"\n    # want output subdir to include the absolute path\
+    \ to the output dir + the directories between the output dir and the file\n  \
+    \  output_subdir = Path(output_dir) / relative_path.parent\n    output_subdir.mkdir(parents=True,\
+    \ exist_ok=True)\n\n    # write instrunct.json files\n    file_names = [f\"{base_name}.instruct.json\"\
+    , f\"{base_name}.details.yaml\"]\n    contents = [instruct_list, file_details]\n\
+    \n    for file_name, content in zip(file_names, contents):\n        write_file(content,\
+    \ output_subdir / file_name)\n\n    try:\n        create_code_graph(file_details,\
+    \ base_name, output_subdir)\n    except Exception as e:\n        logging.info(f\"\
+    Error creating graph for {base_name}: {e}\")\n"
+  file_dependencies:
+  - logging
+  - yaml
+  - networkx
+  - json
+  - html
+  - pathlib
+  - matplotlib.pyplot
+  - typing
+  file_functions:
+  - read_file
+  - write_file
+  - convert_json_to_html
+  - preserve_spacing
+  - convert_json_to_markdown
+  - escape_markdown
+  - combine_json_files
+  - remove_duplicate_dataset_entries
+  - create_code_graph
+  - save_python_data
+  file_classes: []
+  file_constants: []
+  file_summary: '{dependencies: [logging, yaml, networkx, json, html, pathlib, matplotlib.pyplot,
+    typing], function_defs: [{read_file: {inputs: [file_path], calls: [file_path.open,
+    json.load, yaml.load], call_inputs: {file_path.open: [], json.load: [f], yaml.load:
+    [f]}, returns: [{}, json.load(f), yaml.load(f, Loader=yaml.SafeLoader)]}}, {write_file:
+    {inputs: [data, file_path], calls: [file_path.open, json.dump, yaml.dump], call_inputs:
+    {file_path.open: [''w''], json.dump: [data, f], yaml.dump: [data, f]}, returns:
+    []}}, {convert_json_to_html: {inputs: [directory], calls: [text.replace('' '',
+    ''&nbsp;'').replace, text.replace, Path(directory).rglob, Path, read_file, len,
+    dataset[0].keys, escape, str, preserve_spacing, value.replace, row_parts.append,
+    html_rows.append, ''''.join, json_file.with_suffix, open, file.write, logging.info],
+    call_inputs: {text.replace('' '', ''&nbsp;'').replace: [''\\t'', ''&nbsp;'' *
+    tab_width], text.replace: ['' '', ''&nbsp;''], Path(directory).rglob: [''*.json''],
+    Path: [directory], read_file: [json_file], len: [dataset[0].keys()], dataset[0].keys:
+    [], escape: [str(entry[key])], str: [entry[key]], preserve_spacing: [value], value.replace:
+    [''\\n'', ''<br/>''], row_parts.append: [f''<td>{value}</td>'', ''</tr>''], html_rows.append:
+    [''''.join(row_parts)], ''''.join: [row_parts, html_rows], json_file.with_suffix:
+    [''.html''], open: [html_file_path, ''w''], file.write: [html_content], logging.info:
+    [f''Failed saving: {html_file_path}'']}, returns: [text.replace('' '', ''&nbsp;'').replace(''\\t'',
+    ''&nbsp;'' * tab_width)]}}, {preserve_spacing: {inputs: [text, tab_width], calls:
+    [text.replace('' '', ''&nbsp;'').replace, text.replace], call_inputs: {text.replace(''
+    '', ''&nbsp;'').replace: [''\\t'', ''&nbsp;'' * tab_width], text.replace: [''
+    '', ''&nbsp;'']}, returns: [text.replace('' '', ''&nbsp;'').replace(''\\t'', ''&nbsp;''
+    * tab_width)]}}, {convert_json_to_markdown: {inputs: [directory], calls: [text.replace,
+    Path(directory).rglob, Path, read_file, dataset[0].keys, '' | ''.join, len, escape_markdown,
+    str, json_file.with_suffix, open, file.write, logging.error], call_inputs: {text.replace:
+    [char, f''\\\\{char}''], Path(directory).rglob: [''*.json''], Path: [directory],
+    read_file: [json_file], dataset[0].keys: [], '' | ''.join: [headers, [''---'']
+    * len(headers), (escape_markdown(str(entry[key])) for key in headers)], len: [headers],
+    escape_markdown: [str(entry[key])], str: [entry[key]], json_file.with_suffix:
+    [''.md''], open: [markdown_file_path, ''w''], file.write: [markdown_content],
+    logging.error: [f''Failed to save Markdown file {markdown_file_path}: {e}'']},
+    returns: [text]}}, {escape_markdown: {inputs: [text], calls: [text.replace], call_inputs:
+    {text.replace: [char, f''\\\\{char}'']}, returns: [text]}}, {combine_json_files:
+    {inputs: [directory, html], calls: [logging.info, set, seen.add, result.append,
+    Path, Path(directory).rglob, read_file, combined_data.extend, remove_duplicate_dataset_entries,
+    combined_data.copy, item[''instruction''].startswith, code_output.append, write_file,
+    convert_json_to_html], call_inputs: {logging.info: [f''Combining JSON files in
+    {directory}'', f''Error processing: {json_file}: {e}'', ''Converting JSON files
+    to HTML''], set: [], seen.add: [(item[key1], item[key2])], result.append: [item],
+    Path: [directory, directory, directory], Path(directory).rglob: [f''*.{file_name}''],
+    read_file: [json_file], combined_data.extend: [json_file_data], remove_duplicate_dataset_entries:
+    [combined_data, ''instruction'', ''output''], combined_data.copy: [], item[''instruction''].startswith:
+    [''1) Describe the Purpose''], code_output.append: [{''instruction'': instruction,
+    ''output'': item[''input'']}], write_file: [code_output, Path(directory) / ''training.json'',
+    combined_data, file_path], convert_json_to_html: [directory]}, returns: [{''instruct_list'':
+    instruct_data}, result]}}, {remove_duplicate_dataset_entries: {inputs: [dataset,
+    key1, key2], calls: [set, seen.add, result.append], call_inputs: {set: [], seen.add:
+    [(item[key1], item[key2])], result.append: [item]}, returns: [result]}}, {create_code_graph:
+    {inputs: [file_details, base_name, output_subdir], calls: [nx.DiGraph, G.add_nodes_from,
+    G.add_edge, edge.items, plt.figure, nx.spring_layout, nx.draw, G.edges, label.append,
+    '', ''.join, ''\\n''.join, nx.draw_networkx_edge_labels, plt.savefig, plt.close],
+    call_inputs: {nx.DiGraph: [], G.add_nodes_from: [file_details[''file_info''][graph_type][''nodes'']],
+    G.add_edge: [source, target], edge.items: [], plt.figure: [], nx.spring_layout:
+    [G], nx.draw: [G, pos], G.edges: [], label.append: [f\Inputs: {'', ''.join(edge[2][''target_inputs''])}\,
+    f\\\nReturns: {'', ''.join(edge[2][''target_returns''])}\], '', ''.join: [edge[2][''target_inputs''],
+    edge[2][''target_returns'']], ''\\n''.join: [label], nx.draw_networkx_edge_labels:
+    [G, pos], plt.savefig: [output_file], plt.close: []}, returns: []}}, {save_python_data:
+    {inputs: [file_details, instruct_list, base_name, relative_path, output_dir],
+    calls: [Path, output_subdir.mkdir, zip, write_file, create_code_graph, logging.info],
+    call_inputs: {Path: [output_dir], output_subdir.mkdir: [], zip: [file_names, contents],
+    write_file: [content, output_subdir / file_name], create_code_graph: [file_details,
+    base_name, output_subdir], logging.info: [f''Error creating graph for {base_name}:
+    {e}'']}, returns: []}}], class_defs: []}'
+  file_code_simplified: "import json\nimport logging\nfrom html import escape\nfrom\
+    \ pathlib import Path\nfrom typing import Dict, List\nimport matplotlib.pyplot\
+    \ as plt\nimport networkx as nx\nimport yaml\n\ndef read_file(file_path: Path)\
+    \ -> Dict:\n    file_type = file_path.suffix[1:]\n    with file_path.open() as\
+    \ f:\n        if file_type == 'json':\n            return json.load(f)\n     \
+    \   if file_type == 'yaml':\n            return yaml.load(f, Loader=yaml.SafeLoader)\n\
+    \        return {}\n\ndef write_file(data: Dict, file_path: Path) -> None:\n \
+    \   file_type = file_path.suffix[1:]\n    with file_path.open('w') as f:\n   \
+    \     if file_type == 'json':\n            json.dump(data, f, indent=4)\n    \
+    \    elif file_type == 'yaml':\n            yaml.SafeDumper.ignore_aliases = lambda\
+    \ *args: True\n            yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)\n\
+    \ndef convert_json_to_html(directory: str) -> None:\n\n    def preserve_spacing(text:\
+    \ str, tab_width: int=4) -> str:\n        return text.replace(' ', '&nbsp;').replace('\\\
+    t', '&nbsp;' * tab_width)\n    for json_file in Path(directory).rglob('*.json'):\n\
+    \        try:\n            dataset = read_file(json_file)\n            if not\
+    \ dataset:\n                continue\n        except Exception:\n            continue\n\
+    \        html_content = '\\n        <html>\\n        <head>\\n            <style>\\\
+    n                table {border-collapse: collapse; width: 100%; table-layout:\
+    \ fixed;}\\n                th, td {\\n                    border: 1px solid black;\\\
+    n                    padding: 8px;\\n                    text-align: left;\\n\
+    \                    white-space: pre-line;\\n                    vertical-align:\
+    \ top;\\n                    word-wrap: break-word;\\n                }\\n   \
+    \         </style>\\n        </head>\\n        <body>\\n            <table>\\\
+    n                <thead>\\n                    <tr>\\n        '\n        column_count\
+    \ = len(dataset[0].keys())\n        column_width = 100 / column_count\n      \
+    \  for key in dataset[0].keys():\n            html_content += f\"<th style='width:\
+    \ {column_width}%;'>{key}</th>\"\n        html_content += '\\n               \
+    \     </tr>\\n                </thead>\\n                <tbody>\\n        '\n\
+    \        html_rows = []\n        for entry in dataset:\n            row_parts\
+    \ = ['<tr>']\n            for key in entry:\n                value = escape(str(entry[key]))\n\
+    \                value = preserve_spacing(value)\n                value = value.replace('\\\
+    n', '<br/>')\n                row_parts.append(f'<td>{value}</td>')\n        \
+    \    row_parts.append('</tr>')\n            html_rows.append(''.join(row_parts))\n\
+    \        html_content += ''.join(html_rows)\n        html_content += '\\n    \
+    \            </tbody>\\n            </table>\\n        </body>\\n        </html>\\\
+    n        '\n        html_file_path = json_file.with_suffix('.html')\n        try:\n\
+    \            with open(html_file_path, 'w', encoding='utf-8') as file:\n     \
+    \           file.write(html_content)\n        except Exception:\n            logging.info(f'Failed\
+    \ saving: {html_file_path}')\n\ndef convert_json_to_markdown(directory: str) ->\
+    \ None:\n\n    def escape_markdown(text: str) -> str:\n        markdown_special_chars\
+    \ = '\\\\`*_{}[]()#+-.!'\n        for char in markdown_special_chars:\n      \
+    \      text = text.replace(char, f'\\\\{char}')\n        return text\n    for\
+    \ json_file in Path(directory).rglob('*.json'):\n        dataset = read_file(json_file)\n\
+    \        if not dataset:\n            continue\n        markdown_content = '#\
+    \ Data Report\\n\\n'\n        headers = dataset[0].keys()\n        markdown_content\
+    \ += '| ' + ' | '.join(headers) + ' |\\n'\n        markdown_content += '| ' +\
+    \ ' | '.join(['---'] * len(headers)) + ' |\\n'\n        for entry in dataset:\n\
+    \            row = '| ' + ' | '.join((escape_markdown(str(entry[key])) for key\
+    \ in headers)) + ' |\\n'\n            markdown_content += row\n        markdown_file_path\
+    \ = json_file.with_suffix('.md')\n        try:\n            with open(markdown_file_path,\
+    \ 'w', encoding='utf-8') as file:\n                file.write(markdown_content)\n\
+    \        except Exception as e:\n            logging.error(f'Failed to save Markdown\
+    \ file {markdown_file_path}: {e}')\n\ndef combine_json_files(directory: str, html:\
+    \ bool=False) -> Dict[str, List[Dict]]:\n    logging.info(f'Combining JSON files\
+    \ in {directory}')\n\n    def remove_duplicate_dataset_entries(dataset: List[Dict],\
+    \ key1: str, key2: str) -> List[Dict]:\n        seen = set()\n        result =\
+    \ []\n        for item in dataset:\n            if (item[key1], item[key2]) not\
+    \ in seen:\n                seen.add((item[key1], item[key2]))\n             \
+    \   result.append(item)\n        return result\n    instruct_data = []\n    for\
+    \ file_name in ['instruct.json']:\n        file_path = Path(directory) / file_name\n\
+    \        combined_data = []\n        for json_file in Path(directory).rglob(f'*.{file_name}'):\n\
+    \            try:\n                json_file_data = read_file(json_file)\n   \
+    \             combined_data.extend(json_file_data)\n                combined_data\
+    \ = remove_duplicate_dataset_entries(combined_data, 'instruction', 'output')\n\
+    \                instruct_data = combined_data.copy()\n                purpose_data\
+    \ = [item for item in combined_data if item['instruction'].startswith('1) Describe\
+    \ the Purpose')]\n                code_output = []\n                for item in\
+    \ purpose_data:\n                    instruction = 'Define a Python code file\
+    \ that is described as follows:\\n' + item['output']\n                    code_output.append({'instruction':\
+    \ instruction, 'output': item['input']})\n                write_file(code_output,\
+    \ Path(directory) / 'training.json')\n            except Exception as e:\n   \
+    \             logging.info(f'Error processing: {json_file}: {e}')\n        write_file(combined_data,\
+    \ file_path)\n    if html:\n        logging.info('Converting JSON files to HTML')\n\
+    \        convert_json_to_html(directory)\n    return {'instruct_list': instruct_data}\n\
+    \ndef create_code_graph(file_details: Dict, base_name: str, output_subdir: Path)\
+    \ -> None:\n    graph_type = 'entire_code_graph'\n    output_file = output_subdir\
+    \ / f'{base_name}.{graph_type}.png'\n    G = nx.DiGraph()\n    G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])\n\
+    \    for edge in file_details['file_info'][graph_type]['edges']:\n        source,\
+    \ target = (edge['source'], edge['target'])\n        if source in G.nodes and\
+    \ target in G.nodes:\n            G.add_edge(source, target, **{k: v for k, v\
+    \ in edge.items() if k in ['target_inputs', 'target_returns']})\n    plt.figure(figsize=(20,\
+    \ 20))\n    pos = nx.spring_layout(G)\n    nx.draw(G, pos, with_labels=True, font_weight='bold',\
+    \ font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12)\n    edge_labels\
+    \ = {}\n    for edge in G.edges(data=True):\n        label = []\n        if 'target_inputs'\
+    \ in edge[2] and edge[2]['target_inputs']:\n            label.append(f\"Inputs:\
+    \ {', '.join(edge[2]['target_inputs'])}\")\n        if 'target_returns' in edge[2]\
+    \ and edge[2]['target_returns']:\n            label.append(f\"\\nReturns: {',\
+    \ '.join(edge[2]['target_returns'])}\")\n        edge_labels[edge[0], edge[1]]\
+    \ = '\\n'.join(label)\n    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels,\
+    \ font_size=6)\n    plt.savefig(output_file)\n    plt.close()\n\ndef save_python_data(file_details:\
+    \ dict, instruct_list: list, base_name: str, relative_path: Path, output_dir:\
+    \ str) -> None:\n    output_subdir = Path(output_dir) / relative_path.parent\n\
+    \    output_subdir.mkdir(parents=True, exist_ok=True)\n    file_names = [f'{base_name}.instruct.json',\
+    \ f'{base_name}.details.yaml']\n    contents = [instruct_list, file_details]\n\
+    \    for file_name, content in zip(file_names, contents):\n        write_file(content,\
+    \ output_subdir / file_name)\n    try:\n        create_code_graph(file_details,\
+    \ base_name, output_subdir)\n    except Exception as e:\n        logging.info(f'Error\
+    \ creating graph for {base_name}: {e}')"
+  entire_code_graph:
+    nodes:
+    - read_file
+    - write_file
+    - convert_json_to_html
+    - preserve_spacing
+    - convert_json_to_markdown
+    - escape_markdown
+    - combine_json_files
+    - remove_duplicate_dataset_entries
+    - create_code_graph
+    - save_python_data
+    - file_path.open
+    - json.load
+    - yaml.load
+    - json.dump
+    - yaml.dump
+    - text.replace(' ', '&nbsp;').replace
+    - text.replace
+    - Path(directory).rglob
+    - Path
+    - len
+    - dataset[0].keys
+    - escape
+    - str
+    - value.replace
+    - row_parts.append
+    - html_rows.append
+    - '''''.join'
+    - json_file.with_suffix
+    - open
+    - file.write
+    - logging.info
+    - ''' | ''.join'
+    - logging.error
+    - set
+    - seen.add
+    - result.append
+    - combined_data.extend
+    - combined_data.copy
+    - item['instruction'].startswith
+    - code_output.append
+    - nx.DiGraph
+    - G.add_nodes_from
+    - G.add_edge
+    - edge.items
+    - plt.figure
+    - nx.spring_layout
+    - nx.draw
+    - G.edges
+    - label.append
+    - ''', ''.join'
+    - '''\n''.join'
+    - nx.draw_networkx_edge_labels
+    - plt.savefig
+    - plt.close
+    - output_subdir.mkdir
+    - zip
+    edges:
+    - source: read_file
+      target: file_path.open
+      target_inputs: []
+    - source: read_file
+      target: json.load
+      target_inputs:
+      - f
+    - source: read_file
+      target: yaml.load
+      target_inputs:
+      - f
+    - source: write_file
+      target: file_path.open
+      target_inputs:
+      - '''w'''
+    - source: write_file
+      target: json.dump
+      target_inputs:
+      - data
+      - f
+    - source: write_file
+      target: yaml.dump
+      target_inputs:
+      - data
+      - f
+    - source: convert_json_to_html
+      target: text.replace(' ', '&nbsp;').replace
+      target_inputs:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+    - source: convert_json_to_html
+      target: text.replace
+      target_inputs:
+      - ''' '''
+      - '''&nbsp;'''
+    - source: convert_json_to_html
+      target: Path(directory).rglob
+      target_inputs:
+      - '''*.json'''
+    - source: convert_json_to_html
+      target: Path
+      target_inputs:
+      - directory
+    - source: convert_json_to_html
+      target: read_file
+      target_inputs:
+      - json_file
+      target_returns:
+      - '{}'
+      - json.load(f)
+      - yaml.load(f, Loader=yaml.SafeLoader)
+    - source: convert_json_to_html
+      target: len
+      target_inputs:
+      - dataset[0].keys()
+    - source: convert_json_to_html
+      target: dataset[0].keys
+      target_inputs: []
+    - source: convert_json_to_html
+      target: escape
+      target_inputs:
+      - str(entry[key])
+    - source: convert_json_to_html
+      target: str
+      target_inputs:
+      - entry[key]
+    - source: convert_json_to_html
+      target: preserve_spacing
+      target_inputs:
+      - value
+      target_returns:
+      - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    - source: convert_json_to_html
+      target: value.replace
+      target_inputs:
+      - '''\n'''
+      - '''<br/>'''
+    - source: convert_json_to_html
+      target: row_parts.append
+      target_inputs:
+      - f'<td>{value}</td>'
+      - '''</tr>'''
+    - source: convert_json_to_html
+      target: html_rows.append
+      target_inputs:
+      - '''''.join(row_parts)'
+    - source: convert_json_to_html
+      target: '''''.join'
+      target_inputs:
+      - row_parts
+      - html_rows
+    - source: convert_json_to_html
+      target: json_file.with_suffix
+      target_inputs:
+      - '''.html'''
+    - source: convert_json_to_html
+      target: open
+      target_inputs:
+      - html_file_path
+      - '''w'''
+    - source: convert_json_to_html
+      target: file.write
+      target_inputs:
+      - html_content
+    - source: convert_json_to_html
+      target: logging.info
+      target_inputs:
+      - 'f''Failed saving: {html_file_path}'''
+    - source: preserve_spacing
+      target: text.replace(' ', '&nbsp;').replace
+      target_inputs:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+    - source: preserve_spacing
+      target: text.replace
+      target_inputs:
+      - ''' '''
+      - '''&nbsp;'''
+    - source: convert_json_to_markdown
+      target: text.replace
+      target_inputs:
+      - char
+      - f'\\{char}'
+    - source: convert_json_to_markdown
+      target: Path(directory).rglob
+      target_inputs:
+      - '''*.json'''
+    - source: convert_json_to_markdown
+      target: Path
+      target_inputs:
+      - directory
+    - source: convert_json_to_markdown
+      target: read_file
+      target_inputs:
+      - json_file
+      target_returns:
+      - '{}'
+      - json.load(f)
+      - yaml.load(f, Loader=yaml.SafeLoader)
+    - source: convert_json_to_markdown
+      target: dataset[0].keys
+      target_inputs: []
+    - source: convert_json_to_markdown
+      target: ''' | ''.join'
+      target_inputs:
+      - headers
+      - '[''---''] * len(headers)'
+      - (escape_markdown(str(entry[key])) for key in headers)
+    - source: convert_json_to_markdown
+      target: len
+      target_inputs:
+      - headers
+    - source: convert_json_to_markdown
+      target: escape_markdown
+      target_inputs:
+      - str(entry[key])
+      target_returns:
+      - text
+    - source: convert_json_to_markdown
+      target: str
+      target_inputs:
+      - entry[key]
+    - source: convert_json_to_markdown
+      target: json_file.with_suffix
+      target_inputs:
+      - '''.md'''
+    - source: convert_json_to_markdown
+      target: open
+      target_inputs:
+      - markdown_file_path
+      - '''w'''
+    - source: convert_json_to_markdown
+      target: file.write
+      target_inputs:
+      - markdown_content
+    - source: convert_json_to_markdown
+      target: logging.error
+      target_inputs:
+      - 'f''Failed to save Markdown file {markdown_file_path}: {e}'''
+    - source: escape_markdown
+      target: text.replace
+      target_inputs:
+      - char
+      - f'\\{char}'
+    - source: combine_json_files
+      target: logging.info
+      target_inputs:
+      - f'Combining JSON files in {directory}'
+      - 'f''Error processing: {json_file}: {e}'''
+      - '''Converting JSON files to HTML'''
+    - source: combine_json_files
+      target: set
+      target_inputs: []
+    - source: combine_json_files
+      target: seen.add
+      target_inputs:
+      - (item[key1], item[key2])
+    - source: combine_json_files
+      target: result.append
+      target_inputs:
+      - item
+    - source: combine_json_files
+      target: Path
+      target_inputs:
+      - directory
+      - directory
+      - directory
+    - source: combine_json_files
+      target: Path(directory).rglob
+      target_inputs:
+      - f'*.{file_name}'
+    - source: combine_json_files
+      target: read_file
+      target_inputs:
+      - json_file
+      target_returns:
+      - '{}'
+      - json.load(f)
+      - yaml.load(f, Loader=yaml.SafeLoader)
+    - source: combine_json_files
+      target: combined_data.extend
+      target_inputs:
+      - json_file_data
+    - source: combine_json_files
+      target: remove_duplicate_dataset_entries
+      target_inputs:
+      - combined_data
+      - '''instruction'''
+      - '''output'''
+      target_returns:
+      - result
+    - source: combine_json_files
+      target: combined_data.copy
+      target_inputs: []
+    - source: combine_json_files
+      target: item['instruction'].startswith
+      target_inputs:
+      - '''1) Describe the Purpose'''
+    - source: combine_json_files
+      target: code_output.append
+      target_inputs:
+      - '{''instruction'': instruction, ''output'': item[''input'']}'
+    - source: combine_json_files
+      target: write_file
+      target_inputs:
+      - code_output
+      - Path(directory) / 'training.json'
+      - combined_data
+      - file_path
+      target_returns: []
+    - source: combine_json_files
+      target: convert_json_to_html
+      target_inputs:
+      - directory
+      target_returns:
+      - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    - source: remove_duplicate_dataset_entries
+      target: set
+      target_inputs: []
+    - source: remove_duplicate_dataset_entries
+      target: seen.add
+      target_inputs:
+      - (item[key1], item[key2])
+    - source: remove_duplicate_dataset_entries
+      target: result.append
+      target_inputs:
+      - item
+    - source: create_code_graph
+      target: nx.DiGraph
+      target_inputs: []
+    - source: create_code_graph
+      target: G.add_nodes_from
+      target_inputs:
+      - file_details['file_info'][graph_type]['nodes']
+    - source: create_code_graph
+      target: G.add_edge
+      target_inputs:
+      - source
+      - target
+    - source: create_code_graph
+      target: edge.items
+      target_inputs: []
+    - source: create_code_graph
+      target: plt.figure
+      target_inputs: []
+    - source: create_code_graph
+      target: nx.spring_layout
+      target_inputs:
+      - G
+    - source: create_code_graph
+      target: nx.draw
+      target_inputs:
+      - G
+      - pos
+    - source: create_code_graph
+      target: G.edges
+      target_inputs: []
+    - source: create_code_graph
+      target: label.append
+      target_inputs:
+      - 'f"Inputs: {'', ''.join(edge[2][''target_inputs''])}"'
+      - 'f"\nReturns: {'', ''.join(edge[2][''target_returns''])}"'
+    - source: create_code_graph
+      target: ''', ''.join'
+      target_inputs:
+      - edge[2]['target_inputs']
+      - edge[2]['target_returns']
+    - source: create_code_graph
+      target: '''\n''.join'
+      target_inputs:
+      - label
+    - source: create_code_graph
+      target: nx.draw_networkx_edge_labels
+      target_inputs:
+      - G
+      - pos
+    - source: create_code_graph
+      target: plt.savefig
+      target_inputs:
+      - output_file
+    - source: create_code_graph
+      target: plt.close
+      target_inputs: []
+    - source: save_python_data
+      target: Path
+      target_inputs:
+      - output_dir
+    - source: save_python_data
+      target: output_subdir.mkdir
+      target_inputs: []
+    - source: save_python_data
+      target: zip
+      target_inputs:
+      - file_names
+      - contents
+    - source: save_python_data
+      target: write_file
+      target_inputs:
+      - content
+      - output_subdir / file_name
+      target_returns: []
+    - source: save_python_data
+      target: create_code_graph
+      target_inputs:
+      - file_details
+      - base_name
+      - output_subdir
+      target_returns: []
+    - source: save_python_data
+      target: logging.info
+      target_inputs:
+      - 'f''Error creating graph for {base_name}: {e}'''
+  control_flow_structure:
+  - 'def convert_json_to_markdown(directory: str)':
+    - '''\n    Convert JSON files within a given directory to Markdown format.\n    Args:\n        directory
+      (str): The directory where the JSON files are located.\n    Returns:\n        None\n    '''
+    - 'def escape_markdown(text: str)':
+      - '''Escape Markdown special characters in the provided text.'''
+      - markdown_special_chars = '\\`*_{}[]()#+-.!'
+      - for char in markdown_special_chars:
+        - text = text.replace(char, f'\\{char}')
+      - return:
+        - text
+    - for json_file in Path(directory).rglob('*.json'):
+      - dataset = read_file(json_file)
+      - if not dataset:
+        - continue
+      - markdown_content = '# Data Report\n\n'
+      - headers = dataset[0].keys()
+      - markdown_content += '| ' + ' | '.join(headers) + ' |\n'
+      - markdown_content += '| ' + ' | '.join(['---'] * len(headers)) + ' |\n'
+      - for entry in dataset:
+        - row = '| ' + ' | '.join((escape_markdown(str(entry[key])) for key in headers))
+          + ' |\n'
+        - markdown_content += row
+      - markdown_file_path = json_file.with_suffix('.md')
+      - try:
+        - with open(markdown_file_path, 'w', encoding='utf-8') as file:
+          - file.write(markdown_content)
+        except:
+        - 'except Exception as :':
+          - 'logging.error(f''Failed to save Markdown file {markdown_file_path}: {e}'')'
+  - '"\nUtility functions for reading the input and saving the output of the py2dataset
+    script.\nRequirements:\n[req01] The `read_file` function shall:\n        a. Accept
+    a file path as an argument.\n        b. Read and return the contents of a JSON
+    or YAML file as a dictionary.\n[req02] The `write_file` function shall:\n        a.
+    Accept a dictionary and a file path as arguments.\n        b. Write the dictionary
+    to a file in either JSON or YAML format.\n[req03] The `convert_json_to_html` function
+    shall:\n        a. Convert JSON files within a given directory to HTML format.\n        b.
+    Save each converted file with a .html extension.\n        c. Preserve spacing
+    and tabs for the ''input'' field.\n[req04] The `combine_json_files` function shall:\n        a.
+    Accept a directory path as an argument.\n        b. Merge all JSON files in the
+    directory.\n        c. Remove duplicates from the combined JSON files.\n        d.
+    Write the combined data to ''instruct.json'' files.\n        e. Convert the merged
+    JSON files to HTML format.\n        f. Return the ''instruct_list'' datasets.\n[req05]
+    The `create_code_graph` function shall:\n        a. Accept details of a Python
+    file, a base name, and an output directory as arguments.\n        b. Generate
+    code graphs based on the provided file details.\n        c. Save the graphs as
+    PNG images in the specified output directory.\n[req06] The `save_python_data`
+    function shall:\n        a. Accept details of a Python file, a base name, and
+    an output directory as arguments.\n        b. Save the details of the Python file
+    as a YAML file.\n        c. Save the instruction data as JSON files.\n        d.
+    Generate and save code graphs.\n"'
+  - 'def combine_json_files(directory: str, html: bool)':
+    - '"\n    Combine all JSON files in the output directory into ''instruct.json'',
+      and\n    then remove duplicates.\n    Args:\n        directory (str): The directory
+      where the output files are located.\n    Returns:\n        A dictionary containing
+      the ''instruct_list'' datasets.\n    "'
+    - logging.info(f'Combining JSON files in {directory}')
+    - 'def remove_duplicate_dataset_entries(dataset: List[Dict], key1: str, key2: str)':
+      - '''\n        Remove duplicate entries from the provided dataset based on the
+        provided keys.\n        Args:\n            dataset (List[Dict]): The dataset
+        to remove duplicates from.\n            key1 (str): The first key to check
+        for duplicates.\n            key2 (str): The second key to check for duplicates.\n        Returns:\n            A
+        dataset without duplicate entries.\n        '''
+      - seen = set()
+      - result = []
+      - for item in dataset:
+        - if (item[key1], item[key2]) not in seen:
+          - seen.add((item[key1], item[key2]))
+          - result.append(item)
+      - return:
+        - result
+    - instruct_data = []
+    - for file_name in ['instruct.json']:
+      - file_path = Path(directory) / file_name
+      - combined_data = []
+      - for json_file in Path(directory).rglob(f'*.{file_name}'):
+        - try:
+          - json_file_data = read_file(json_file)
+          - combined_data.extend(json_file_data)
+          - combined_data = remove_duplicate_dataset_entries(combined_data, 'instruction',
+            'output')
+          - instruct_data = combined_data.copy()
+          - purpose_data = [item for item in combined_data if item['instruction'].startswith('1)
+            Describe the Purpose')]
+          - code_output = []
+          - for item in purpose_data:
+            - instruction = 'Define a Python code file that is described as follows:\n'
+              + item['output']
+            - 'code_output.append({''instruction'': instruction, ''output'': item[''input'']})'
+          - write_file(code_output, Path(directory) / 'training.json')
+          except:
+          - 'except Exception as :':
+            - 'logging.info(f''Error processing: {json_file}: {e}'')'
+      - write_file(combined_data, file_path)
+    - if html:
+      - logging.info('Converting JSON files to HTML')
+      - convert_json_to_html(directory)
+    - return:
+      - '{''instruct_list'': instruct_data}'
+  - '"\nUtility functions for reading the input and saving the output of the py2dataset
+    script.\nRequirements:\n[req01] The `read_file` function shall:\n        a. Accept
+    a file path as an argument.\n        b. Read and return the contents of a JSON
+    or YAML file as a dictionary.\n[req02] The `write_file` function shall:\n        a.
+    Accept a dictionary and a file path as arguments.\n        b. Write the dictionary
+    to a file in either JSON or YAML format.\n[req03] The `convert_json_to_html` function
+    shall:\n        a. Convert JSON files within a given directory to HTML format.\n        b.
+    Save each converted file with a .html extension.\n        c. Preserve spacing
+    and tabs for the ''input'' field.\n[req04] The `combine_json_files` function shall:\n        a.
+    Accept a directory path as an argument.\n        b. Merge all JSON files in the
+    directory.\n        c. Remove duplicates from the combined JSON files.\n        d.
+    Write the combined data to ''instruct.json'' files.\n        e. Convert the merged
+    JSON files to HTML format.\n        f. Return the ''instruct_list'' datasets.\n[req05]
+    The `create_code_graph` function shall:\n        a. Accept details of a Python
+    file, a base name, and an output directory as arguments.\n        b. Generate
+    code graphs based on the provided file details.\n        c. Save the graphs as
+    PNG images in the specified output directory.\n[req06] The `save_python_data`
+    function shall:\n        a. Accept details of a Python file, a base name, and
+    an output directory as arguments.\n        b. Save the details of the Python file
+    as a YAML file.\n        c. Save the instruction data as JSON files.\n        d.
+    Generate and save code graphs.\n"'
+  - 'def save_python_data(file_details: dict, instruct_list: list, base_name: str, relative_path: Path, output_dir: str)':
+    - '''\n    Save Python file details as a YAML file, the instruction data as a
+      JSON file, and code graphs.\n    Args:\n        file_details (dict): The details
+      extracted from the Python file.\n        instruct_list (list): The instruction
+      data extracted from the Python file.\n        relative_path (Path): The relative
+      path to the Python file.\n        output_dir (str): The directory where the
+      output files will be saved.\n    Returns:\n        None\n    '''
+    - output_subdir = Path(output_dir) / relative_path.parent
+    - output_subdir.mkdir(parents=True, exist_ok=True)
+    - file_names = [f'{base_name}.instruct.json', f'{base_name}.details.yaml']
+    - contents = [instruct_list, file_details]
+    - for (file_name, content) in zip(file_names, contents):
+      - write_file(content, output_subdir / file_name)
+    - try:
+      - create_code_graph(file_details, base_name, output_subdir)
+      except:
+      - 'except Exception as :':
+        - 'logging.info(f''Error creating graph for {base_name}: {e}'')'
+  - '"\nUtility functions for reading the input and saving the output of the py2dataset
+    script.\nRequirements:\n[req01] The `read_file` function shall:\n        a. Accept
+    a file path as an argument.\n        b. Read and return the contents of a JSON
+    or YAML file as a dictionary.\n[req02] The `write_file` function shall:\n        a.
+    Accept a dictionary and a file path as arguments.\n        b. Write the dictionary
+    to a file in either JSON or YAML format.\n[req03] The `convert_json_to_html` function
+    shall:\n        a. Convert JSON files within a given directory to HTML format.\n        b.
+    Save each converted file with a .html extension.\n        c. Preserve spacing
+    and tabs for the ''input'' field.\n[req04] The `combine_json_files` function shall:\n        a.
+    Accept a directory path as an argument.\n        b. Merge all JSON files in the
+    directory.\n        c. Remove duplicates from the combined JSON files.\n        d.
+    Write the combined data to ''instruct.json'' files.\n        e. Convert the merged
+    JSON files to HTML format.\n        f. Return the ''instruct_list'' datasets.\n[req05]
+    The `create_code_graph` function shall:\n        a. Accept details of a Python
+    file, a base name, and an output directory as arguments.\n        b. Generate
+    code graphs based on the provided file details.\n        c. Save the graphs as
+    PNG images in the specified output directory.\n[req06] The `save_python_data`
+    function shall:\n        a. Accept details of a Python file, a base name, and
+    an output directory as arguments.\n        b. Save the details of the Python file
+    as a YAML file.\n        c. Save the instruction data as JSON files.\n        d.
+    Generate and save code graphs.\n"'
+  - import json
+  - import logging
+  - from html import escape
+  - from pathlib import Path
+  - from typing import Dict, List
+  - import matplotlib.pyplot as plt
+  - import networkx as nx
+  - import yaml
+  - 'def read_file(file_path: Path)':
+    - '''\n    Reads a JSON or YAML file and returns its contents as a dictionary.\n    Args:\n        file_path
+      (Path): The path to the file.\n    Returns:\n        The contents of the file
+      as a dictionary.\n    '''
+    - file_type = file_path.suffix[1:]
+    - with file_path.open() as f:
+      - if file_type == 'json':
+        - return:
+          - json.load(f)
+      - if file_type == 'yaml':
+        - return:
+          - yaml.load(f, Loader=yaml.SafeLoader)
+      - return:
+        - '{}'
+  - 'def write_file(data: Dict, file_path: Path)':
+    - '''\n    Writes a dictionary to a JSON or YAML file.\n    Args:\n        data
+      (Dict): The data to write to the file.\n        file_path (Path): The path to
+      the file.\n    Returns:\n        None\n    '''
+    - file_type = file_path.suffix[1:]
+    - with file_path.open('w') as f:
+      - if file_type == 'json':
+        - json.dump(data, f, indent=4)
+        elif file_type == 'yaml':
+        - 'yaml.SafeDumper.ignore_aliases = lambda *args: True'
+        - yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)
+  - 'def convert_json_to_html(directory: str)':
+    - '''\n    Convert JSON files within a given directory to HTML format.\n    Args:\n        directory
+      (str): The directory where the JSON files are located.\n    Returns:\n        None\n    '''
+    - 'def preserve_spacing(text: str, tab_width: int)':
+      - '''Preserve spaces and tabs in the provided text.'''
+      - return:
+        - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    - for json_file in Path(directory).rglob('*.json'):
+      - try:
+        - dataset = read_file(json_file)
+        - if not dataset:
+          - continue
+        except:
+        - 'except Exception as :':
+          - continue
+      - 'html_content = ''\n        <html>\n        <head>\n            <style>\n                table
+        {border-collapse: collapse; width: 100%; table-layout: fixed;}\n                th,
+        td {\n                    border: 1px solid black;\n                    padding:
+        8px;\n                    text-align: left;\n                    white-space:
+        pre-line;\n                    vertical-align: top;\n                    word-wrap:
+        break-word;\n                }\n            </style>\n        </head>\n        <body>\n            <table>\n                <thead>\n                    <tr>\n        '''
+      - column_count = len(dataset[0].keys())
+      - column_width = 100 / column_count
+      - for key in dataset[0].keys():
+        - 'html_content += f"<th style=''width: {column_width}%;''>{key}</th>"'
+      - html_content += '\n                    </tr>\n                </thead>\n                <tbody>\n        '
+      - html_rows = []
+      - for entry in dataset:
+        - row_parts = ['<tr>']
+        - for key in entry:
+          - value = escape(str(entry[key]))
+          - value = preserve_spacing(value)
+          - value = value.replace('\n', '<br/>')
+          - row_parts.append(f'<td>{value}</td>')
+        - row_parts.append('</tr>')
+        - html_rows.append(''.join(row_parts))
+      - html_content += ''.join(html_rows)
+      - html_content += '\n                </tbody>\n            </table>\n        </body>\n        </html>\n        '
+      - html_file_path = json_file.with_suffix('.html')
+      - try:
+        - with open(html_file_path, 'w', encoding='utf-8') as file:
+          - file.write(html_content)
+        except:
+        - 'except Exception as :':
+          - 'logging.info(f''Failed saving: {html_file_path}'')'
+  - 'def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path)':
+    - '''\n    Generate graphs from the file_details and save them as PNG images.\n    Args:\n        file_details
+      (dict): The details extracted from the Python file.\n        base_name (str):
+      The base name of the output files.\n        output_subdir (Path): The subdirectory
+      where the output files will be saved.\n    Returns:\n        None\n    '''
+    - graph_type = 'entire_code_graph'
+    - output_file = output_subdir / f'{base_name}.{graph_type}.png'
+    - G = nx.DiGraph()
+    - G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])
+    - for edge in file_details['file_info'][graph_type]['edges']:
+      - source, target = (edge['source'], edge['target'])
+      - if source in G.nodes and target in G.nodes:
+        - 'G.add_edge(source, target, **{k: v for k, v in edge.items() if k in [''target_inputs'',
+          ''target_returns'']})'
+    - plt.figure(figsize=(20, 20))
+    - pos = nx.spring_layout(G)
+    - nx.draw(G, pos, with_labels=True, font_weight='bold', font_size=8, node_shape='s',
+      node_size=500, width=1, arrowsize=12)
+    - edge_labels = {}
+    - for edge in G.edges(data=True):
+      - label = []
+      - if 'target_inputs' in edge[2] and edge[2]['target_inputs']:
+        - 'label.append(f"Inputs: {'', ''.join(edge[2][''target_inputs''])}")'
+      - if 'target_returns' in edge[2] and edge[2]['target_returns']:
+        - 'label.append(f"\nReturns: {'', ''.join(edge[2][''target_returns''])}")'
+      - edge_labels[edge[0], edge[1]] = '\n'.join(label)
+    - nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
+    - plt.savefig(output_file)
+    - plt.close()
+  plantUML: "@startuml\n  class [\"'\\\\n    Convert JSON files within a given directory\
+    \ to Markdown format.\\\\n    Args:\\\\n        directory (str): The directory\
+    \ where the JSON files are located.\\\\n    Returns:\\\\n        None\\\\n   \
+    \ '\", {'def escape_markdown(text: str)': [\"'Escape Markdown special characters\
+    \ in the provided text.'\", \"markdown_special_chars = '\\\\\\\\`*_{}[]()#+-.!'\"\
+    , {'for char in markdown_special_chars': [\"text = text.replace(char, f'\\\\\\\
+    \\{char}')\"]}, {'return': ['text']}]}, {\"for json_file in Path(directory).rglob('*.json')\"\
+    : ['dataset = read_file(json_file)', {'if not dataset': ['continue']}, \"markdown_content\
+    \ = '# Data Report\\\\n\\\\n'\", 'headers = dataset[0].keys()', \"markdown_content\
+    \ += '| ' + ' | '.join(headers) + ' |\\\\n'\", \"markdown_content += '| ' + '\
+    \ | '.join(['---'] * len(headers)) + ' |\\\\n'\", {'for entry in dataset': [\"\
+    row = '| ' + ' | '.join((escape_markdown(str(entry[key])) for key in headers))\
+    \ + ' |\\\\n'\", 'markdown_content += row']}, \"markdown_file_path = json_file.with_suffix('.md')\"\
+    , {'try': [{\"with open(markdown_file_path, 'w', encoding='utf-8') as file\":\
+    \ ['file.write(markdown_content)']}], 'except': [{'except Exception as :': [\"\
+    logging.error(f'Failed to save Markdown file {markdown_file_path}: {e}')\"]}]}]}]\
+    \ {\n    :'\\n    Convert JSON files within a given directory to Markdown format.\\\
+    n    Args:\\n        directory (str): The directory where the JSON files are located.\\\
+    n    Returns:\\n        None\\n    ';\n    class [\"'Escape Markdown special characters\
+    \ in the provided text.'\", \"markdown_special_chars = '\\\\\\\\`*_{}[]()#+-.!'\"\
+    , {'for char in markdown_special_chars': [\"text = text.replace(char, f'\\\\\\\
+    \\{char}')\"]}, {'return': ['text']}] {\n      :'Escape Markdown special characters\
+    \ in the provided text.';\n      :markdown_special_chars = '\\\\`*_{}[]()#+-.!';\n\
+    \      while ([\"text = text.replace(char, f'\\\\\\\\{char}')\"]) {\n        :text\
+    \ = text.replace(char, f'\\\\{char}');\n      }\n      :return;\n      :text;\n\
+    \    }\n    while (['dataset = read_file(json_file)', {'if not dataset': ['continue']},\
+    \ \"markdown_content = '# Data Report\\\\n\\\\n'\", 'headers = dataset[0].keys()',\
+    \ \"markdown_content += '| ' + ' | '.join(headers) + ' |\\\\n'\", \"markdown_content\
+    \ += '| ' + ' | '.join(['---'] * len(headers)) + ' |\\\\n'\", {'for entry in dataset':\
+    \ [\"row = '| ' + ' | '.join((escape_markdown(str(entry[key])) for key in headers))\
+    \ + ' |\\\\n'\", 'markdown_content += row']}, \"markdown_file_path = json_file.with_suffix('.md')\"\
+    , {'try': [{\"with open(markdown_file_path, 'w', encoding='utf-8') as file\":\
+    \ ['file.write(markdown_content)']}], 'except': [{'except Exception as :': [\"\
+    logging.error(f'Failed to save Markdown file {markdown_file_path}: {e}')\"]}]}])\
+    \ {\n      :dataset = read_file(json_file);\n      if (['continue']) {\n     \
+    \   :continue;\n      }\n      :markdown_content = '# Data Report\\n\\n';\n  \
+    \    :headers = dataset[0].keys();\n      :markdown_content += '| ' + ' | '.join(headers)\
+    \ + ' |\\n';\n      :markdown_content += '| ' + ' | '.join(['---'] * len(headers))\
+    \ + ' |\\n';\n      while ([\"row = '| ' + ' | '.join((escape_markdown(str(entry[key]))\
+    \ for key in headers)) + ' |\\\\n'\", 'markdown_content += row']) {\n        :row\
+    \ = '| ' + ' | '.join((escape_markdown(str(entry[key])) for key in headers)) +\
+    \ ' |\\n';\n        :markdown_content += row;\n      }\n      :markdown_file_path\
+    \ = json_file.with_suffix('.md');\n      :try;\n      :with open(markdown_file_path,\
+    \ 'w', encoding='utf-8') as file;\n      :file.write(markdown_content);\n    }\n\
+    \  }\n  :\"\\nUtility functions for reading the input and saving the output of\
+    \ the py2dataset script.\\nRequirements:\\n[req01] The `read_file` function shall:\\\
+    n        a. Accept a file path as an argument.\\n        b. Read and return the\
+    \ contents of a JSON or YAML file as a dictionary.\\n[req02] The `write_file`\
+    \ function shall:\\n        a. Accept a dictionary and a file path as arguments.\\\
+    n        b. Write the dictionary to a file in either JSON or YAML format.\\n[req03]\
+    \ The `convert_json_to_html` function shall:\\n        a. Convert JSON files within\
+    \ a given directory to HTML format.\\n        b. Save each converted file with\
+    \ a .html extension.\\n        c. Preserve spacing and tabs for the 'input' field.\\\
+    n[req04] The `combine_json_files` function shall:\\n        a. Accept a directory\
+    \ path as an argument.\\n        b. Merge all JSON files in the directory.\\n\
+    \        c. Remove duplicates from the combined JSON files.\\n        d. Write\
+    \ the combined data to 'instruct.json' files.\\n        e. Convert the merged\
+    \ JSON files to HTML format.\\n        f. Return the 'instruct_list' datasets.\\\
+    n[req05] The `create_code_graph` function shall:\\n        a. Accept details of\
+    \ a Python file, a base name, and an output directory as arguments.\\n       \
+    \ b. Generate code graphs based on the provided file details.\\n        c. Save\
+    \ the graphs as PNG images in the specified output directory.\\n[req06] The `save_python_data`\
+    \ function shall:\\n        a. Accept details of a Python file, a base name, and\
+    \ an output directory as arguments.\\n        b. Save the details of the Python\
+    \ file as a YAML file.\\n        c. Save the instruction data as JSON files.\\\
+    n        d. Generate and save code graphs.\\n\";\n  class ['\"\\\\n    Combine\
+    \ all JSON files in the output directory into \\'instruct.json\\', and\\\\n  \
+    \  then remove duplicates.\\\\n    Args:\\\\n        directory (str): The directory\
+    \ where the output files are located.\\\\n    Returns:\\\\n        A dictionary\
+    \ containing the \\'instruct_list\\' datasets.\\\\n    \"', \"logging.info(f'Combining\
+    \ JSON files in {directory}')\", {'def remove_duplicate_dataset_entries(dataset:\
+    \ List[Dict], key1: str, key2: str)': [\"'\\\\n        Remove duplicate entries\
+    \ from the provided dataset based on the provided keys.\\\\n        Args:\\\\\
+    n            dataset (List[Dict]): The dataset to remove duplicates from.\\\\\
+    n            key1 (str): The first key to check for duplicates.\\\\n         \
+    \   key2 (str): The second key to check for duplicates.\\\\n        Returns:\\\
+    \\n            A dataset without duplicate entries.\\\\n        '\", 'seen = set()',\
+    \ 'result = []', {'for item in dataset': [{'if (item[key1], item[key2]) not in\
+    \ seen': ['seen.add((item[key1], item[key2]))', 'result.append(item)']}]}, {'return':\
+    \ ['result']}]}, 'instruct_data = []', {\"for file_name in ['instruct.json']\"\
+    : ['file_path = Path(directory) / file_name', 'combined_data = []', {\"for json_file\
+    \ in Path(directory).rglob(f'*.{file_name}')\": [{'try': ['json_file_data = read_file(json_file)',\
+    \ 'combined_data.extend(json_file_data)', \"combined_data = remove_duplicate_dataset_entries(combined_data,\
+    \ 'instruction', 'output')\", 'instruct_data = combined_data.copy()', \"purpose_data\
+    \ = [item for item in combined_data if item['instruction'].startswith('1) Describe\
+    \ the Purpose')]\", 'code_output = []', {'for item in purpose_data': [\"instruction\
+    \ = 'Define a Python code file that is described as follows:\\\\n' + item['output']\"\
+    , \"code_output.append({'instruction': instruction, 'output': item['input']})\"\
+    ]}, \"write_file(code_output, Path(directory) / 'training.json')\"], 'except':\
+    \ [{'except Exception as :': [\"logging.info(f'Error processing: {json_file}:\
+    \ {e}')\"]}]}]}, 'write_file(combined_data, file_path)']}, {'if html': [\"logging.info('Converting\
+    \ JSON files to HTML')\", 'convert_json_to_html(directory)']}, {'return': [\"\
+    {'instruct_list': instruct_data}\"]}] {\n    :\"\\n    Combine all JSON files\
+    \ in the output directory into 'instruct.json', and\\n    then remove duplicates.\\\
+    n    Args:\\n        directory (str): The directory where the output files are\
+    \ located.\\n    Returns:\\n        A dictionary containing the 'instruct_list'\
+    \ datasets.\\n    \";\n    :logging.info(f'Combining JSON files in {directory}');\n\
+    \    class [\"'\\\\n        Remove duplicate entries from the provided dataset\
+    \ based on the provided keys.\\\\n        Args:\\\\n            dataset (List[Dict]):\
+    \ The dataset to remove duplicates from.\\\\n            key1 (str): The first\
+    \ key to check for duplicates.\\\\n            key2 (str): The second key to check\
+    \ for duplicates.\\\\n        Returns:\\\\n            A dataset without duplicate\
+    \ entries.\\\\n        '\", 'seen = set()', 'result = []', {'for item in dataset':\
+    \ [{'if (item[key1], item[key2]) not in seen': ['seen.add((item[key1], item[key2]))',\
+    \ 'result.append(item)']}]}, {'return': ['result']}] {\n      :'\\n        Remove\
+    \ duplicate entries from the provided dataset based on the provided keys.\\n \
+    \       Args:\\n            dataset (List[Dict]): The dataset to remove duplicates\
+    \ from.\\n            key1 (str): The first key to check for duplicates.\\n  \
+    \          key2 (str): The second key to check for duplicates.\\n        Returns:\\\
+    n            A dataset without duplicate entries.\\n        ';\n      :seen =\
+    \ set();\n      :result = [];\n      while ([{'if (item[key1], item[key2]) not\
+    \ in seen': ['seen.add((item[key1], item[key2]))', 'result.append(item)']}]) {\n\
+    \        if (['seen.add((item[key1], item[key2]))', 'result.append(item)']) {\n\
+    \          :seen.add((item[key1], item[key2]));\n          :result.append(item);\n\
+    \        }\n      }\n      :return;\n      :result;\n    }\n    :instruct_data\
+    \ = [];\n    while (['file_path = Path(directory) / file_name', 'combined_data\
+    \ = []', {\"for json_file in Path(directory).rglob(f'*.{file_name}')\": [{'try':\
+    \ ['json_file_data = read_file(json_file)', 'combined_data.extend(json_file_data)',\
+    \ \"combined_data = remove_duplicate_dataset_entries(combined_data, 'instruction',\
+    \ 'output')\", 'instruct_data = combined_data.copy()', \"purpose_data = [item\
+    \ for item in combined_data if item['instruction'].startswith('1) Describe the\
+    \ Purpose')]\", 'code_output = []', {'for item in purpose_data': [\"instruction\
+    \ = 'Define a Python code file that is described as follows:\\\\n' + item['output']\"\
+    , \"code_output.append({'instruction': instruction, 'output': item['input']})\"\
+    ]}, \"write_file(code_output, Path(directory) / 'training.json')\"], 'except':\
+    \ [{'except Exception as :': [\"logging.info(f'Error processing: {json_file}:\
+    \ {e}')\"]}]}]}, 'write_file(combined_data, file_path)']) {\n      :file_path\
+    \ = Path(directory) / file_name;\n      :combined_data = [];\n      while ([{'try':\
+    \ ['json_file_data = read_file(json_file)', 'combined_data.extend(json_file_data)',\
+    \ \"combined_data = remove_duplicate_dataset_entries(combined_data, 'instruction',\
+    \ 'output')\", 'instruct_data = combined_data.copy()', \"purpose_data = [item\
+    \ for item in combined_data if item['instruction'].startswith('1) Describe the\
+    \ Purpose')]\", 'code_output = []', {'for item in purpose_data': [\"instruction\
+    \ = 'Define a Python code file that is described as follows:\\\\n' + item['output']\"\
+    , \"code_output.append({'instruction': instruction, 'output': item['input']})\"\
+    ]}, \"write_file(code_output, Path(directory) / 'training.json')\"], 'except':\
+    \ [{'except Exception as :': [\"logging.info(f'Error processing: {json_file}:\
+    \ {e}')\"]}]}]) {\n        :try;\n        :json_file_data = read_file(json_file);\n\
+    \        :combined_data.extend(json_file_data);\n        :combined_data = remove_duplicate_dataset_entries(combined_data,\
+    \ 'instruction', 'output');\n        :instruct_data = combined_data.copy();\n\
+    \        :purpose_data = [item for item in combined_data if item['instruction'].startswith('1)\
+    \ Describe the Purpose')];\n        :code_output = [];\n        while ([\"instruction\
+    \ = 'Define a Python code file that is described as follows:\\\\n' + item['output']\"\
+    , \"code_output.append({'instruction': instruction, 'output': item['input']})\"\
+    ]) {\n          :instruction = 'Define a Python code file that is described as\
+    \ follows:\\n' + item['output'];\n          :code_output.append({'instruction':\
+    \ instruction, 'output': item['input']});\n        }\n        :write_file(code_output,\
+    \ Path(directory) / 'training.json');\n      }\n      :write_file(combined_data,\
+    \ file_path);\n    }\n    if ([\"logging.info('Converting JSON files to HTML')\"\
+    , 'convert_json_to_html(directory)']) {\n      :logging.info('Converting JSON\
+    \ files to HTML');\n      :convert_json_to_html(directory);\n    }\n    :return;\n\
+    \    :{'instruct_list': instruct_data};\n  }\n  :\"\\nUtility functions for reading\
+    \ the input and saving the output of the py2dataset script.\\nRequirements:\\\
+    n[req01] The `read_file` function shall:\\n        a. Accept a file path as an\
+    \ argument.\\n        b. Read and return the contents of a JSON or YAML file as\
+    \ a dictionary.\\n[req02] The `write_file` function shall:\\n        a. Accept\
+    \ a dictionary and a file path as arguments.\\n        b. Write the dictionary\
+    \ to a file in either JSON or YAML format.\\n[req03] The `convert_json_to_html`\
+    \ function shall:\\n        a. Convert JSON files within a given directory to\
+    \ HTML format.\\n        b. Save each converted file with a .html extension.\\\
+    n        c. Preserve spacing and tabs for the 'input' field.\\n[req04] The `combine_json_files`\
+    \ function shall:\\n        a. Accept a directory path as an argument.\\n    \
+    \    b. Merge all JSON files in the directory.\\n        c. Remove duplicates\
+    \ from the combined JSON files.\\n        d. Write the combined data to 'instruct.json'\
+    \ files.\\n        e. Convert the merged JSON files to HTML format.\\n       \
+    \ f. Return the 'instruct_list' datasets.\\n[req05] The `create_code_graph` function\
+    \ shall:\\n        a. Accept details of a Python file, a base name, and an output\
+    \ directory as arguments.\\n        b. Generate code graphs based on the provided\
+    \ file details.\\n        c. Save the graphs as PNG images in the specified output\
+    \ directory.\\n[req06] The `save_python_data` function shall:\\n        a. Accept\
+    \ details of a Python file, a base name, and an output directory as arguments.\\\
+    n        b. Save the details of the Python file as a YAML file.\\n        c. Save\
+    \ the instruction data as JSON files.\\n        d. Generate and save code graphs.\\\
+    n\";\n  class [\"'\\\\n    Save Python file details as a YAML file, the instruction\
+    \ data as a JSON file, and code graphs.\\\\n    Args:\\\\n        file_details\
+    \ (dict): The details extracted from the Python file.\\\\n        instruct_list\
+    \ (list): The instruction data extracted from the Python file.\\\\n        relative_path\
+    \ (Path): The relative path to the Python file.\\\\n        output_dir (str):\
+    \ The directory where the output files will be saved.\\\\n    Returns:\\\\n  \
+    \      None\\\\n    '\", 'output_subdir = Path(output_dir) / relative_path.parent',\
+    \ 'output_subdir.mkdir(parents=True, exist_ok=True)', \"file_names = [f'{base_name}.instruct.json',\
+    \ f'{base_name}.details.yaml']\", 'contents = [instruct_list, file_details]',\
+    \ {'for (file_name, content) in zip(file_names, contents)': ['write_file(content,\
+    \ output_subdir / file_name)']}, {'try': ['create_code_graph(file_details, base_name,\
+    \ output_subdir)'], 'except': [{'except Exception as :': [\"logging.info(f'Error\
+    \ creating graph for {base_name}: {e}')\"]}]}] {\n    :'\\n    Save Python file\
+    \ details as a YAML file, the instruction data as a JSON file, and code graphs.\\\
+    n    Args:\\n        file_details (dict): The details extracted from the Python\
+    \ file.\\n        instruct_list (list): The instruction data extracted from the\
+    \ Python file.\\n        relative_path (Path): The relative path to the Python\
+    \ file.\\n        output_dir (str): The directory where the output files will\
+    \ be saved.\\n    Returns:\\n        None\\n    ';\n    :output_subdir = Path(output_dir)\
+    \ / relative_path.parent;\n    :output_subdir.mkdir(parents=True, exist_ok=True);\n\
+    \    :file_names = [f'{base_name}.instruct.json', f'{base_name}.details.yaml'];\n\
+    \    :contents = [instruct_list, file_details];\n    while (['write_file(content,\
+    \ output_subdir / file_name)']) {\n      :write_file(content, output_subdir /\
+    \ file_name);\n    }\n    :try;\n    :create_code_graph(file_details, base_name,\
+    \ output_subdir);\n  }\n  :\"\\nUtility functions for reading the input and saving\
+    \ the output of the py2dataset script.\\nRequirements:\\n[req01] The `read_file`\
+    \ function shall:\\n        a. Accept a file path as an argument.\\n        b.\
+    \ Read and return the contents of a JSON or YAML file as a dictionary.\\n[req02]\
+    \ The `write_file` function shall:\\n        a. Accept a dictionary and a file\
+    \ path as arguments.\\n        b. Write the dictionary to a file in either JSON\
+    \ or YAML format.\\n[req03] The `convert_json_to_html` function shall:\\n    \
+    \    a. Convert JSON files within a given directory to HTML format.\\n       \
+    \ b. Save each converted file with a .html extension.\\n        c. Preserve spacing\
+    \ and tabs for the 'input' field.\\n[req04] The `combine_json_files` function\
+    \ shall:\\n        a. Accept a directory path as an argument.\\n        b. Merge\
+    \ all JSON files in the directory.\\n        c. Remove duplicates from the combined\
+    \ JSON files.\\n        d. Write the combined data to 'instruct.json' files.\\\
+    n        e. Convert the merged JSON files to HTML format.\\n        f. Return\
+    \ the 'instruct_list' datasets.\\n[req05] The `create_code_graph` function shall:\\\
+    n        a. Accept details of a Python file, a base name, and an output directory\
+    \ as arguments.\\n        b. Generate code graphs based on the provided file details.\\\
+    n        c. Save the graphs as PNG images in the specified output directory.\\\
+    n[req06] The `save_python_data` function shall:\\n        a. Accept details of\
+    \ a Python file, a base name, and an output directory as arguments.\\n       \
+    \ b. Save the details of the Python file as a YAML file.\\n        c. Save the\
+    \ instruction data as JSON files.\\n        d. Generate and save code graphs.\\\
+    n\";\n  :import json;\n  :import logging;\n  :from html import escape;\n  :from\
+    \ pathlib import Path;\n  :from typing import Dict, List;\n  :import matplotlib.pyplot\
+    \ as plt;\n  :import networkx as nx;\n  :import yaml;\n  class [\"'\\\\n    Reads\
+    \ a JSON or YAML file and returns its contents as a dictionary.\\\\n    Args:\\\
+    \\n        file_path (Path): The path to the file.\\\\n    Returns:\\\\n     \
+    \   The contents of the file as a dictionary.\\\\n    '\", 'file_type = file_path.suffix[1:]',\
+    \ {'with file_path.open() as f': [{\"if file_type == 'json'\": [{'return': ['json.load(f)']}]},\
+    \ {\"if file_type == 'yaml'\": [{'return': ['yaml.load(f, Loader=yaml.SafeLoader)']}]},\
+    \ {'return': ['{}']}]}] {\n    :'\\n    Reads a JSON or YAML file and returns\
+    \ its contents as a dictionary.\\n    Args:\\n        file_path (Path): The path\
+    \ to the file.\\n    Returns:\\n        The contents of the file as a dictionary.\\\
+    n    ';\n    :file_type = file_path.suffix[1:];\n    :with file_path.open() as\
+    \ f;\n    if ([{'return': ['json.load(f)']}]) {\n      :return;\n      :json.load(f);\n\
+    \    }\n    if ([{'return': ['yaml.load(f, Loader=yaml.SafeLoader)']}]) {\n  \
+    \    :return;\n      :yaml.load(f, Loader=yaml.SafeLoader);\n    }\n    :return;\n\
+    \    :{};\n  }\n  class [\"'\\\\n    Writes a dictionary to a JSON or YAML file.\\\
+    \\n    Args:\\\\n        data (Dict): The data to write to the file.\\\\n    \
+    \    file_path (Path): The path to the file.\\\\n    Returns:\\\\n        None\\\
+    \\n    '\", 'file_type = file_path.suffix[1:]', {\"with file_path.open('w') as\
+    \ f\": [{\"if file_type == 'json'\": ['json.dump(data, f, indent=4)'], \"elif\
+    \ file_type == 'yaml'\": ['yaml.SafeDumper.ignore_aliases = lambda *args: True',\
+    \ 'yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)']}]}] {\n    :'\\\
+    n    Writes a dictionary to a JSON or YAML file.\\n    Args:\\n        data (Dict):\
+    \ The data to write to the file.\\n        file_path (Path): The path to the file.\\\
+    n    Returns:\\n        None\\n    ';\n    :file_type = file_path.suffix[1:];\n\
+    \    :with file_path.open('w') as f;\n    if (['json.dump(data, f, indent=4)'])\
+    \ {\n      :json.dump(data, f, indent=4);\n    }\n  }\n  class [\"'\\\\n    Convert\
+    \ JSON files within a given directory to HTML format.\\\\n    Args:\\\\n     \
+    \   directory (str): The directory where the JSON files are located.\\\\n    Returns:\\\
+    \\n        None\\\\n    '\", {'def preserve_spacing(text: str, tab_width: int)':\
+    \ [\"'Preserve spaces and tabs in the provided text.'\", {'return': [\"text.replace('\
+    \ ', '&nbsp;').replace('\\\\t', '&nbsp;' * tab_width)\"]}]}, {\"for json_file\
+    \ in Path(directory).rglob('*.json')\": [{'try': ['dataset = read_file(json_file)',\
+    \ {'if not dataset': ['continue']}], 'except': [{'except Exception as :': ['continue']}]},\
+    \ \"html_content = '\\\\n        <html>\\\\n        <head>\\\\n            <style>\\\
+    \\n                table {border-collapse: collapse; width: 100%; table-layout:\
+    \ fixed;}\\\\n                th, td {\\\\n                    border: 1px solid\
+    \ black;\\\\n                    padding: 8px;\\\\n                    text-align:\
+    \ left;\\\\n                    white-space: pre-line;\\\\n                  \
+    \  vertical-align: top;\\\\n                    word-wrap: break-word;\\\\n  \
+    \              }\\\\n            </style>\\\\n        </head>\\\\n        <body>\\\
+    \\n            <table>\\\\n                <thead>\\\\n                    <tr>\\\
+    \\n        '\", 'column_count = len(dataset[0].keys())', 'column_width = 100 /\
+    \ column_count', {'for key in dataset[0].keys()': ['html_content += f\"<th style=\\\
+    'width: {column_width}%;\\'>{key}</th>\"']}, \"html_content += '\\\\n        \
+    \            </tr>\\\\n                </thead>\\\\n                <tbody>\\\\\
+    n        '\", 'html_rows = []', {'for entry in dataset': [\"row_parts = ['<tr>']\"\
+    , {'for key in entry': ['value = escape(str(entry[key]))', 'value = preserve_spacing(value)',\
+    \ \"value = value.replace('\\\\n', '<br/>')\", \"row_parts.append(f'<td>{value}</td>')\"\
+    ]}, \"row_parts.append('</tr>')\", \"html_rows.append(''.join(row_parts))\"]},\
+    \ \"html_content += ''.join(html_rows)\", \"html_content += '\\\\n           \
+    \     </tbody>\\\\n            </table>\\\\n        </body>\\\\n        </html>\\\
+    \\n        '\", \"html_file_path = json_file.with_suffix('.html')\", {'try': [{\"\
+    with open(html_file_path, 'w', encoding='utf-8') as file\": ['file.write(html_content)']}],\
+    \ 'except': [{'except Exception as :': [\"logging.info(f'Failed saving: {html_file_path}')\"\
+    ]}]}]}] {\n    :'\\n    Convert JSON files within a given directory to HTML format.\\\
+    n    Args:\\n        directory (str): The directory where the JSON files are located.\\\
+    n    Returns:\\n        None\\n    ';\n    class [\"'Preserve spaces and tabs\
+    \ in the provided text.'\", {'return': [\"text.replace(' ', '&nbsp;').replace('\\\
+    \\t', '&nbsp;' * tab_width)\"]}] {\n      :'Preserve spaces and tabs in the provided\
+    \ text.';\n      :return;\n      :text.replace(' ', '&nbsp;').replace('\\t', '&nbsp;'\
+    \ * tab_width);\n    }\n    while ([{'try': ['dataset = read_file(json_file)',\
+    \ {'if not dataset': ['continue']}], 'except': [{'except Exception as :': ['continue']}]},\
+    \ \"html_content = '\\\\n        <html>\\\\n        <head>\\\\n            <style>\\\
+    \\n                table {border-collapse: collapse; width: 100%; table-layout:\
+    \ fixed;}\\\\n                th, td {\\\\n                    border: 1px solid\
+    \ black;\\\\n                    padding: 8px;\\\\n                    text-align:\
+    \ left;\\\\n                    white-space: pre-line;\\\\n                  \
+    \  vertical-align: top;\\\\n                    word-wrap: break-word;\\\\n  \
+    \              }\\\\n            </style>\\\\n        </head>\\\\n        <body>\\\
+    \\n            <table>\\\\n                <thead>\\\\n                    <tr>\\\
+    \\n        '\", 'column_count = len(dataset[0].keys())', 'column_width = 100 /\
+    \ column_count', {'for key in dataset[0].keys()': ['html_content += f\"<th style=\\\
+    'width: {column_width}%;\\'>{key}</th>\"']}, \"html_content += '\\\\n        \
+    \            </tr>\\\\n                </thead>\\\\n                <tbody>\\\\\
+    n        '\", 'html_rows = []', {'for entry in dataset': [\"row_parts = ['<tr>']\"\
+    , {'for key in entry': ['value = escape(str(entry[key]))', 'value = preserve_spacing(value)',\
+    \ \"value = value.replace('\\\\n', '<br/>')\", \"row_parts.append(f'<td>{value}</td>')\"\
+    ]}, \"row_parts.append('</tr>')\", \"html_rows.append(''.join(row_parts))\"]},\
+    \ \"html_content += ''.join(html_rows)\", \"html_content += '\\\\n           \
+    \     </tbody>\\\\n            </table>\\\\n        </body>\\\\n        </html>\\\
+    \\n        '\", \"html_file_path = json_file.with_suffix('.html')\", {'try': [{\"\
+    with open(html_file_path, 'w', encoding='utf-8') as file\": ['file.write(html_content)']}],\
+    \ 'except': [{'except Exception as :': [\"logging.info(f'Failed saving: {html_file_path}')\"\
+    ]}]}]) {\n      :try;\n      :dataset = read_file(json_file);\n      if (['continue'])\
+    \ {\n        :continue;\n      }\n      :html_content = '\\n        <html>\\n\
+    \        <head>\\n            <style>\\n                table {border-collapse:\
+    \ collapse; width: 100%; table-layout: fixed;}\\n                th, td {\\n \
+    \                   border: 1px solid black;\\n                    padding: 8px;\\\
+    n                    text-align: left;\\n                    white-space: pre-line;\\\
+    n                    vertical-align: top;\\n                    word-wrap: break-word;\\\
+    n                }\\n            </style>\\n        </head>\\n        <body>\\\
+    n            <table>\\n                <thead>\\n                    <tr>\\n \
+    \       ';\n      :column_count = len(dataset[0].keys());\n      :column_width\
+    \ = 100 / column_count;\n      while (['html_content += f\"<th style=\\'width:\
+    \ {column_width}%;\\'>{key}</th>\"']) {\n        :html_content += f\"<th style='width:\
+    \ {column_width}%;'>{key}</th>\";\n      }\n      :html_content += '\\n      \
+    \              </tr>\\n                </thead>\\n                <tbody>\\n \
+    \       ';\n      :html_rows = [];\n      while ([\"row_parts = ['<tr>']\", {'for\
+    \ key in entry': ['value = escape(str(entry[key]))', 'value = preserve_spacing(value)',\
+    \ \"value = value.replace('\\\\n', '<br/>')\", \"row_parts.append(f'<td>{value}</td>')\"\
+    ]}, \"row_parts.append('</tr>')\", \"html_rows.append(''.join(row_parts))\"])\
+    \ {\n        :row_parts = ['<tr>'];\n        while (['value = escape(str(entry[key]))',\
+    \ 'value = preserve_spacing(value)', \"value = value.replace('\\\\n', '<br/>')\"\
+    , \"row_parts.append(f'<td>{value}</td>')\"]) {\n          :value = escape(str(entry[key]));\n\
+    \          :value = preserve_spacing(value);\n          :value = value.replace('\\\
+    n', '<br/>');\n          :row_parts.append(f'<td>{value}</td>');\n        }\n\
+    \        :row_parts.append('</tr>');\n        :html_rows.append(''.join(row_parts));\n\
+    \      }\n      :html_content += ''.join(html_rows);\n      :html_content += '\\\
+    n                </tbody>\\n            </table>\\n        </body>\\n        </html>\\\
+    n        ';\n      :html_file_path = json_file.with_suffix('.html');\n      :try;\n\
+    \      :with open(html_file_path, 'w', encoding='utf-8') as file;\n      :file.write(html_content);\n\
+    \    }\n  }\n  class [\"'\\\\n    Generate graphs from the file_details and save\
+    \ them as PNG images.\\\\n    Args:\\\\n        file_details (dict): The details\
+    \ extracted from the Python file.\\\\n        base_name (str): The base name of\
+    \ the output files.\\\\n        output_subdir (Path): The subdirectory where the\
+    \ output files will be saved.\\\\n    Returns:\\\\n        None\\\\n    '\", \"\
+    graph_type = 'entire_code_graph'\", \"output_file = output_subdir / f'{base_name}.{graph_type}.png'\"\
+    , 'G = nx.DiGraph()', \"G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])\"\
+    , {\"for edge in file_details['file_info'][graph_type]['edges']\": [\"source,\
+    \ target = (edge['source'], edge['target'])\", {'if source in G.nodes and target\
+    \ in G.nodes': [\"G.add_edge(source, target, **{k: v for k, v in edge.items()\
+    \ if k in ['target_inputs', 'target_returns']})\"]}]}, 'plt.figure(figsize=(20,\
+    \ 20))', 'pos = nx.spring_layout(G)', \"nx.draw(G, pos, with_labels=True, font_weight='bold',\
+    \ font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12)\", 'edge_labels\
+    \ = {}', {'for edge in G.edges(data=True)': ['label = []', {\"if 'target_inputs'\
+    \ in edge[2] and edge[2]['target_inputs']\": ['label.append(f\"Inputs: {\\', \\\
+    '.join(edge[2][\\'target_inputs\\'])}\")']}, {\"if 'target_returns' in edge[2]\
+    \ and edge[2]['target_returns']\": ['label.append(f\"\\\\nReturns: {\\', \\'.join(edge[2][\\\
+    'target_returns\\'])}\")']}, \"edge_labels[edge[0], edge[1]] = '\\\\n'.join(label)\"\
+    ]}, 'nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)',\
+    \ 'plt.savefig(output_file)', 'plt.close()'] {\n    :'\\n    Generate graphs from\
+    \ the file_details and save them as PNG images.\\n    Args:\\n        file_details\
+    \ (dict): The details extracted from the Python file.\\n        base_name (str):\
+    \ The base name of the output files.\\n        output_subdir (Path): The subdirectory\
+    \ where the output files will be saved.\\n    Returns:\\n        None\\n    ';\n\
+    \    :graph_type = 'entire_code_graph';\n    :output_file = output_subdir / f'{base_name}.{graph_type}.png';\n\
+    \    :G = nx.DiGraph();\n    :G.add_nodes_from(file_details['file_info'][graph_type]['nodes']);\n\
+    \    while ([\"source, target = (edge['source'], edge['target'])\", {'if source\
+    \ in G.nodes and target in G.nodes': [\"G.add_edge(source, target, **{k: v for\
+    \ k, v in edge.items() if k in ['target_inputs', 'target_returns']})\"]}]) {\n\
+    \      :source, target = (edge['source'], edge['target']);\n      if ([\"G.add_edge(source,\
+    \ target, **{k: v for k, v in edge.items() if k in ['target_inputs', 'target_returns']})\"\
+    ]) {\n        :G.add_edge(source, target, **{k: v for k, v in edge.items() if\
+    \ k in ['target_inputs', 'target_returns']});\n      }\n    }\n    :plt.figure(figsize=(20,\
+    \ 20));\n    :pos = nx.spring_layout(G);\n    :nx.draw(G, pos, with_labels=True,\
+    \ font_weight='bold', font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12);\n\
+    \    :edge_labels = {};\n    while (['label = []', {\"if 'target_inputs' in edge[2]\
+    \ and edge[2]['target_inputs']\": ['label.append(f\"Inputs: {\\', \\'.join(edge[2][\\\
+    'target_inputs\\'])}\")']}, {\"if 'target_returns' in edge[2] and edge[2]['target_returns']\"\
+    : ['label.append(f\"\\\\nReturns: {\\', \\'.join(edge[2][\\'target_returns\\'])}\"\
+    )']}, \"edge_labels[edge[0], edge[1]] = '\\\\n'.join(label)\"]) {\n      :label\
+    \ = [];\n      if (['label.append(f\"Inputs: {\\', \\'.join(edge[2][\\'target_inputs\\\
+    '])}\")']) {\n        :label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\"\
+    );\n      }\n      if (['label.append(f\"\\\\nReturns: {\\', \\'.join(edge[2][\\\
+    'target_returns\\'])}\")']) {\n        :label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\"\
+    );\n      }\n      :edge_labels[edge[0], edge[1]] = '\\n'.join(label);\n    }\n\
+    \    :nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6);\n\
+    \    :plt.savefig(output_file);\n    :plt.close();\n  }\nend\n@enduml"
+functions:
+  read_file:
+    function_name: read_file
+    function_code: "def read_file(file_path: Path) -> Dict:\n    \"\"\"\n    Reads\
+      \ a JSON or YAML file and returns its contents as a dictionary.\n    Args:\n\
+      \        file_path (Path): The path to the file.\n    Returns:\n        The\
+      \ contents of the file as a dictionary.\n    \"\"\"\n    file_type = file_path.suffix[1:]\n\
+      \    with file_path.open() as f:\n        if file_type == 'json':\n        \
+      \    return json.load(f)\n        if file_type == 'yaml':\n            return\
+      \ yaml.load(f, Loader=yaml.SafeLoader)\n        return {}"
+    function_docstring: "\n    Reads a JSON or YAML file and returns its contents\
+      \ as a dictionary.\n    Args:\n        file_path (Path): The path to the file.\n\
+      \    Returns:\n        The contents of the file as a dictionary.\n    "
+    function_inputs:
+    - file_path
+    function_defaults: []
+    function_returns:
+    - '{}'
+    - json.load(f)
+    - yaml.load(f, Loader=yaml.SafeLoader)
+    function_calls:
+    - file_path.open
+    - json.load
+    - yaml.load
+    function_call_inputs:
+      file_path.open: []
+      json.load:
+      - f
+      yaml.load:
+      - f
+    function_variables:
+    - file_type
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  write_file:
+    function_name: write_file
+    function_code: "def write_file(data: Dict, file_path: Path) -> None:\n    \"\"\
+      \"\n    Writes a dictionary to a JSON or YAML file.\n    Args:\n        data\
+      \ (Dict): The data to write to the file.\n        file_path (Path): The path\
+      \ to the file.\n    Returns:\n        None\n    \"\"\"\n    file_type = file_path.suffix[1:]\n\
+      \    with file_path.open('w') as f:\n        if file_type == 'json':\n     \
+      \       json.dump(data, f, indent=4)\n        elif file_type == 'yaml':\n  \
+      \          yaml.SafeDumper.ignore_aliases = lambda *args: True\n           \
+      \ yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)"
+    function_docstring: "\n    Writes a dictionary to a JSON or YAML file.\n    Args:\n\
+      \        data (Dict): The data to write to the file.\n        file_path (Path):\
+      \ The path to the file.\n    Returns:\n        None\n    "
+    function_inputs:
+    - data
+    - file_path
+    function_defaults: []
+    function_returns: []
+    function_calls:
+    - file_path.open
+    - json.dump
+    - yaml.dump
+    function_call_inputs:
+      file_path.open:
+      - '''w'''
+      json.dump:
+      - data
+      - f
+      yaml.dump:
+      - data
+      - f
+    function_variables:
+    - file_type
+    function_decorators: []
+    function_annotations: []
+    function_properties:
+    - yaml.SafeDumper.ignore_aliases
+  convert_json_to_html:
+    function_name: convert_json_to_html
+    function_code: "def convert_json_to_html(directory: str) -> None:\n    \"\"\"\n\
+      \    Convert JSON files within a given directory to HTML format.\n    Args:\n\
+      \        directory (str): The directory where the JSON files are located.\n\
+      \    Returns:\n        None\n    \"\"\"\n\n    def preserve_spacing(text: str,\
+      \ tab_width: int=4) -> str:\n        \"\"\"Preserve spaces and tabs in the provided\
+      \ text.\"\"\"\n        return text.replace(' ', '&nbsp;').replace('\\t', '&nbsp;'\
+      \ * tab_width)\n    for json_file in Path(directory).rglob('*.json'):\n    \
+      \    try:\n            dataset = read_file(json_file)\n            if not dataset:\n\
+      \                continue\n        except Exception:\n            continue\n\
+      \        html_content = '\\n        <html>\\n        <head>\\n            <style>\\\
+      n                table {border-collapse: collapse; width: 100%; table-layout:\
+      \ fixed;}\\n                th, td {\\n                    border: 1px solid\
+      \ black;\\n                    padding: 8px;\\n                    text-align:\
+      \ left;\\n                    white-space: pre-line;\\n                    vertical-align:\
+      \ top;\\n                    word-wrap: break-word;\\n                }\\n \
+      \           </style>\\n        </head>\\n        <body>\\n            <table>\\\
+      n                <thead>\\n                    <tr>\\n        '\n        column_count\
+      \ = len(dataset[0].keys())\n        column_width = 100 / column_count\n    \
+      \    for key in dataset[0].keys():\n            html_content += f\"<th style='width:\
+      \ {column_width}%;'>{key}</th>\"\n        html_content += '\\n             \
+      \       </tr>\\n                </thead>\\n                <tbody>\\n      \
+      \  '\n        html_rows = []\n        for entry in dataset:\n            row_parts\
+      \ = ['<tr>']\n            for key in entry:\n                value = escape(str(entry[key]))\n\
+      \                value = preserve_spacing(value)\n                value = value.replace('\\\
+      n', '<br/>')\n                row_parts.append(f'<td>{value}</td>')\n      \
+      \      row_parts.append('</tr>')\n            html_rows.append(''.join(row_parts))\n\
+      \        html_content += ''.join(html_rows)\n        html_content += '\\n  \
+      \              </tbody>\\n            </table>\\n        </body>\\n        </html>\\\
+      n        '\n        html_file_path = json_file.with_suffix('.html')\n      \
+      \  try:\n            with open(html_file_path, 'w', encoding='utf-8') as file:\n\
+      \                file.write(html_content)\n        except Exception:\n     \
+      \       logging.info(f'Failed saving: {html_file_path}')"
+    function_docstring: "\n    Convert JSON files within a given directory to HTML\
+      \ format.\n    Args:\n        directory (str): The directory where the JSON\
+      \ files are located.\n    Returns:\n        None\n    "
+    function_inputs:
+    - directory
+    function_defaults: []
+    function_returns:
+    - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    function_calls:
+    - text.replace(' ', '&nbsp;').replace
+    - text.replace
+    - Path(directory).rglob
+    - Path
+    - read_file
+    - len
+    - dataset[0].keys
+    - escape
+    - str
+    - preserve_spacing
+    - value.replace
+    - row_parts.append
+    - html_rows.append
+    - '''''.join'
+    - json_file.with_suffix
+    - open
+    - file.write
+    - logging.info
+    function_call_inputs:
+      text.replace(' ', '&nbsp;').replace:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+      text.replace:
+      - ''' '''
+      - '''&nbsp;'''
+      Path(directory).rglob:
+      - '''*.json'''
+      Path:
+      - directory
+      read_file:
+      - json_file
+      len:
+      - dataset[0].keys()
+      dataset[0].keys: []
+      escape:
+      - str(entry[key])
+      str:
+      - entry[key]
+      preserve_spacing:
+      - value
+      value.replace:
+      - '''\n'''
+      - '''<br/>'''
+      row_parts.append:
+      - f'<td>{value}</td>'
+      - '''</tr>'''
+      html_rows.append:
+      - '''''.join(row_parts)'
+      '''''.join':
+      - row_parts
+      - html_rows
+      json_file.with_suffix:
+      - '''.html'''
+      open:
+      - html_file_path
+      - '''w'''
+      file.write:
+      - html_content
+      logging.info:
+      - 'f''Failed saving: {html_file_path}'''
+    function_variables:
+    - html_rows
+    - html_file_path
+    - dataset
+    - column_count
+    - row_parts
+    - html_content
+    - value
+    - column_width
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  preserve_spacing:
+    function_name: preserve_spacing
+    function_code: "def preserve_spacing(text: str, tab_width: int=4) -> str:\n  \
+      \  \"\"\"Preserve spaces and tabs in the provided text.\"\"\"\n    return text.replace('\
+      \ ', '&nbsp;').replace('\\t', '&nbsp;' * tab_width)"
+    function_docstring: Preserve spaces and tabs in the provided text.
+    function_inputs:
+    - text
+    - tab_width
+    function_defaults:
+    - '4'
+    function_returns:
+    - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+    function_calls:
+    - text.replace(' ', '&nbsp;').replace
+    - text.replace
+    function_call_inputs:
+      text.replace(' ', '&nbsp;').replace:
+      - '''\t'''
+      - '''&nbsp;'' * tab_width'
+      text.replace:
+      - ''' '''
+      - '''&nbsp;'''
+    function_variables: []
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  convert_json_to_markdown:
+    function_name: convert_json_to_markdown
+    function_code: "def convert_json_to_markdown(directory: str) -> None:\n    \"\"\
+      \"\n    Convert JSON files within a given directory to Markdown format.\n  \
+      \  Args:\n        directory (str): The directory where the JSON files are located.\n\
+      \    Returns:\n        None\n    \"\"\"\n\n    def escape_markdown(text: str)\
+      \ -> str:\n        \"\"\"Escape Markdown special characters in the provided\
+      \ text.\"\"\"\n        markdown_special_chars = '\\\\`*_{}[]()#+-.!'\n     \
+      \   for char in markdown_special_chars:\n            text = text.replace(char,\
+      \ f'\\\\{char}')\n        return text\n    for json_file in Path(directory).rglob('*.json'):\n\
+      \        dataset = read_file(json_file)\n        if not dataset:\n         \
+      \   continue\n        markdown_content = '# Data Report\\n\\n'\n        headers\
+      \ = dataset[0].keys()\n        markdown_content += '| ' + ' | '.join(headers)\
+      \ + ' |\\n'\n        markdown_content += '| ' + ' | '.join(['---'] * len(headers))\
+      \ + ' |\\n'\n        for entry in dataset:\n            row = '| ' + ' | '.join((escape_markdown(str(entry[key]))\
+      \ for key in headers)) + ' |\\n'\n            markdown_content += row\n    \
+      \    markdown_file_path = json_file.with_suffix('.md')\n        try:\n     \
+      \       with open(markdown_file_path, 'w', encoding='utf-8') as file:\n    \
+      \            file.write(markdown_content)\n        except Exception as e:\n\
+      \            logging.error(f'Failed to save Markdown file {markdown_file_path}:\
+      \ {e}')"
+    function_docstring: "\n    Convert JSON files within a given directory to Markdown\
+      \ format.\n    Args:\n        directory (str): The directory where the JSON\
+      \ files are located.\n    Returns:\n        None\n    "
+    function_inputs:
+    - directory
+    function_defaults: []
+    function_returns:
+    - text
+    function_calls:
+    - text.replace
+    - Path(directory).rglob
+    - Path
+    - read_file
+    - dataset[0].keys
+    - ''' | ''.join'
+    - len
+    - escape_markdown
+    - str
+    - json_file.with_suffix
+    - open
+    - file.write
+    - logging.error
+    function_call_inputs:
+      text.replace:
+      - char
+      - f'\\{char}'
+      Path(directory).rglob:
+      - '''*.json'''
+      Path:
+      - directory
+      read_file:
+      - json_file
+      dataset[0].keys: []
+      ''' | ''.join':
+      - headers
+      - '[''---''] * len(headers)'
+      - (escape_markdown(str(entry[key])) for key in headers)
+      len:
+      - headers
+      escape_markdown:
+      - str(entry[key])
+      str:
+      - entry[key]
+      json_file.with_suffix:
+      - '''.md'''
+      open:
+      - markdown_file_path
+      - '''w'''
+      file.write:
+      - markdown_content
+      logging.error:
+      - 'f''Failed to save Markdown file {markdown_file_path}: {e}'''
+    function_variables:
+    - headers
+    - text
+    - markdown_file_path
+    - row
+    - dataset
+    - markdown_content
+    - markdown_special_chars
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  escape_markdown:
+    function_name: escape_markdown
+    function_code: "def escape_markdown(text: str) -> str:\n    \"\"\"Escape Markdown\
+      \ special characters in the provided text.\"\"\"\n    markdown_special_chars\
+      \ = '\\\\`*_{}[]()#+-.!'\n    for char in markdown_special_chars:\n        text\
+      \ = text.replace(char, f'\\\\{char}')\n    return text"
+    function_docstring: Escape Markdown special characters in the provided text.
+    function_inputs:
+    - text
+    function_defaults: []
+    function_returns:
+    - text
+    function_calls:
+    - text.replace
+    function_call_inputs:
+      text.replace:
+      - char
+      - f'\\{char}'
+    function_variables:
+    - markdown_special_chars
+    - text
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  combine_json_files:
+    function_name: combine_json_files
+    function_code: "def combine_json_files(directory: str, html: bool=False) -> Dict[str,\
+      \ List[Dict]]:\n    \"\"\"\n    Combine all JSON files in the output directory\
+      \ into 'instruct.json', and\n    then remove duplicates.\n    Args:\n      \
+      \  directory (str): The directory where the output files are located.\n    Returns:\n\
+      \        A dictionary containing the 'instruct_list' datasets.\n    \"\"\"\n\
+      \    logging.info(f'Combining JSON files in {directory}')\n\n    def remove_duplicate_dataset_entries(dataset:\
+      \ List[Dict], key1: str, key2: str) -> List[Dict]:\n        \"\"\"\n       \
+      \ Remove duplicate entries from the provided dataset based on the provided keys.\n\
+      \        Args:\n            dataset (List[Dict]): The dataset to remove duplicates\
+      \ from.\n            key1 (str): The first key to check for duplicates.\n  \
+      \          key2 (str): The second key to check for duplicates.\n        Returns:\n\
+      \            A dataset without duplicate entries.\n        \"\"\"\n        seen\
+      \ = set()\n        result = []\n        for item in dataset:\n            if\
+      \ (item[key1], item[key2]) not in seen:\n                seen.add((item[key1],\
+      \ item[key2]))\n                result.append(item)\n        return result\n\
+      \    instruct_data = []\n    for file_name in ['instruct.json']:\n        file_path\
+      \ = Path(directory) / file_name\n        combined_data = []\n        for json_file\
+      \ in Path(directory).rglob(f'*.{file_name}'):\n            try:\n          \
+      \      json_file_data = read_file(json_file)\n                combined_data.extend(json_file_data)\n\
+      \                combined_data = remove_duplicate_dataset_entries(combined_data,\
+      \ 'instruction', 'output')\n                instruct_data = combined_data.copy()\n\
+      \                purpose_data = [item for item in combined_data if item['instruction'].startswith('1)\
+      \ Describe the Purpose')]\n                code_output = []\n              \
+      \  for item in purpose_data:\n                    instruction = 'Define a Python\
+      \ code file that is described as follows:\\n' + item['output']\n           \
+      \         code_output.append({'instruction': instruction, 'output': item['input']})\n\
+      \                write_file(code_output, Path(directory) / 'training.json')\n\
+      \            except Exception as e:\n                logging.info(f'Error processing:\
+      \ {json_file}: {e}')\n        write_file(combined_data, file_path)\n    if html:\n\
+      \        logging.info('Converting JSON files to HTML')\n        convert_json_to_html(directory)\n\
+      \    return {'instruct_list': instruct_data}"
+    function_docstring: "\n    Combine all JSON files in the output directory into\
+      \ 'instruct.json', and\n    then remove duplicates.\n    Args:\n        directory\
+      \ (str): The directory where the output files are located.\n    Returns:\n \
+      \       A dictionary containing the 'instruct_list' datasets.\n    "
+    function_inputs:
+    - directory
+    - html
+    function_defaults:
+    - 'False'
+    function_returns:
+    - '{''instruct_list'': instruct_data}'
+    - result
+    function_calls:
+    - logging.info
+    - set
+    - seen.add
+    - result.append
+    - Path
+    - Path(directory).rglob
+    - read_file
+    - combined_data.extend
+    - remove_duplicate_dataset_entries
+    - combined_data.copy
+    - item['instruction'].startswith
+    - code_output.append
+    - write_file
+    - convert_json_to_html
+    function_call_inputs:
+      logging.info:
+      - f'Combining JSON files in {directory}'
+      - 'f''Error processing: {json_file}: {e}'''
+      - '''Converting JSON files to HTML'''
+      set: []
+      seen.add:
+      - (item[key1], item[key2])
+      result.append:
+      - item
+      Path:
+      - directory
+      - directory
+      - directory
+      Path(directory).rglob:
+      - f'*.{file_name}'
+      read_file:
+      - json_file
+      combined_data.extend:
+      - json_file_data
+      remove_duplicate_dataset_entries:
+      - combined_data
+      - '''instruction'''
+      - '''output'''
+      combined_data.copy: []
+      item['instruction'].startswith:
+      - '''1) Describe the Purpose'''
+      code_output.append:
+      - '{''instruction'': instruction, ''output'': item[''input'']}'
+      write_file:
+      - code_output
+      - Path(directory) / 'training.json'
+      - combined_data
+      - file_path
+      convert_json_to_html:
+      - directory
+    function_variables:
+    - result
+    - purpose_data
+    - file_path
+    - seen
+    - combined_data
+    - instruction
+    - instruct_data
+    - code_output
+    - json_file_data
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  remove_duplicate_dataset_entries:
+    function_name: remove_duplicate_dataset_entries
+    function_code: "def remove_duplicate_dataset_entries(dataset: List[Dict], key1:\
+      \ str, key2: str) -> List[Dict]:\n    \"\"\"\n        Remove duplicate entries\
+      \ from the provided dataset based on the provided keys.\n        Args:\n   \
+      \         dataset (List[Dict]): The dataset to remove duplicates from.\n   \
+      \         key1 (str): The first key to check for duplicates.\n            key2\
+      \ (str): The second key to check for duplicates.\n        Returns:\n       \
+      \     A dataset without duplicate entries.\n        \"\"\"\n    seen = set()\n\
+      \    result = []\n    for item in dataset:\n        if (item[key1], item[key2])\
+      \ not in seen:\n            seen.add((item[key1], item[key2]))\n           \
+      \ result.append(item)\n    return result"
+    function_docstring: "\n        Remove duplicate entries from the provided dataset\
+      \ based on the provided keys.\n        Args:\n            dataset (List[Dict]):\
+      \ The dataset to remove duplicates from.\n            key1 (str): The first\
+      \ key to check for duplicates.\n            key2 (str): The second key to check\
+      \ for duplicates.\n        Returns:\n            A dataset without duplicate\
+      \ entries.\n        "
+    function_inputs:
+    - dataset
+    - key1
+    - key2
+    function_defaults: []
+    function_returns:
+    - result
+    function_calls:
+    - set
+    - seen.add
+    - result.append
+    function_call_inputs:
+      set: []
+      seen.add:
+      - (item[key1], item[key2])
+      result.append:
+      - item
+    function_variables:
+    - result
+    - seen
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  create_code_graph:
+    function_name: create_code_graph
+    function_code: "def create_code_graph(file_details: Dict, base_name: str, output_subdir:\
+      \ Path) -> None:\n    \"\"\"\n    Generate graphs from the file_details and\
+      \ save them as PNG images.\n    Args:\n        file_details (dict): The details\
+      \ extracted from the Python file.\n        base_name (str): The base name of\
+      \ the output files.\n        output_subdir (Path): The subdirectory where the\
+      \ output files will be saved.\n    Returns:\n        None\n    \"\"\"\n    graph_type\
+      \ = 'entire_code_graph'\n    output_file = output_subdir / f'{base_name}.{graph_type}.png'\n\
+      \    G = nx.DiGraph()\n    G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])\n\
+      \    for edge in file_details['file_info'][graph_type]['edges']:\n        source,\
+      \ target = (edge['source'], edge['target'])\n        if source in G.nodes and\
+      \ target in G.nodes:\n            G.add_edge(source, target, **{k: v for k,\
+      \ v in edge.items() if k in ['target_inputs', 'target_returns']})\n    plt.figure(figsize=(20,\
+      \ 20))\n    pos = nx.spring_layout(G)\n    nx.draw(G, pos, with_labels=True,\
+      \ font_weight='bold', font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12)\n\
+      \    edge_labels = {}\n    for edge in G.edges(data=True):\n        label =\
+      \ []\n        if 'target_inputs' in edge[2] and edge[2]['target_inputs']:\n\
+      \            label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\"\
+      )\n        if 'target_returns' in edge[2] and edge[2]['target_returns']:\n \
+      \           label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\"\
+      )\n        edge_labels[edge[0], edge[1]] = '\\n'.join(label)\n    nx.draw_networkx_edge_labels(G,\
+      \ pos, edge_labels=edge_labels, font_size=6)\n    plt.savefig(output_file)\n\
+      \    plt.close()"
+    function_docstring: "\n    Generate graphs from the file_details and save them\
+      \ as PNG images.\n    Args:\n        file_details (dict): The details extracted\
+      \ from the Python file.\n        base_name (str): The base name of the output\
+      \ files.\n        output_subdir (Path): The subdirectory where the output files\
+      \ will be saved.\n    Returns:\n        None\n    "
+    function_inputs:
+    - file_details
+    - base_name
+    - output_subdir
+    function_defaults: []
+    function_returns: []
+    function_calls:
+    - nx.DiGraph
+    - G.add_nodes_from
+    - G.add_edge
+    - edge.items
+    - plt.figure
+    - nx.spring_layout
+    - nx.draw
+    - G.edges
+    - label.append
+    - ''', ''.join'
+    - '''\n''.join'
+    - nx.draw_networkx_edge_labels
+    - plt.savefig
+    - plt.close
+    function_call_inputs:
+      nx.DiGraph: []
+      G.add_nodes_from:
+      - file_details['file_info'][graph_type]['nodes']
+      G.add_edge:
+      - source
+      - target
+      edge.items: []
+      plt.figure: []
+      nx.spring_layout:
+      - G
+      nx.draw:
+      - G
+      - pos
+      G.edges: []
+      label.append:
+      - 'f"Inputs: {'', ''.join(edge[2][''target_inputs''])}"'
+      - 'f"\nReturns: {'', ''.join(edge[2][''target_returns''])}"'
+      ''', ''.join':
+      - edge[2]['target_inputs']
+      - edge[2]['target_returns']
+      '''\n''.join':
+      - label
+      nx.draw_networkx_edge_labels:
+      - G
+      - pos
+      plt.savefig:
+      - output_file
+      plt.close: []
+    function_variables:
+    - edge_labels
+    - pos
+    - graph_type
+    - G
+    - output_file
+    - label
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  save_python_data:
+    function_name: save_python_data
+    function_code: "def save_python_data(file_details: dict, instruct_list: list,\
+      \ base_name: str, relative_path: Path, output_dir: str) -> None:\n    \"\"\"\
+      \n    Save Python file details as a YAML file, the instruction data as a JSON\
+      \ file, and code graphs.\n    Args:\n        file_details (dict): The details\
+      \ extracted from the Python file.\n        instruct_list (list): The instruction\
+      \ data extracted from the Python file.\n        relative_path (Path): The relative\
+      \ path to the Python file.\n        output_dir (str): The directory where the\
+      \ output files will be saved.\n    Returns:\n        None\n    \"\"\"\n    output_subdir\
+      \ = Path(output_dir) / relative_path.parent\n    output_subdir.mkdir(parents=True,\
+      \ exist_ok=True)\n    file_names = [f'{base_name}.instruct.json', f'{base_name}.details.yaml']\n\
+      \    contents = [instruct_list, file_details]\n    for file_name, content in\
+      \ zip(file_names, contents):\n        write_file(content, output_subdir / file_name)\n\
+      \    try:\n        create_code_graph(file_details, base_name, output_subdir)\n\
+      \    except Exception as e:\n        logging.info(f'Error creating graph for\
+      \ {base_name}: {e}')"
+    function_docstring: "\n    Save Python file details as a YAML file, the instruction\
+      \ data as a JSON file, and code graphs.\n    Args:\n        file_details (dict):\
+      \ The details extracted from the Python file.\n        instruct_list (list):\
+      \ The instruction data extracted from the Python file.\n        relative_path\
+      \ (Path): The relative path to the Python file.\n        output_dir (str): The\
+      \ directory where the output files will be saved.\n    Returns:\n        None\n\
+      \    "
+    function_inputs:
+    - file_details
+    - instruct_list
+    - base_name
+    - relative_path
+    - output_dir
+    function_defaults: []
+    function_returns: []
+    function_calls:
+    - Path
+    - output_subdir.mkdir
+    - zip
+    - write_file
+    - create_code_graph
+    - logging.info
+    function_call_inputs:
+      Path:
+      - output_dir
+      output_subdir.mkdir: []
+      zip:
+      - file_names
+      - contents
+      write_file:
+      - content
+      - output_subdir / file_name
+      create_code_graph:
+      - file_details
+      - base_name
+      - output_subdir
+      logging.info:
+      - 'f''Error creating graph for {base_name}: {e}'''
+    function_variables:
+    - file_names
+    - contents
+    - output_subdir
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+classes: {}

@@ -1,0 +1,2409 @@
+file_info:
+  file_code: "\"\"\"\nRequirements\n[req01] The code_graph function performs the following:\n\
+    \        a. Extracts the function and class method details from the file summary.\n\
+    \        b. Creates a lookup dictionary for function and class method details.\n\
+    \        c. Creates a directed graph with nodes and edges representing the relationships\
+    \ in the code.\n        d. Adds edges for function and class method calls.\n \
+    \       e. Adds edge data to edges.\n        f. Returns a dictionary with nodes\
+    \ and edges representing the relationships in the code.\n[req02] The extract_control_flow_tree\
+    \ function performs the following:\n        a. Extracts control flow tree from\
+    \ AST.\n        b. Returns control flow tree.\n[req03] The reorganize_control_flow\
+    \ function performs the following:\n        a. Gets starting points from the code\
+    \ graph.\n        b. Reorganizes the control flow structure recursively.\n   \
+    \     c. Returns reorganized control flow structure.\n[req04] The get_plantUML_element\
+    \ function performs the following:\n        a. Gets plantUML code for each element.\n\
+    \        b. Returns plantUML code for each element.\n[req05] The get_plantUML\
+    \ function performs the following: \n        a. Gets plantUML code for entire\
+    \ file.\n        b. Returns plantUML code for entire file.\n[req06] The get_code_graph\
+    \ function performs the following:\n        a. Adds code graph and control flow\
+    \ to file details.\n        b. Returns file details.\n\"\"\"\nimport ast\nimport\
+    \ json\nfrom typing import Dict, List, Optional, Union\nimport networkx as nx\n\
+    \n\ndef code_graph(\n    file_summary: Dict[str, Union[Dict, str]]\n) -> Dict[str,\
+    \ Union[List[str], Dict[str, List[str]]]]:\n    \"\"\"\n    Create a dictionary\
+    \ representation of file details.\n    Args:\n        file_summary: Dict[str,\
+    \ Union[Dict, str]]: The details extracted from the file.\n    Returns:\n    \
+    \    dict: A dictionary with nodes and edges representing the relationships in\
+    \ the code.\n    \"\"\"\n    G = nx.DiGraph()\n\n    # Create lookup dictionaries\
+    \ for function and class method details\n    function_details_lookup = {}\n  \
+    \  for function_def in file_summary[\"function_defs\"]:\n        function_details_lookup.update(function_def)\n\
+    \    class_method_details_lookup = {}\n    for class_def in file_summary[\"class_defs\"\
+    ]:\n        for (\n            class_name,\n            class_details,\n     \
+    \   ) in class_def.items():  # Extract class name and details\n            G.add_node(class_name)\
+    \  # Add class as a graph node\n            for method_name, method_details in\
+    \ class_details[\"method_defs\"].items():\n                qualified_method_name\
+    \ = (\n                    f\"{class_name}.{method_name}\"  # Create method fully\
+    \ qualified name\n                )\n                G.add_node(qualified_method_name)\
+    \  # Add method as a graph node\n                class_method_details_lookup[\n\
+    \                    qualified_method_name\n                ] = method_details\
+    \  # Store method details\n                G.add_edge(\n                    class_name,\
+    \ qualified_method_name\n                )  # Add edge from class to method\n\n\
+    \    # Helper function to extract edge data from target details\n    def get_edge_data_from_details(\n\
+    \        target_details: dict, source_details: dict, target: str\n    ) -> dict:\n\
+    \        edge_data = {}\n        if target_details:\n            edge_data[\"\
+    target_inputs\"] = target_details.get(\"inputs\")\n            edge_data[\"target_returns\"\
+    ] = list(set(target_details.get(\"returns\", [])))\n        if (\n           \
+    \ source_details\n            and \"call_inputs\" in source_details\n        \
+    \    and target in source_details[\"call_inputs\"]\n        ):\n            edge_data[\"\
+    target_inputs\"] = source_details[\"call_inputs\"][target]\n        return edge_data\n\
+    \n    # Helper function to add edge with data\n    def add_edge_with_data(\n \
+    \       source: str, target: str, init_method: Optional[str] = None\n    ) ->\
+    \ None:\n        target_details = class_method_details_lookup.get(\n         \
+    \   init_method or target\n        ) or function_details_lookup.get(target)\n\
+    \        source_details = function_details_lookup.get(\n            source\n \
+    \       ) or class_method_details_lookup.get(source)\n        G.add_edge(\n  \
+    \          source,\n            target,\n            **get_edge_data_from_details(target_details,\
+    \ source_details, target),\n        )\n\n    # Helper function to add edges for\
+    \ function or class method calls\n    def add_edges_for_calls(source_name, calls):\n\
+    \        class_names = [\n            list(class_def.keys())[0] for class_def\
+    \ in file_summary[\"class_defs\"]\n        ]\n        for called in calls:\n \
+    \           called_class_name = called.split(\".\")[0]\n            if called.startswith(\"\
+    self.\"):\n                method_name = called.replace(\"self.\", \"\")\n   \
+    \             fully_qualified_name = f\"{source_name.split('.')[0]}.{method_name}\"\
+    \n                if fully_qualified_name in class_method_details_lookup:\n  \
+    \                  add_edge_with_data(source_name, fully_qualified_name)\n   \
+    \                 continue\n            if (\n                called in function_details_lookup\n\
+    \                or called in class_method_details_lookup\n                or\
+    \ f\"{source_name.split('.')[0]}.{called}\"\n                in class_method_details_lookup\n\
+    \            ):\n                add_edge_with_data(source_name, called)\n   \
+    \         elif called_class_name in class_names:\n                init_method\
+    \ = None\n                init_method_name = f\"{called}.__init__\"\n        \
+    \        if init_method_name in class_method_details_lookup:\n               \
+    \     init_method = init_method_name\n                add_edge_with_data(source_name,\
+    \ called, init_method)\n            else:\n                G.add_node(called)\n\
+    \                add_edge_with_data(source_name, called)\n\n    # Add function\
+    \ nodes to graph and edges for function calls\n    for function_name in function_details_lookup:\n\
+    \        G.add_node(function_name)\n    for func_name, details in function_details_lookup.items():\n\
+    \        add_edges_for_calls(func_name, details[\"calls\"])\n\n    # Add edges\
+    \ for method calls\n    for qualified_method_name, details in class_method_details_lookup.items():\n\
+    \        add_edges_for_calls(qualified_method_name, details[\"calls\"])\n\n  \
+    \  # Add edge data to edges and create node and edges to return\n    for edge\
+    \ in G.edges:\n        source, target = edge\n        target_details = function_details_lookup.get(\n\
+    \            target\n        ) or class_method_details_lookup.get(target)\n  \
+    \      source_details = function_details_lookup.get(\n            source\n   \
+    \     ) or class_method_details_lookup.get(source)\n        edge_data = get_edge_data_from_details(target_details,\
+    \ source_details, target)\n        G[source][target].update(edge_data)\n    nodes\
+    \ = list(G.nodes)\n    edges = [\n        {\"source\": edge[0], \"target\": edge[1],\
+    \ **edge[2]} for edge in G.edges.data()\n    ]\n\n    # remove any nodes that\
+    \ are not either a source of an edge or a target of an edge\n    nodes_to_remove\
+    \ = []\n    for node in nodes:\n        if node not in [edge[\"source\"] for edge\
+    \ in edges] and node not in [\n            edge[\"target\"] for edge in edges\n\
+    \        ]:\n            nodes_to_remove.append(node)\n\n    return {\"nodes\"\
+    : nodes, \"edges\": edges}\n\n\ndef extract_control_flow_tree(nodes: List[ast.AST])\
+    \ -> List[Union[str, dict]]:\n    \"\"\"\n    Extract control flow tree from AST.\n\
+    \    Args:\n        nodes: AST nodes\n    Returns:\n        control_flow_tree:\
+    \ control flow tree\n    \"\"\"\n    control_flow_tree = []\n    node_keywords_map\
+    \ = {\n        \"if\": \"If\",\n        \"while\": \"While\",\n        \"for\"\
+    : \"For\",\n        \"asyncfor\": \"AsyncFor\",\n        \"with\": \"With\",\n\
+    \        \"asyncwith\": \"AsyncWith\",\n        \"try\": \"Try\",\n        \"\
+    except\": \"ExceptHandler\",\n        \"def\": \"FunctionDef\",\n        \"asyncdef\"\
+    : \"AsyncFunctionDef\",\n        \"class\": \"ClassDef\",\n        \"return\"\
+    : \"Return\",\n    }\n    for node in nodes:\n        if isinstance(node, (ast.FunctionDef,\
+    \ ast.AsyncFunctionDef)):\n            args_str = \", \".join([ast.unparse(arg)\
+    \ for arg in node.args.args])\n            control_flow_tree.append(\n       \
+    \         {f\"def {node.name}({args_str})\": extract_control_flow_tree(node.body)}\n\
+    \            )\n        elif isinstance(node, ast.If):\n            if_block =\
+    \ {\n                f\"if {ast.unparse(node.test)}\": extract_control_flow_tree(node.body)\n\
+    \            }\n            orelse = node.orelse\n            while orelse and\
+    \ isinstance(orelse[0], ast.If):\n                if_block.update(\n         \
+    \           {\n                        f\"elif {ast.unparse(orelse[0].test)}\"\
+    : extract_control_flow_tree(\n                            orelse[0].body\n   \
+    \                     )\n                    }\n                )\n          \
+    \      orelse = orelse[0].orelse\n            if orelse:\n                if_block.update({\"\
+    else\": extract_control_flow_tree(orelse)})\n            control_flow_tree.append(if_block)\n\
+    \        elif isinstance(node, ast.Return):\n            if node.value is not\
+    \ None:\n                control_flow_tree.append({\"return\": [ast.unparse(node.value)]})\n\
+    \            else:\n                control_flow_tree.append(\n              \
+    \      {\"return\": []}\n                )  # Handle cases with no return value\n\
+    \        elif isinstance(node, ast.Try):\n            try_block = extract_control_flow_tree(node.body)\n\
+    \            except_block = []\n            for handler in node.handlers:\n  \
+    \              handler_type = (\n                    ast.unparse(handler.type)\
+    \ if handler.type is not None else \"\"\n                )\n                handler_name\
+    \ = (\n                    ast.unparse(handler.name)\n                    if isinstance(handler.name,\
+    \ ast.Name)\n                    else \"\"\n                )\n              \
+    \  except_block.append(\n                    {\n                        f\"except\
+    \ {handler_type} as {handler_name}:\": extract_control_flow_tree(\n          \
+    \                  handler.body\n                        )\n                 \
+    \   }\n                )\n            control_flow_dict = {\"try\": try_block,\
+    \ \"except\": except_block}\n            if node.orelse:\n                else_block\
+    \ = extract_control_flow_tree(node.orelse)\n                control_flow_dict[\"\
+    else\"] = else_block\n            if node.finalbody:\n                finally_block\
+    \ = extract_control_flow_tree(node.finalbody)\n                control_flow_dict[\"\
+    finally\"] = finally_block\n            control_flow_tree.append(control_flow_dict)\n\
+    \        elif isinstance(node, ast.While):\n            control_flow_tree.append(\n\
+    \                {\n                    f\"while {ast.unparse(node.test)}\": extract_control_flow_tree(\n\
+    \                        node.body\n                    )\n                }\n\
+    \            )\n        elif isinstance(node, ast.For):\n            control_flow_tree.append(\n\
+    \                {\n                    f\"for {ast.unparse(node.target)} in {ast.unparse(node.iter)}\"\
+    : extract_control_flow_tree(\n                        node.body\n            \
+    \        )\n                }\n            )\n        elif isinstance(node, ast.With):\n\
+    \            control_flow_tree.append(\n                {\n                  \
+    \  f\"with {', '.join([ast.unparse(item) for item in node.items])}\": extract_control_flow_tree(\n\
+    \                        node.body\n                    )\n                }\n\
+    \            )\n        elif isinstance(node, ast.ClassDef):\n            control_flow_tree.append(\n\
+    \                {f\"class {node.name}\": extract_control_flow_tree(node.body)}\n\
+    \            )\n        elif any(\n            isinstance(node, getattr(ast, node_keywords_map[keyword]))\n\
+    \            for keyword in node_keywords_map.keys()\n        ):\n           \
+    \ control_flow_tree.append({ast.unparse(node): []})\n        else:\n         \
+    \   control_flow_tree.append(ast.unparse(node))\n    return control_flow_tree\n\
+    \n\ndef reorganize_control_flow(code_graph, control_flow_structure):\n    \"\"\
+    \"\n    Reorganize control flow sturcture to match the code graph.\n    Args:\n\
+    \        file_details: file details\n        control_flow_structure: control flow\
+    \ structure\n    Returns:\n        reorganized_control_flow_structure: reorganized\
+    \ control flow structure\n    \"\"\"\n    # Get starting points from the code\
+    \ graph\n    targets = [edge[\"target\"] for edge in code_graph[\"edges\"]]\n\
+    \    starting_points = [node for node in code_graph[\"nodes\"] if node not in\
+    \ targets]\n\n    # Define a function to reorganize the structure recursively\n\
+    \    def reorganize_structure(structure, start_points):\n        organized, seen\
+    \ = [], set()\n\n        # Iterate through each start point and find matching\
+    \ elements in structure\n        for start in start_points:\n            for element\
+    \ in structure:\n                if isinstance(element, dict):\n             \
+    \       key = next(iter(element))  # Get the first key of the dictionary\n   \
+    \                 if (\n                        start in key\n               \
+    \     ):  # Add element if it matches the start point and hasn't been seen\n \
+    \                       element_id = json.dumps(element)\n                   \
+    \     if element_id not in seen:\n                            organized.append(element)\n\
+    \                            seen.add(element_id)\n                elif (\n  \
+    \                  isinstance(element, str) and start in element\n           \
+    \     ):  # Handle string elements\n                    organized.append(element)\n\
+    \n        # Append elements not included in the organized list\n        remaining\
+    \ = [elem for elem in structure if json.dumps(elem) not in seen]\n        organized.extend(remaining)\n\
+    \        return organized\n\n    # Reorganize the control flow structure recursively\n\
+    \    return reorganize_structure(control_flow_structure, starting_points)\n\n\n\
+    def get_plantUML_element(element, indentation=\"\"):\n    \"\"\"\n    Get plantUML\
+    \ code for each element.\n    Args:\n        element: element\n        indentation:\
+    \ current indentation level\n    Returns:\n        plantuml_str: plantUML code\
+    \ for each element\n    \"\"\"\n    plantuml_str = \"\"\n    if isinstance(element,\
+    \ dict):\n        key = next(iter(element))\n        value = element[key]\n  \
+    \      if key.startswith(\"def \") or key.startswith(\"class \"):\n          \
+    \  plantuml_str += f\"{indentation}class {value} {{\\n\"\n            inner_indentation\
+    \ = indentation + \"  \"\n        elif key.startswith(\"if \"):\n            plantuml_str\
+    \ += f\"{indentation}if ({value}) {{\\n\"\n            inner_indentation = indentation\
+    \ + \"  \"\n        elif (\n            key.startswith(\"for \")\n           \
+    \ or key.startswith(\"while \")\n            or key.startswith(\"asyncfor \")\n\
+    \        ):\n            plantuml_str += f\"{indentation}while ({value}) {{\\\
+    n\"\n            inner_indentation = indentation + \"  \"\n        elif key.startswith(\"\
+    try \"):\n            plantuml_str += f\"{indentation}try {{\\n\"\n          \
+    \  inner_indentation = indentation + \"  \"\n        elif key.startswith(\"except\
+    \ \"):\n            plantuml_str += f\"{indentation}catch ({value}) {{\\n\"\n\
+    \            inner_indentation = indentation + \"  \"\n        else:\n       \
+    \     plantuml_str += f\"{indentation}:{key};\\n\"\n            inner_indentation\
+    \ = indentation\n\n        if isinstance(value, list):\n            for child\
+    \ in value:\n                plantuml_str += get_plantUML_element(child, inner_indentation)\n\
+    \n        if key.startswith(\"def \") or key.startswith(\"class \"):\n       \
+    \     plantuml_str += f\"{indentation}}}\\n\"\n        elif (\n            key.startswith(\"\
+    if \")\n            or key.startswith(\"for \")\n            or key.startswith(\"\
+    while \")\n            or key.startswith(\"asyncfor \")\n            or key.startswith(\"\
+    try \")\n            or key.startswith(\"except \")\n        ):\n            plantuml_str\
+    \ += f\"{indentation}}}\\n\"\n\n    elif isinstance(element, str):\n        plantuml_str\
+    \ += f\"{indentation}:{element};\\n\"\n\n    return plantuml_str\n\n\ndef get_plantUML(file_details):\n\
+    \    \"\"\"\n    Get plantUML code for entire file.\n    Args:\n        file_details:\
+    \ file details\n    Returns:\n        plantuml_str: plantUML code for entire file\n\
+    \    \"\"\"\n    plantuml_str = \"@startuml\\n\"\n    for element in file_details[\"\
+    file_info\"][\"control_flow_structure\"]:\n        plantuml_str += get_plantUML_element(element,\
+    \ \"  \")\n    plantuml_str += \"end\\n@enduml\"\n    return plantuml_str\n\n\n\
+    def get_code_graph(file_details):\n    \"\"\"\n    Add code graph and control\
+    \ flow to file details.\n    Args:\n        file_details: file details\n    Returns:\n\
+    \        file_details: file details\n    \"\"\"\n    file_details[\"file_info\"\
+    ][\"entire_code_graph\"] = code_graph(\n        file_details[\"file_info\"][\"\
+    file_summary\"]\n    )\n    file_details[\"file_info\"][\"file_summary\"] = json.dumps(\n\
+    \        file_details[\"file_info\"][\"file_summary\"]\n    ).replace('\"', \"\
+    \")\n\n    # file_code_simplified is the code without comments and docstrings\n\
+    \    try:\n        file_ast = file_details[\"file_info\"][\"file_ast\"]  # Accessing\
+    \ the AST\n        file_details[\"file_info\"][\"control_flow_structure\"] = reorganize_control_flow(\n\
+    \            file_details[\"file_info\"][\"entire_code_graph\"],\n           \
+    \ extract_control_flow_tree(file_ast.body)  # Using the AST for control flow extraction\n\
+    \        )\n        file_details[\"file_info\"][\"plantUML\"] = get_plantUML(file_details)\n\
+    \    except Exception as e:\n        file_details[\"file_info\"][\"control_flow_structure\"\
+    ] = [str(e)]\n        file_details[\"file_info\"][\"plantUML\"] = str(e)  \n\n\
+    \    # remove the AST from the file_details\n    del file_details[\"file_info\"\
+    ][\"file_ast\"]\n\n    return file_details\n"
+  file_dependencies:
+  - json
+  - networkx
+  - typing
+  - ast
+  file_functions:
+  - code_graph
+  - get_edge_data_from_details
+  - add_edge_with_data
+  - add_edges_for_calls
+  - extract_control_flow_tree
+  - reorganize_control_flow
+  - reorganize_structure
+  - get_plantUML_element
+  - get_plantUML
+  - get_code_graph
+  file_classes: []
+  file_constants: []
+  file_summary: '{dependencies: [json, networkx, typing, ast], function_defs: [{code_graph:
+    {inputs: [file_summary], calls: [nx.DiGraph, function_details_lookup.update, class_def.items,
+    G.add_node, class_details[''method_defs''].items, G.add_edge, target_details.get,
+    list, set, class_method_details_lookup.get, function_details_lookup.get, get_edge_data_from_details,
+    class_def.keys, called.split, called.startswith, called.replace, source_name.split,
+    add_edge_with_data, function_details_lookup.items, add_edges_for_calls, class_method_details_lookup.items,
+    G[source][target].update, G.edges.data, nodes_to_remove.append], call_inputs:
+    {nx.DiGraph: [], function_details_lookup.update: [function_def], class_def.items:
+    [], G.add_node: [class_name, qualified_method_name, called, function_name], class_details[''method_defs''].items:
+    [], G.add_edge: [class_name, qualified_method_name, source, target], target_details.get:
+    [''inputs'', ''returns'', []], list: [set(target_details.get(''returns'', [])),
+    class_def.keys(), G.nodes], set: [target_details.get(''returns'', [])], class_method_details_lookup.get:
+    [init_method or target, source, target, source], function_details_lookup.get:
+    [target, source, target, source], get_edge_data_from_details: [target_details,
+    source_details, target, target_details, source_details, target], class_def.keys:
+    [], called.split: [''.''], called.startswith: [''self.''], called.replace: [''self.'',
+    ''''], source_name.split: [''.'', ''.''], add_edge_with_data: [source_name, fully_qualified_name,
+    source_name, called, source_name, called, init_method, source_name, called], function_details_lookup.items:
+    [], add_edges_for_calls: [func_name, details[''calls''], qualified_method_name,
+    details[''calls'']], class_method_details_lookup.items: [], G[source][target].update:
+    [edge_data], G.edges.data: [], nodes_to_remove.append: [node]}, returns: [{''nodes'':
+    nodes, ''edges'': edges}, edge_data]}}, {get_edge_data_from_details: {inputs:
+    [target_details, source_details, target], calls: [target_details.get, list, set],
+    call_inputs: {target_details.get: [''inputs'', ''returns'', []], list: [set(target_details.get(''returns'',
+    []))], set: [target_details.get(''returns'', [])]}, returns: [edge_data]}}, {add_edge_with_data:
+    {inputs: [source, target, init_method], calls: [class_method_details_lookup.get,
+    function_details_lookup.get, G.add_edge, get_edge_data_from_details], call_inputs:
+    {class_method_details_lookup.get: [init_method or target, source], function_details_lookup.get:
+    [target, source], G.add_edge: [source, target], get_edge_data_from_details: [target_details,
+    source_details, target]}, returns: []}}, {add_edges_for_calls: {inputs: [source_name,
+    calls], calls: [list, class_def.keys, called.split, called.startswith, called.replace,
+    source_name.split, add_edge_with_data, G.add_node], call_inputs: {list: [class_def.keys()],
+    class_def.keys: [], called.split: [''.''], called.startswith: [''self.''], called.replace:
+    [''self.'', ''''], source_name.split: [''.'', ''.''], add_edge_with_data: [source_name,
+    fully_qualified_name, source_name, called, source_name, called, init_method, source_name,
+    called], G.add_node: [called]}, returns: []}}, {extract_control_flow_tree: {inputs:
+    [nodes], calls: [isinstance, '', ''.join, ast.unparse, control_flow_tree.append,
+    extract_control_flow_tree, if_block.update, except_block.append, any, getattr,
+    node_keywords_map.keys], call_inputs: {isinstance: [node, (ast.FunctionDef, ast.AsyncFunctionDef),
+    node, ast.If, orelse[0], ast.If, node, ast.Return, node, ast.Try, handler.name,
+    ast.Name, node, ast.While, node, ast.For, node, ast.With, node, ast.ClassDef,
+    node, getattr(ast, node_keywords_map[keyword])], '', ''.join: [[ast.unparse(arg)
+    for arg in node.args.args], [ast.unparse(item) for item in node.items]], ast.unparse:
+    [arg, node.test, orelse[0].test, node.value, handler.type, handler.name, node.test,
+    node.target, node.iter, item, node, node], control_flow_tree.append: [{f''def
+    {node.name}({args_str})'': extract_control_flow_tree(node.body)}, if_block, {''return'':
+    [ast.unparse(node.value)]}, {''return'': []}, control_flow_dict, {f''while {ast.unparse(node.test)}'':
+    extract_control_flow_tree(node.body)}, {f''for {ast.unparse(node.target)} in {ast.unparse(node.iter)}'':
+    extract_control_flow_tree(node.body)}, {f\with {'', ''.join([ast.unparse(item)
+    for item in node.items])}\: extract_control_flow_tree(node.body)}, {f''class {node.name}'':
+    extract_control_flow_tree(node.body)}, {ast.unparse(node): []}, ast.unparse(node)],
+    extract_control_flow_tree: [node.body, node.body, orelse[0].body, orelse, node.body,
+    handler.body, node.orelse, node.finalbody, node.body, node.body, node.body, node.body],
+    if_block.update: [{f''elif {ast.unparse(orelse[0].test)}'': extract_control_flow_tree(orelse[0].body)},
+    {''else'': extract_control_flow_tree(orelse)}], except_block.append: [{f''except
+    {handler_type} as {handler_name}:'': extract_control_flow_tree(handler.body)}],
+    any: [(isinstance(node, getattr(ast, node_keywords_map[keyword])) for keyword
+    in node_keywords_map.keys())], getattr: [ast, node_keywords_map[keyword]], node_keywords_map.keys:
+    []}, returns: [control_flow_tree]}}, {reorganize_control_flow: {inputs: [code_graph,
+    control_flow_structure], calls: [set, isinstance, next, iter, json.dumps, organized.append,
+    seen.add, organized.extend, reorganize_structure], call_inputs: {set: [], isinstance:
+    [element, dict, element, str], next: [iter(element)], iter: [element], json.dumps:
+    [element, elem], organized.append: [element, element], seen.add: [element_id],
+    organized.extend: [remaining], reorganize_structure: [control_flow_structure,
+    starting_points]}, returns: [reorganize_structure(control_flow_structure, starting_points),
+    organized]}}, {reorganize_structure: {inputs: [structure, start_points], calls:
+    [set, isinstance, next, iter, json.dumps, organized.append, seen.add, organized.extend],
+    call_inputs: {set: [], isinstance: [element, dict, element, str], next: [iter(element)],
+    iter: [element], json.dumps: [element, elem], organized.append: [element, element],
+    seen.add: [element_id], organized.extend: [remaining]}, returns: [organized]}},
+    {get_plantUML_element: {inputs: [element, indentation], calls: [isinstance, next,
+    iter, key.startswith, get_plantUML_element], call_inputs: {isinstance: [element,
+    dict, value, list, element, str], next: [iter(element)], iter: [element], key.startswith:
+    [''def '', ''class '', ''if '', ''for '', ''while '', ''asyncfor '', ''try '',
+    ''except '', ''def '', ''class '', ''if '', ''for '', ''while '', ''asyncfor '',
+    ''try '', ''except ''], get_plantUML_element: [child, inner_indentation]}, returns:
+    [plantuml_str]}}, {get_plantUML: {inputs: [file_details], calls: [get_plantUML_element],
+    call_inputs: {get_plantUML_element: [element, ''  '']}, returns: [plantuml_str]}},
+    {get_code_graph: {inputs: [file_details], calls: [code_graph, json.dumps(file_details[''file_info''][''file_summary'']).replace,
+    json.dumps, reorganize_control_flow, extract_control_flow_tree, get_plantUML,
+    str], call_inputs: {code_graph: [file_details[''file_info''][''file_summary'']],
+    json.dumps(file_details[''file_info''][''file_summary'']).replace: [''\'', ''''],
+    json.dumps: [file_details[''file_info''][''file_summary'']], reorganize_control_flow:
+    [file_details[''file_info''][''entire_code_graph''], extract_control_flow_tree(file_ast.body)],
+    extract_control_flow_tree: [file_ast.body], get_plantUML: [file_details], str:
+    [e, e]}, returns: [file_details]}}], class_defs: []}'
+  file_code_simplified: "import ast\nimport json\nfrom typing import Dict, List, Optional,\
+    \ Union\nimport networkx as nx\n\ndef code_graph(file_summary: Dict[str, Union[Dict,\
+    \ str]]) -> Dict[str, Union[List[str], Dict[str, List[str]]]]:\n    G = nx.DiGraph()\n\
+    \    function_details_lookup = {}\n    for function_def in file_summary['function_defs']:\n\
+    \        function_details_lookup.update(function_def)\n    class_method_details_lookup\
+    \ = {}\n    for class_def in file_summary['class_defs']:\n        for class_name,\
+    \ class_details in class_def.items():\n            G.add_node(class_name)\n  \
+    \          for method_name, method_details in class_details['method_defs'].items():\n\
+    \                qualified_method_name = f'{class_name}.{method_name}'\n     \
+    \           G.add_node(qualified_method_name)\n                class_method_details_lookup[qualified_method_name]\
+    \ = method_details\n                G.add_edge(class_name, qualified_method_name)\n\
+    \n    def get_edge_data_from_details(target_details: dict, source_details: dict,\
+    \ target: str) -> dict:\n        edge_data = {}\n        if target_details:\n\
+    \            edge_data['target_inputs'] = target_details.get('inputs')\n     \
+    \       edge_data['target_returns'] = list(set(target_details.get('returns', [])))\n\
+    \        if source_details and 'call_inputs' in source_details and (target in\
+    \ source_details['call_inputs']):\n            edge_data['target_inputs'] = source_details['call_inputs'][target]\n\
+    \        return edge_data\n\n    def add_edge_with_data(source: str, target: str,\
+    \ init_method: Optional[str]=None) -> None:\n        target_details = class_method_details_lookup.get(init_method\
+    \ or target) or function_details_lookup.get(target)\n        source_details =\
+    \ function_details_lookup.get(source) or class_method_details_lookup.get(source)\n\
+    \        G.add_edge(source, target, **get_edge_data_from_details(target_details,\
+    \ source_details, target))\n\n    def add_edges_for_calls(source_name, calls):\n\
+    \        class_names = [list(class_def.keys())[0] for class_def in file_summary['class_defs']]\n\
+    \        for called in calls:\n            called_class_name = called.split('.')[0]\n\
+    \            if called.startswith('self.'):\n                method_name = called.replace('self.',\
+    \ '')\n                fully_qualified_name = f\"{source_name.split('.')[0]}.{method_name}\"\
+    \n                if fully_qualified_name in class_method_details_lookup:\n  \
+    \                  add_edge_with_data(source_name, fully_qualified_name)\n   \
+    \                 continue\n            if called in function_details_lookup or\
+    \ called in class_method_details_lookup or f\"{source_name.split('.')[0]}.{called}\"\
+    \ in class_method_details_lookup:\n                add_edge_with_data(source_name,\
+    \ called)\n            elif called_class_name in class_names:\n              \
+    \  init_method = None\n                init_method_name = f'{called}.__init__'\n\
+    \                if init_method_name in class_method_details_lookup:\n       \
+    \             init_method = init_method_name\n                add_edge_with_data(source_name,\
+    \ called, init_method)\n            else:\n                G.add_node(called)\n\
+    \                add_edge_with_data(source_name, called)\n    for function_name\
+    \ in function_details_lookup:\n        G.add_node(function_name)\n    for func_name,\
+    \ details in function_details_lookup.items():\n        add_edges_for_calls(func_name,\
+    \ details['calls'])\n    for qualified_method_name, details in class_method_details_lookup.items():\n\
+    \        add_edges_for_calls(qualified_method_name, details['calls'])\n    for\
+    \ edge in G.edges:\n        source, target = edge\n        target_details = function_details_lookup.get(target)\
+    \ or class_method_details_lookup.get(target)\n        source_details = function_details_lookup.get(source)\
+    \ or class_method_details_lookup.get(source)\n        edge_data = get_edge_data_from_details(target_details,\
+    \ source_details, target)\n        G[source][target].update(edge_data)\n    nodes\
+    \ = list(G.nodes)\n    edges = [{'source': edge[0], 'target': edge[1], **edge[2]}\
+    \ for edge in G.edges.data()]\n    nodes_to_remove = []\n    for node in nodes:\n\
+    \        if node not in [edge['source'] for edge in edges] and node not in [edge['target']\
+    \ for edge in edges]:\n            nodes_to_remove.append(node)\n    return {'nodes':\
+    \ nodes, 'edges': edges}\n\ndef extract_control_flow_tree(nodes: List[ast.AST])\
+    \ -> List[Union[str, dict]]:\n    control_flow_tree = []\n    node_keywords_map\
+    \ = {'if': 'If', 'while': 'While', 'for': 'For', 'asyncfor': 'AsyncFor', 'with':\
+    \ 'With', 'asyncwith': 'AsyncWith', 'try': 'Try', 'except': 'ExceptHandler', 'def':\
+    \ 'FunctionDef', 'asyncdef': 'AsyncFunctionDef', 'class': 'ClassDef', 'return':\
+    \ 'Return'}\n    for node in nodes:\n        if isinstance(node, (ast.FunctionDef,\
+    \ ast.AsyncFunctionDef)):\n            args_str = ', '.join([ast.unparse(arg)\
+    \ for arg in node.args.args])\n            control_flow_tree.append({f'def {node.name}({args_str})':\
+    \ extract_control_flow_tree(node.body)})\n        elif isinstance(node, ast.If):\n\
+    \            if_block = {f'if {ast.unparse(node.test)}': extract_control_flow_tree(node.body)}\n\
+    \            orelse = node.orelse\n            while orelse and isinstance(orelse[0],\
+    \ ast.If):\n                if_block.update({f'elif {ast.unparse(orelse[0].test)}':\
+    \ extract_control_flow_tree(orelse[0].body)})\n                orelse = orelse[0].orelse\n\
+    \            if orelse:\n                if_block.update({'else': extract_control_flow_tree(orelse)})\n\
+    \            control_flow_tree.append(if_block)\n        elif isinstance(node,\
+    \ ast.Return):\n            if node.value is not None:\n                control_flow_tree.append({'return':\
+    \ [ast.unparse(node.value)]})\n            else:\n                control_flow_tree.append({'return':\
+    \ []})\n        elif isinstance(node, ast.Try):\n            try_block = extract_control_flow_tree(node.body)\n\
+    \            except_block = []\n            for handler in node.handlers:\n  \
+    \              handler_type = ast.unparse(handler.type) if handler.type is not\
+    \ None else ''\n                handler_name = ast.unparse(handler.name) if isinstance(handler.name,\
+    \ ast.Name) else ''\n                except_block.append({f'except {handler_type}\
+    \ as {handler_name}:': extract_control_flow_tree(handler.body)})\n           \
+    \ control_flow_dict = {'try': try_block, 'except': except_block}\n           \
+    \ if node.orelse:\n                else_block = extract_control_flow_tree(node.orelse)\n\
+    \                control_flow_dict['else'] = else_block\n            if node.finalbody:\n\
+    \                finally_block = extract_control_flow_tree(node.finalbody)\n \
+    \               control_flow_dict['finally'] = finally_block\n            control_flow_tree.append(control_flow_dict)\n\
+    \        elif isinstance(node, ast.While):\n            control_flow_tree.append({f'while\
+    \ {ast.unparse(node.test)}': extract_control_flow_tree(node.body)})\n        elif\
+    \ isinstance(node, ast.For):\n            control_flow_tree.append({f'for {ast.unparse(node.target)}\
+    \ in {ast.unparse(node.iter)}': extract_control_flow_tree(node.body)})\n     \
+    \   elif isinstance(node, ast.With):\n            control_flow_tree.append({f\"\
+    with {', '.join([ast.unparse(item) for item in node.items])}\": extract_control_flow_tree(node.body)})\n\
+    \        elif isinstance(node, ast.ClassDef):\n            control_flow_tree.append({f'class\
+    \ {node.name}': extract_control_flow_tree(node.body)})\n        elif any((isinstance(node,\
+    \ getattr(ast, node_keywords_map[keyword])) for keyword in node_keywords_map.keys())):\n\
+    \            control_flow_tree.append({ast.unparse(node): []})\n        else:\n\
+    \            control_flow_tree.append(ast.unparse(node))\n    return control_flow_tree\n\
+    \ndef reorganize_control_flow(code_graph, control_flow_structure):\n    targets\
+    \ = [edge['target'] for edge in code_graph['edges']]\n    starting_points = [node\
+    \ for node in code_graph['nodes'] if node not in targets]\n\n    def reorganize_structure(structure,\
+    \ start_points):\n        organized, seen = ([], set())\n        for start in\
+    \ start_points:\n            for element in structure:\n                if isinstance(element,\
+    \ dict):\n                    key = next(iter(element))\n                    if\
+    \ start in key:\n                        element_id = json.dumps(element)\n  \
+    \                      if element_id not in seen:\n                          \
+    \  organized.append(element)\n                            seen.add(element_id)\n\
+    \                elif isinstance(element, str) and start in element:\n       \
+    \             organized.append(element)\n        remaining = [elem for elem in\
+    \ structure if json.dumps(elem) not in seen]\n        organized.extend(remaining)\n\
+    \        return organized\n    return reorganize_structure(control_flow_structure,\
+    \ starting_points)\n\ndef get_plantUML_element(element, indentation=''):\n   \
+    \ plantuml_str = ''\n    if isinstance(element, dict):\n        key = next(iter(element))\n\
+    \        value = element[key]\n        if key.startswith('def ') or key.startswith('class\
+    \ '):\n            plantuml_str += f'{indentation}class {value} {{\\n'\n     \
+    \       inner_indentation = indentation + '  '\n        elif key.startswith('if\
+    \ '):\n            plantuml_str += f'{indentation}if ({value}) {{\\n'\n      \
+    \      inner_indentation = indentation + '  '\n        elif key.startswith('for\
+    \ ') or key.startswith('while ') or key.startswith('asyncfor '):\n           \
+    \ plantuml_str += f'{indentation}while ({value}) {{\\n'\n            inner_indentation\
+    \ = indentation + '  '\n        elif key.startswith('try '):\n            plantuml_str\
+    \ += f'{indentation}try {{\\n'\n            inner_indentation = indentation +\
+    \ '  '\n        elif key.startswith('except '):\n            plantuml_str += f'{indentation}catch\
+    \ ({value}) {{\\n'\n            inner_indentation = indentation + '  '\n     \
+    \   else:\n            plantuml_str += f'{indentation}:{key};\\n'\n          \
+    \  inner_indentation = indentation\n        if isinstance(value, list):\n    \
+    \        for child in value:\n                plantuml_str += get_plantUML_element(child,\
+    \ inner_indentation)\n        if key.startswith('def ') or key.startswith('class\
+    \ '):\n            plantuml_str += f'{indentation}}}\\n'\n        elif key.startswith('if\
+    \ ') or key.startswith('for ') or key.startswith('while ') or key.startswith('asyncfor\
+    \ ') or key.startswith('try ') or key.startswith('except '):\n            plantuml_str\
+    \ += f'{indentation}}}\\n'\n    elif isinstance(element, str):\n        plantuml_str\
+    \ += f'{indentation}:{element};\\n'\n    return plantuml_str\n\ndef get_plantUML(file_details):\n\
+    \    plantuml_str = '@startuml\\n'\n    for element in file_details['file_info']['control_flow_structure']:\n\
+    \        plantuml_str += get_plantUML_element(element, '  ')\n    plantuml_str\
+    \ += 'end\\n@enduml'\n    return plantuml_str\n\ndef get_code_graph(file_details):\n\
+    \    file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary'])\n\
+    \    file_details['file_info']['file_summary'] = json.dumps(file_details['file_info']['file_summary']).replace('\"\
+    ', '')\n    try:\n        file_ast = file_details['file_info']['file_ast']\n \
+    \       file_details['file_info']['control_flow_structure'] = reorganize_control_flow(file_details['file_info']['entire_code_graph'],\
+    \ extract_control_flow_tree(file_ast.body))\n        file_details['file_info']['plantUML']\
+    \ = get_plantUML(file_details)\n    except Exception as e:\n        file_details['file_info']['control_flow_structure']\
+    \ = [str(e)]\n        file_details['file_info']['plantUML'] = str(e)\n    del\
+    \ file_details['file_info']['file_ast']\n    return file_details"
+  entire_code_graph:
+    nodes:
+    - code_graph
+    - get_edge_data_from_details
+    - add_edge_with_data
+    - add_edges_for_calls
+    - extract_control_flow_tree
+    - reorganize_control_flow
+    - reorganize_structure
+    - get_plantUML_element
+    - get_plantUML
+    - get_code_graph
+    - nx.DiGraph
+    - function_details_lookup.update
+    - class_def.items
+    - G.add_node
+    - class_details['method_defs'].items
+    - G.add_edge
+    - target_details.get
+    - list
+    - set
+    - class_method_details_lookup.get
+    - function_details_lookup.get
+    - class_def.keys
+    - called.split
+    - called.startswith
+    - called.replace
+    - source_name.split
+    - function_details_lookup.items
+    - class_method_details_lookup.items
+    - G[source][target].update
+    - G.edges.data
+    - nodes_to_remove.append
+    - isinstance
+    - ''', ''.join'
+    - ast.unparse
+    - control_flow_tree.append
+    - if_block.update
+    - except_block.append
+    - any
+    - getattr
+    - node_keywords_map.keys
+    - next
+    - iter
+    - json.dumps
+    - organized.append
+    - seen.add
+    - organized.extend
+    - key.startswith
+    - json.dumps(file_details['file_info']['file_summary']).replace
+    - str
+    edges:
+    - source: code_graph
+      target: nx.DiGraph
+      target_inputs: []
+    - source: code_graph
+      target: function_details_lookup.update
+      target_inputs:
+      - function_def
+    - source: code_graph
+      target: class_def.items
+      target_inputs: []
+    - source: code_graph
+      target: G.add_node
+      target_inputs:
+      - class_name
+      - qualified_method_name
+      - called
+      - function_name
+    - source: code_graph
+      target: class_details['method_defs'].items
+      target_inputs: []
+    - source: code_graph
+      target: G.add_edge
+      target_inputs:
+      - class_name
+      - qualified_method_name
+      - source
+      - target
+    - source: code_graph
+      target: target_details.get
+      target_inputs:
+      - '''inputs'''
+      - '''returns'''
+      - '[]'
+    - source: code_graph
+      target: list
+      target_inputs:
+      - set(target_details.get('returns', []))
+      - class_def.keys()
+      - G.nodes
+    - source: code_graph
+      target: set
+      target_inputs:
+      - target_details.get('returns', [])
+    - source: code_graph
+      target: class_method_details_lookup.get
+      target_inputs:
+      - init_method or target
+      - source
+      - target
+      - source
+    - source: code_graph
+      target: function_details_lookup.get
+      target_inputs:
+      - target
+      - source
+      - target
+      - source
+    - source: code_graph
+      target: get_edge_data_from_details
+      target_inputs:
+      - target_details
+      - source_details
+      - target
+      - target_details
+      - source_details
+      - target
+      target_returns:
+      - edge_data
+    - source: code_graph
+      target: class_def.keys
+      target_inputs: []
+    - source: code_graph
+      target: called.split
+      target_inputs:
+      - '''.'''
+    - source: code_graph
+      target: called.startswith
+      target_inputs:
+      - '''self.'''
+    - source: code_graph
+      target: called.replace
+      target_inputs:
+      - '''self.'''
+      - ''''''
+    - source: code_graph
+      target: source_name.split
+      target_inputs:
+      - '''.'''
+      - '''.'''
+    - source: code_graph
+      target: add_edge_with_data
+      target_inputs:
+      - source_name
+      - fully_qualified_name
+      - source_name
+      - called
+      - source_name
+      - called
+      - init_method
+      - source_name
+      - called
+      target_returns: []
+    - source: code_graph
+      target: function_details_lookup.items
+      target_inputs: []
+    - source: code_graph
+      target: add_edges_for_calls
+      target_inputs:
+      - func_name
+      - details['calls']
+      - qualified_method_name
+      - details['calls']
+      target_returns: []
+    - source: code_graph
+      target: class_method_details_lookup.items
+      target_inputs: []
+    - source: code_graph
+      target: G[source][target].update
+      target_inputs:
+      - edge_data
+    - source: code_graph
+      target: G.edges.data
+      target_inputs: []
+    - source: code_graph
+      target: nodes_to_remove.append
+      target_inputs:
+      - node
+    - source: get_edge_data_from_details
+      target: target_details.get
+      target_inputs:
+      - '''inputs'''
+      - '''returns'''
+      - '[]'
+    - source: get_edge_data_from_details
+      target: list
+      target_inputs:
+      - set(target_details.get('returns', []))
+    - source: get_edge_data_from_details
+      target: set
+      target_inputs:
+      - target_details.get('returns', [])
+    - source: add_edge_with_data
+      target: class_method_details_lookup.get
+      target_inputs:
+      - init_method or target
+      - source
+    - source: add_edge_with_data
+      target: function_details_lookup.get
+      target_inputs:
+      - target
+      - source
+    - source: add_edge_with_data
+      target: G.add_edge
+      target_inputs:
+      - source
+      - target
+    - source: add_edge_with_data
+      target: get_edge_data_from_details
+      target_inputs:
+      - target_details
+      - source_details
+      - target
+      target_returns:
+      - edge_data
+    - source: add_edges_for_calls
+      target: list
+      target_inputs:
+      - class_def.keys()
+    - source: add_edges_for_calls
+      target: class_def.keys
+      target_inputs: []
+    - source: add_edges_for_calls
+      target: called.split
+      target_inputs:
+      - '''.'''
+    - source: add_edges_for_calls
+      target: called.startswith
+      target_inputs:
+      - '''self.'''
+    - source: add_edges_for_calls
+      target: called.replace
+      target_inputs:
+      - '''self.'''
+      - ''''''
+    - source: add_edges_for_calls
+      target: source_name.split
+      target_inputs:
+      - '''.'''
+      - '''.'''
+    - source: add_edges_for_calls
+      target: add_edge_with_data
+      target_inputs:
+      - source_name
+      - fully_qualified_name
+      - source_name
+      - called
+      - source_name
+      - called
+      - init_method
+      - source_name
+      - called
+      target_returns: []
+    - source: add_edges_for_calls
+      target: G.add_node
+      target_inputs:
+      - called
+    - source: extract_control_flow_tree
+      target: isinstance
+      target_inputs:
+      - node
+      - (ast.FunctionDef, ast.AsyncFunctionDef)
+      - node
+      - ast.If
+      - orelse[0]
+      - ast.If
+      - node
+      - ast.Return
+      - node
+      - ast.Try
+      - handler.name
+      - ast.Name
+      - node
+      - ast.While
+      - node
+      - ast.For
+      - node
+      - ast.With
+      - node
+      - ast.ClassDef
+      - node
+      - getattr(ast, node_keywords_map[keyword])
+    - source: extract_control_flow_tree
+      target: ''', ''.join'
+      target_inputs:
+      - '[ast.unparse(arg) for arg in node.args.args]'
+      - '[ast.unparse(item) for item in node.items]'
+    - source: extract_control_flow_tree
+      target: ast.unparse
+      target_inputs:
+      - arg
+      - node.test
+      - orelse[0].test
+      - node.value
+      - handler.type
+      - handler.name
+      - node.test
+      - node.target
+      - node.iter
+      - item
+      - node
+      - node
+    - source: extract_control_flow_tree
+      target: control_flow_tree.append
+      target_inputs:
+      - '{f''def {node.name}({args_str})'': extract_control_flow_tree(node.body)}'
+      - if_block
+      - '{''return'': [ast.unparse(node.value)]}'
+      - '{''return'': []}'
+      - control_flow_dict
+      - '{f''while {ast.unparse(node.test)}'': extract_control_flow_tree(node.body)}'
+      - '{f''for {ast.unparse(node.target)} in {ast.unparse(node.iter)}'': extract_control_flow_tree(node.body)}'
+      - '{f"with {'', ''.join([ast.unparse(item) for item in node.items])}": extract_control_flow_tree(node.body)}'
+      - '{f''class {node.name}'': extract_control_flow_tree(node.body)}'
+      - '{ast.unparse(node): []}'
+      - ast.unparse(node)
+    - source: extract_control_flow_tree
+      target: extract_control_flow_tree
+      target_inputs:
+      - node.body
+      - node.body
+      - orelse[0].body
+      - orelse
+      - node.body
+      - handler.body
+      - node.orelse
+      - node.finalbody
+      - node.body
+      - node.body
+      - node.body
+      - node.body
+      target_returns:
+      - control_flow_tree
+    - source: extract_control_flow_tree
+      target: if_block.update
+      target_inputs:
+      - '{f''elif {ast.unparse(orelse[0].test)}'': extract_control_flow_tree(orelse[0].body)}'
+      - '{''else'': extract_control_flow_tree(orelse)}'
+    - source: extract_control_flow_tree
+      target: except_block.append
+      target_inputs:
+      - '{f''except {handler_type} as {handler_name}:'': extract_control_flow_tree(handler.body)}'
+    - source: extract_control_flow_tree
+      target: any
+      target_inputs:
+      - (isinstance(node, getattr(ast, node_keywords_map[keyword])) for keyword in
+        node_keywords_map.keys())
+    - source: extract_control_flow_tree
+      target: getattr
+      target_inputs:
+      - ast
+      - node_keywords_map[keyword]
+    - source: extract_control_flow_tree
+      target: node_keywords_map.keys
+      target_inputs: []
+    - source: reorganize_control_flow
+      target: set
+      target_inputs: []
+    - source: reorganize_control_flow
+      target: isinstance
+      target_inputs:
+      - element
+      - dict
+      - element
+      - str
+    - source: reorganize_control_flow
+      target: next
+      target_inputs:
+      - iter(element)
+    - source: reorganize_control_flow
+      target: iter
+      target_inputs:
+      - element
+    - source: reorganize_control_flow
+      target: json.dumps
+      target_inputs:
+      - element
+      - elem
+    - source: reorganize_control_flow
+      target: organized.append
+      target_inputs:
+      - element
+      - element
+    - source: reorganize_control_flow
+      target: seen.add
+      target_inputs:
+      - element_id
+    - source: reorganize_control_flow
+      target: organized.extend
+      target_inputs:
+      - remaining
+    - source: reorganize_control_flow
+      target: reorganize_structure
+      target_inputs:
+      - control_flow_structure
+      - starting_points
+      target_returns:
+      - organized
+    - source: reorganize_structure
+      target: set
+      target_inputs: []
+    - source: reorganize_structure
+      target: isinstance
+      target_inputs:
+      - element
+      - dict
+      - element
+      - str
+    - source: reorganize_structure
+      target: next
+      target_inputs:
+      - iter(element)
+    - source: reorganize_structure
+      target: iter
+      target_inputs:
+      - element
+    - source: reorganize_structure
+      target: json.dumps
+      target_inputs:
+      - element
+      - elem
+    - source: reorganize_structure
+      target: organized.append
+      target_inputs:
+      - element
+      - element
+    - source: reorganize_structure
+      target: seen.add
+      target_inputs:
+      - element_id
+    - source: reorganize_structure
+      target: organized.extend
+      target_inputs:
+      - remaining
+    - source: get_plantUML_element
+      target: isinstance
+      target_inputs:
+      - element
+      - dict
+      - value
+      - list
+      - element
+      - str
+    - source: get_plantUML_element
+      target: next
+      target_inputs:
+      - iter(element)
+    - source: get_plantUML_element
+      target: iter
+      target_inputs:
+      - element
+    - source: get_plantUML_element
+      target: key.startswith
+      target_inputs:
+      - '''def '''
+      - '''class '''
+      - '''if '''
+      - '''for '''
+      - '''while '''
+      - '''asyncfor '''
+      - '''try '''
+      - '''except '''
+      - '''def '''
+      - '''class '''
+      - '''if '''
+      - '''for '''
+      - '''while '''
+      - '''asyncfor '''
+      - '''try '''
+      - '''except '''
+    - source: get_plantUML_element
+      target: get_plantUML_element
+      target_inputs:
+      - child
+      - inner_indentation
+      target_returns:
+      - plantuml_str
+    - source: get_plantUML
+      target: get_plantUML_element
+      target_inputs:
+      - element
+      - '''  '''
+      target_returns:
+      - plantuml_str
+    - source: get_code_graph
+      target: code_graph
+      target_inputs:
+      - file_details['file_info']['file_summary']
+      target_returns:
+      - edge_data
+      - '{''nodes'': nodes, ''edges'': edges}'
+    - source: get_code_graph
+      target: json.dumps(file_details['file_info']['file_summary']).replace
+      target_inputs:
+      - '''"'''
+      - ''''''
+    - source: get_code_graph
+      target: json.dumps
+      target_inputs:
+      - file_details['file_info']['file_summary']
+    - source: get_code_graph
+      target: reorganize_control_flow
+      target_inputs:
+      - file_details['file_info']['entire_code_graph']
+      - extract_control_flow_tree(file_ast.body)
+      target_returns:
+      - reorganize_structure(control_flow_structure, starting_points)
+      - organized
+    - source: get_code_graph
+      target: extract_control_flow_tree
+      target_inputs:
+      - file_ast.body
+      target_returns:
+      - control_flow_tree
+    - source: get_code_graph
+      target: get_plantUML
+      target_inputs:
+      - file_details
+      target_returns:
+      - plantuml_str
+    - source: get_code_graph
+      target: str
+      target_inputs:
+      - e
+      - e
+  control_flow_structure:
+  - '''\nRequirements\n[req01] The code_graph function performs the following:\n        a.
+    Extracts the function and class method details from the file summary.\n        b.
+    Creates a lookup dictionary for function and class method details.\n        c.
+    Creates a directed graph with nodes and edges representing the relationships in
+    the code.\n        d. Adds edges for function and class method calls.\n        e.
+    Adds edge data to edges.\n        f. Returns a dictionary with nodes and edges
+    representing the relationships in the code.\n[req02] The extract_control_flow_tree
+    function performs the following:\n        a. Extracts control flow tree from AST.\n        b.
+    Returns control flow tree.\n[req03] The reorganize_control_flow function performs
+    the following:\n        a. Gets starting points from the code graph.\n        b.
+    Reorganizes the control flow structure recursively.\n        c. Returns reorganized
+    control flow structure.\n[req04] The get_plantUML_element function performs the
+    following:\n        a. Gets plantUML code for each element.\n        b. Returns
+    plantUML code for each element.\n[req05] The get_plantUML function performs the
+    following: \n        a. Gets plantUML code for entire file.\n        b. Returns
+    plantUML code for entire file.\n[req06] The get_code_graph function performs the
+    following:\n        a. Adds code graph and control flow to file details.\n        b.
+    Returns file details.\n'''
+  - def get_code_graph(file_details):
+    - '''\n    Add code graph and control flow to file details.\n    Args:\n        file_details:
+      file details\n    Returns:\n        file_details: file details\n    '''
+    - file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary'])
+    - file_details['file_info']['file_summary'] = json.dumps(file_details['file_info']['file_summary']).replace('"',
+      '')
+    - try:
+      - file_ast = file_details['file_info']['file_ast']
+      - file_details['file_info']['control_flow_structure'] = reorganize_control_flow(file_details['file_info']['entire_code_graph'],
+        extract_control_flow_tree(file_ast.body))
+      - file_details['file_info']['plantUML'] = get_plantUML(file_details)
+      except:
+      - 'except Exception as :':
+        - file_details['file_info']['control_flow_structure'] = [str(e)]
+        - file_details['file_info']['plantUML'] = str(e)
+    - del file_details['file_info']['file_ast']
+    - return:
+      - file_details
+  - '''\nRequirements\n[req01] The code_graph function performs the following:\n        a.
+    Extracts the function and class method details from the file summary.\n        b.
+    Creates a lookup dictionary for function and class method details.\n        c.
+    Creates a directed graph with nodes and edges representing the relationships in
+    the code.\n        d. Adds edges for function and class method calls.\n        e.
+    Adds edge data to edges.\n        f. Returns a dictionary with nodes and edges
+    representing the relationships in the code.\n[req02] The extract_control_flow_tree
+    function performs the following:\n        a. Extracts control flow tree from AST.\n        b.
+    Returns control flow tree.\n[req03] The reorganize_control_flow function performs
+    the following:\n        a. Gets starting points from the code graph.\n        b.
+    Reorganizes the control flow structure recursively.\n        c. Returns reorganized
+    control flow structure.\n[req04] The get_plantUML_element function performs the
+    following:\n        a. Gets plantUML code for each element.\n        b. Returns
+    plantUML code for each element.\n[req05] The get_plantUML function performs the
+    following: \n        a. Gets plantUML code for entire file.\n        b. Returns
+    plantUML code for entire file.\n[req06] The get_code_graph function performs the
+    following:\n        a. Adds code graph and control flow to file details.\n        b.
+    Returns file details.\n'''
+  - import ast
+  - import json
+  - from typing import Dict, List, Optional, Union
+  - import networkx as nx
+  - 'def code_graph(file_summary: Dict[str, Union[Dict, str]])':
+    - '''\n    Create a dictionary representation of file details.\n    Args:\n        file_summary:
+      Dict[str, Union[Dict, str]]: The details extracted from the file.\n    Returns:\n        dict:
+      A dictionary with nodes and edges representing the relationships in the code.\n    '''
+    - G = nx.DiGraph()
+    - function_details_lookup = {}
+    - for function_def in file_summary['function_defs']:
+      - function_details_lookup.update(function_def)
+    - class_method_details_lookup = {}
+    - for class_def in file_summary['class_defs']:
+      - for (class_name, class_details) in class_def.items():
+        - G.add_node(class_name)
+        - for (method_name, method_details) in class_details['method_defs'].items():
+          - qualified_method_name = f'{class_name}.{method_name}'
+          - G.add_node(qualified_method_name)
+          - class_method_details_lookup[qualified_method_name] = method_details
+          - G.add_edge(class_name, qualified_method_name)
+    - 'def get_edge_data_from_details(target_details: dict, source_details: dict, target: str)':
+      - edge_data = {}
+      - if target_details:
+        - edge_data['target_inputs'] = target_details.get('inputs')
+        - edge_data['target_returns'] = list(set(target_details.get('returns', [])))
+      - if source_details and 'call_inputs' in source_details and (target in source_details['call_inputs']):
+        - edge_data['target_inputs'] = source_details['call_inputs'][target]
+      - return:
+        - edge_data
+    - 'def add_edge_with_data(source: str, target: str, init_method: Optional[str])':
+      - target_details = class_method_details_lookup.get(init_method or target) or
+        function_details_lookup.get(target)
+      - source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source)
+      - G.add_edge(source, target, **get_edge_data_from_details(target_details, source_details,
+        target))
+    - def add_edges_for_calls(source_name, calls):
+      - class_names = [list(class_def.keys())[0] for class_def in file_summary['class_defs']]
+      - for called in calls:
+        - called_class_name = called.split('.')[0]
+        - if called.startswith('self.'):
+          - method_name = called.replace('self.', '')
+          - fully_qualified_name = f"{source_name.split('.')[0]}.{method_name}"
+          - if fully_qualified_name in class_method_details_lookup:
+            - add_edge_with_data(source_name, fully_qualified_name)
+            - continue
+        - ? if called in function_details_lookup or called in class_method_details_lookup
+            or f"{source_name.split('.')[0]}.{called}" in class_method_details_lookup
+          : - add_edge_with_data(source_name, called)
+          elif called_class_name in class_names:
+          - init_method = None
+          - init_method_name = f'{called}.__init__'
+          - if init_method_name in class_method_details_lookup:
+            - init_method = init_method_name
+          - add_edge_with_data(source_name, called, init_method)
+          else:
+          - G.add_node(called)
+          - add_edge_with_data(source_name, called)
+    - for function_name in function_details_lookup:
+      - G.add_node(function_name)
+    - for (func_name, details) in function_details_lookup.items():
+      - add_edges_for_calls(func_name, details['calls'])
+    - for (qualified_method_name, details) in class_method_details_lookup.items():
+      - add_edges_for_calls(qualified_method_name, details['calls'])
+    - for edge in G.edges:
+      - source, target = edge
+      - target_details = function_details_lookup.get(target) or class_method_details_lookup.get(target)
+      - source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source)
+      - edge_data = get_edge_data_from_details(target_details, source_details, target)
+      - G[source][target].update(edge_data)
+    - nodes = list(G.nodes)
+    - 'edges = [{''source'': edge[0], ''target'': edge[1], **edge[2]} for edge in
+      G.edges.data()]'
+    - nodes_to_remove = []
+    - for node in nodes:
+      - if node not in [edge['source'] for edge in edges] and node not in [edge['target'] for edge in edges]:
+        - nodes_to_remove.append(node)
+    - return:
+      - '{''nodes'': nodes, ''edges'': edges}'
+  - 'def extract_control_flow_tree(nodes: List[ast.AST])':
+    - '''\n    Extract control flow tree from AST.\n    Args:\n        nodes: AST
+      nodes\n    Returns:\n        control_flow_tree: control flow tree\n    '''
+    - control_flow_tree = []
+    - 'node_keywords_map = {''if'': ''If'', ''while'': ''While'', ''for'': ''For'',
+      ''asyncfor'': ''AsyncFor'', ''with'': ''With'', ''asyncwith'': ''AsyncWith'',
+      ''try'': ''Try'', ''except'': ''ExceptHandler'', ''def'': ''FunctionDef'', ''asyncdef'':
+      ''AsyncFunctionDef'', ''class'': ''ClassDef'', ''return'': ''Return''}'
+    - for node in nodes:
+      - if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        - args_str = ', '.join([ast.unparse(arg) for arg in node.args.args])
+        - 'control_flow_tree.append({f''def {node.name}({args_str})'': extract_control_flow_tree(node.body)})'
+        elif isinstance(node, ast.If):
+        - 'if_block = {f''if {ast.unparse(node.test)}'': extract_control_flow_tree(node.body)}'
+        - orelse = node.orelse
+        - while orelse and isinstance(orelse[0], ast.If):
+          - 'if_block.update({f''elif {ast.unparse(orelse[0].test)}'': extract_control_flow_tree(orelse[0].body)})'
+          - orelse = orelse[0].orelse
+        - if orelse:
+          - 'if_block.update({''else'': extract_control_flow_tree(orelse)})'
+        - control_flow_tree.append(if_block)
+        elif isinstance(node, ast.Return):
+        - if node.value is not None:
+          - 'control_flow_tree.append({''return'': [ast.unparse(node.value)]})'
+          else:
+          - 'control_flow_tree.append({''return'': []})'
+        elif isinstance(node, ast.Try):
+        - try_block = extract_control_flow_tree(node.body)
+        - except_block = []
+        - for handler in node.handlers:
+          - handler_type = ast.unparse(handler.type) if handler.type is not None else
+            ''
+          - handler_name = ast.unparse(handler.name) if isinstance(handler.name, ast.Name)
+            else ''
+          - 'except_block.append({f''except {handler_type} as {handler_name}:'': extract_control_flow_tree(handler.body)})'
+        - 'control_flow_dict = {''try'': try_block, ''except'': except_block}'
+        - if node.orelse:
+          - else_block = extract_control_flow_tree(node.orelse)
+          - control_flow_dict['else'] = else_block
+        - if node.finalbody:
+          - finally_block = extract_control_flow_tree(node.finalbody)
+          - control_flow_dict['finally'] = finally_block
+        - control_flow_tree.append(control_flow_dict)
+        elif isinstance(node, ast.While):
+        - 'control_flow_tree.append({f''while {ast.unparse(node.test)}'': extract_control_flow_tree(node.body)})'
+        elif isinstance(node, ast.For):
+        - 'control_flow_tree.append({f''for {ast.unparse(node.target)} in {ast.unparse(node.iter)}'':
+          extract_control_flow_tree(node.body)})'
+        elif isinstance(node, ast.With):
+        - 'control_flow_tree.append({f"with {'', ''.join([ast.unparse(item) for item
+          in node.items])}": extract_control_flow_tree(node.body)})'
+        elif isinstance(node, ast.ClassDef):
+        - 'control_flow_tree.append({f''class {node.name}'': extract_control_flow_tree(node.body)})'
+        elif any((isinstance(node, getattr(ast, node_keywords_map[keyword])) for keyword in node_keywords_map.keys())):
+        - 'control_flow_tree.append({ast.unparse(node): []})'
+        else:
+        - control_flow_tree.append(ast.unparse(node))
+    - return:
+      - control_flow_tree
+  - def reorganize_control_flow(code_graph, control_flow_structure):
+    - '''\n    Reorganize control flow sturcture to match the code graph.\n    Args:\n        file_details:
+      file details\n        control_flow_structure: control flow structure\n    Returns:\n        reorganized_control_flow_structure:
+      reorganized control flow structure\n    '''
+    - targets = [edge['target'] for edge in code_graph['edges']]
+    - starting_points = [node for node in code_graph['nodes'] if node not in targets]
+    - def reorganize_structure(structure, start_points):
+      - organized, seen = ([], set())
+      - for start in start_points:
+        - for element in structure:
+          - if isinstance(element, dict):
+            - key = next(iter(element))
+            - if start in key:
+              - element_id = json.dumps(element)
+              - if element_id not in seen:
+                - organized.append(element)
+                - seen.add(element_id)
+            elif isinstance(element, str) and start in element:
+            - organized.append(element)
+      - remaining = [elem for elem in structure if json.dumps(elem) not in seen]
+      - organized.extend(remaining)
+      - return:
+        - organized
+    - return:
+      - reorganize_structure(control_flow_structure, starting_points)
+  - def get_plantUML_element(element, indentation):
+    - '''\n    Get plantUML code for each element.\n    Args:\n        element: element\n        indentation:
+      current indentation level\n    Returns:\n        plantuml_str: plantUML code
+      for each element\n    '''
+    - plantuml_str = ''
+    - if isinstance(element, dict):
+      - key = next(iter(element))
+      - value = element[key]
+      - if key.startswith('def ') or key.startswith('class '):
+        - plantuml_str += f'{indentation}class {value} {{\n'
+        - inner_indentation = indentation + '  '
+        elif key.startswith('if '):
+        - plantuml_str += f'{indentation}if ({value}) {{\n'
+        - inner_indentation = indentation + '  '
+        elif key.startswith('for ') or key.startswith('while ') or key.startswith('asyncfor '):
+        - plantuml_str += f'{indentation}while ({value}) {{\n'
+        - inner_indentation = indentation + '  '
+        elif key.startswith('try '):
+        - plantuml_str += f'{indentation}try {{\n'
+        - inner_indentation = indentation + '  '
+        elif key.startswith('except '):
+        - plantuml_str += f'{indentation}catch ({value}) {{\n'
+        - inner_indentation = indentation + '  '
+        else:
+        - plantuml_str += f'{indentation}:{key};\n'
+        - inner_indentation = indentation
+      - if isinstance(value, list):
+        - for child in value:
+          - plantuml_str += get_plantUML_element(child, inner_indentation)
+      - if key.startswith('def ') or key.startswith('class '):
+        - plantuml_str += f'{indentation}}}\n'
+        ? elif key.startswith('if ') or key.startswith('for ') or key.startswith('while
+          ') or key.startswith('asyncfor ') or key.startswith('try ') or key.startswith('except
+          ')
+        : - plantuml_str += f'{indentation}}}\n'
+      elif isinstance(element, str):
+      - plantuml_str += f'{indentation}:{element};\n'
+    - return:
+      - plantuml_str
+  - def get_plantUML(file_details):
+    - '''\n    Get plantUML code for entire file.\n    Args:\n        file_details:
+      file details\n    Returns:\n        plantuml_str: plantUML code for entire file\n    '''
+    - plantuml_str = '@startuml\n'
+    - for element in file_details['file_info']['control_flow_structure']:
+      - plantuml_str += get_plantUML_element(element, '  ')
+    - plantuml_str += 'end\n@enduml'
+    - return:
+      - plantuml_str
+  plantUML: "@startuml\n  :'\\nRequirements\\n[req01] The code_graph function performs\
+    \ the following:\\n        a. Extracts the function and class method details from\
+    \ the file summary.\\n        b. Creates a lookup dictionary for function and\
+    \ class method details.\\n        c. Creates a directed graph with nodes and edges\
+    \ representing the relationships in the code.\\n        d. Adds edges for function\
+    \ and class method calls.\\n        e. Adds edge data to edges.\\n        f. Returns\
+    \ a dictionary with nodes and edges representing the relationships in the code.\\\
+    n[req02] The extract_control_flow_tree function performs the following:\\n   \
+    \     a. Extracts control flow tree from AST.\\n        b. Returns control flow\
+    \ tree.\\n[req03] The reorganize_control_flow function performs the following:\\\
+    n        a. Gets starting points from the code graph.\\n        b. Reorganizes\
+    \ the control flow structure recursively.\\n        c. Returns reorganized control\
+    \ flow structure.\\n[req04] The get_plantUML_element function performs the following:\\\
+    n        a. Gets plantUML code for each element.\\n        b. Returns plantUML\
+    \ code for each element.\\n[req05] The get_plantUML function performs the following:\
+    \ \\n        a. Gets plantUML code for entire file.\\n        b. Returns plantUML\
+    \ code for entire file.\\n[req06] The get_code_graph function performs the following:\\\
+    n        a. Adds code graph and control flow to file details.\\n        b. Returns\
+    \ file details.\\n';\n  class [\"'\\\\n    Add code graph and control flow to\
+    \ file details.\\\\n    Args:\\\\n        file_details: file details\\\\n    Returns:\\\
+    \\n        file_details: file details\\\\n    '\", \"file_details['file_info']['entire_code_graph']\
+    \ = code_graph(file_details['file_info']['file_summary'])\", 'file_details[\\\
+    'file_info\\'][\\'file_summary\\'] = json.dumps(file_details[\\'file_info\\'][\\\
+    'file_summary\\']).replace(\\'\"\\', \\'\\')', {'try': [\"file_ast = file_details['file_info']['file_ast']\"\
+    , \"file_details['file_info']['control_flow_structure'] = reorganize_control_flow(file_details['file_info']['entire_code_graph'],\
+    \ extract_control_flow_tree(file_ast.body))\", \"file_details['file_info']['plantUML']\
+    \ = get_plantUML(file_details)\"], 'except': [{'except Exception as :': [\"file_details['file_info']['control_flow_structure']\
+    \ = [str(e)]\", \"file_details['file_info']['plantUML'] = str(e)\"]}]}, \"del\
+    \ file_details['file_info']['file_ast']\", {'return': ['file_details']}] {\n \
+    \   :'\\n    Add code graph and control flow to file details.\\n    Args:\\n \
+    \       file_details: file details\\n    Returns:\\n        file_details: file\
+    \ details\\n    ';\n    :file_details['file_info']['entire_code_graph'] = code_graph(file_details['file_info']['file_summary']);\n\
+    \    :file_details['file_info']['file_summary'] = json.dumps(file_details['file_info']['file_summary']).replace('\"\
+    ', '');\n    :try;\n    :file_ast = file_details['file_info']['file_ast'];\n \
+    \   :file_details['file_info']['control_flow_structure'] = reorganize_control_flow(file_details['file_info']['entire_code_graph'],\
+    \ extract_control_flow_tree(file_ast.body));\n    :file_details['file_info']['plantUML']\
+    \ = get_plantUML(file_details);\n    :del file_details['file_info']['file_ast'];\n\
+    \    :return;\n    :file_details;\n  }\n  :'\\nRequirements\\n[req01] The code_graph\
+    \ function performs the following:\\n        a. Extracts the function and class\
+    \ method details from the file summary.\\n        b. Creates a lookup dictionary\
+    \ for function and class method details.\\n        c. Creates a directed graph\
+    \ with nodes and edges representing the relationships in the code.\\n        d.\
+    \ Adds edges for function and class method calls.\\n        e. Adds edge data\
+    \ to edges.\\n        f. Returns a dictionary with nodes and edges representing\
+    \ the relationships in the code.\\n[req02] The extract_control_flow_tree function\
+    \ performs the following:\\n        a. Extracts control flow tree from AST.\\\
+    n        b. Returns control flow tree.\\n[req03] The reorganize_control_flow function\
+    \ performs the following:\\n        a. Gets starting points from the code graph.\\\
+    n        b. Reorganizes the control flow structure recursively.\\n        c. Returns\
+    \ reorganized control flow structure.\\n[req04] The get_plantUML_element function\
+    \ performs the following:\\n        a. Gets plantUML code for each element.\\\
+    n        b. Returns plantUML code for each element.\\n[req05] The get_plantUML\
+    \ function performs the following: \\n        a. Gets plantUML code for entire\
+    \ file.\\n        b. Returns plantUML code for entire file.\\n[req06] The get_code_graph\
+    \ function performs the following:\\n        a. Adds code graph and control flow\
+    \ to file details.\\n        b. Returns file details.\\n';\n  :import ast;\n \
+    \ :import json;\n  :from typing import Dict, List, Optional, Union;\n  :import\
+    \ networkx as nx;\n  class [\"'\\\\n    Create a dictionary representation of\
+    \ file details.\\\\n    Args:\\\\n        file_summary: Dict[str, Union[Dict,\
+    \ str]]: The details extracted from the file.\\\\n    Returns:\\\\n        dict:\
+    \ A dictionary with nodes and edges representing the relationships in the code.\\\
+    \\n    '\", 'G = nx.DiGraph()', 'function_details_lookup = {}', {\"for function_def\
+    \ in file_summary['function_defs']\": ['function_details_lookup.update(function_def)']},\
+    \ 'class_method_details_lookup = {}', {\"for class_def in file_summary['class_defs']\"\
+    : [{'for (class_name, class_details) in class_def.items()': ['G.add_node(class_name)',\
+    \ {\"for (method_name, method_details) in class_details['method_defs'].items()\"\
+    : [\"qualified_method_name = f'{class_name}.{method_name}'\", 'G.add_node(qualified_method_name)',\
+    \ 'class_method_details_lookup[qualified_method_name] = method_details', 'G.add_edge(class_name,\
+    \ qualified_method_name)']}]}]}, {'def get_edge_data_from_details(target_details:\
+    \ dict, source_details: dict, target: str)': ['edge_data = {}', {'if target_details':\
+    \ [\"edge_data['target_inputs'] = target_details.get('inputs')\", \"edge_data['target_returns']\
+    \ = list(set(target_details.get('returns', [])))\"]}, {\"if source_details and\
+    \ 'call_inputs' in source_details and (target in source_details['call_inputs'])\"\
+    : [\"edge_data['target_inputs'] = source_details['call_inputs'][target]\"]}, {'return':\
+    \ ['edge_data']}]}, {'def add_edge_with_data(source: str, target: str, init_method:\
+    \ Optional[str])': ['target_details = class_method_details_lookup.get(init_method\
+    \ or target) or function_details_lookup.get(target)', 'source_details = function_details_lookup.get(source)\
+    \ or class_method_details_lookup.get(source)', 'G.add_edge(source, target, **get_edge_data_from_details(target_details,\
+    \ source_details, target))']}, {'def add_edges_for_calls(source_name, calls)':\
+    \ [\"class_names = [list(class_def.keys())[0] for class_def in file_summary['class_defs']]\"\
+    , {'for called in calls': [\"called_class_name = called.split('.')[0]\", {\"if\
+    \ called.startswith('self.')\": [\"method_name = called.replace('self.', '')\"\
+    , 'fully_qualified_name = f\"{source_name.split(\\'.\\')[0]}.{method_name}\"',\
+    \ {'if fully_qualified_name in class_method_details_lookup': ['add_edge_with_data(source_name,\
+    \ fully_qualified_name)', 'continue']}]}, {'if called in function_details_lookup\
+    \ or called in class_method_details_lookup or f\"{source_name.split(\\'.\\')[0]}.{called}\"\
+    \ in class_method_details_lookup': ['add_edge_with_data(source_name, called)'],\
+    \ 'elif called_class_name in class_names': ['init_method = None', \"init_method_name\
+    \ = f'{called}.__init__'\", {'if init_method_name in class_method_details_lookup':\
+    \ ['init_method = init_method_name']}, 'add_edge_with_data(source_name, called,\
+    \ init_method)'], 'else': ['G.add_node(called)', 'add_edge_with_data(source_name,\
+    \ called)']}]}]}, {'for function_name in function_details_lookup': ['G.add_node(function_name)']},\
+    \ {'for (func_name, details) in function_details_lookup.items()': [\"add_edges_for_calls(func_name,\
+    \ details['calls'])\"]}, {'for (qualified_method_name, details) in class_method_details_lookup.items()':\
+    \ [\"add_edges_for_calls(qualified_method_name, details['calls'])\"]}, {'for edge\
+    \ in G.edges': ['source, target = edge', 'target_details = function_details_lookup.get(target)\
+    \ or class_method_details_lookup.get(target)', 'source_details = function_details_lookup.get(source)\
+    \ or class_method_details_lookup.get(source)', 'edge_data = get_edge_data_from_details(target_details,\
+    \ source_details, target)', 'G[source][target].update(edge_data)']}, 'nodes =\
+    \ list(G.nodes)', \"edges = [{'source': edge[0], 'target': edge[1], **edge[2]}\
+    \ for edge in G.edges.data()]\", 'nodes_to_remove = []', {'for node in nodes':\
+    \ [{\"if node not in [edge['source'] for edge in edges] and node not in [edge['target']\
+    \ for edge in edges]\": ['nodes_to_remove.append(node)']}]}, {'return': [\"{'nodes':\
+    \ nodes, 'edges': edges}\"]}] {\n    :'\\n    Create a dictionary representation\
+    \ of file details.\\n    Args:\\n        file_summary: Dict[str, Union[Dict, str]]:\
+    \ The details extracted from the file.\\n    Returns:\\n        dict: A dictionary\
+    \ with nodes and edges representing the relationships in the code.\\n    ';\n\
+    \    :G = nx.DiGraph();\n    :function_details_lookup = {};\n    while (['function_details_lookup.update(function_def)'])\
+    \ {\n      :function_details_lookup.update(function_def);\n    }\n    :class_method_details_lookup\
+    \ = {};\n    while ([{'for (class_name, class_details) in class_def.items()':\
+    \ ['G.add_node(class_name)', {\"for (method_name, method_details) in class_details['method_defs'].items()\"\
+    : [\"qualified_method_name = f'{class_name}.{method_name}'\", 'G.add_node(qualified_method_name)',\
+    \ 'class_method_details_lookup[qualified_method_name] = method_details', 'G.add_edge(class_name,\
+    \ qualified_method_name)']}]}]) {\n      while (['G.add_node(class_name)', {\"\
+    for (method_name, method_details) in class_details['method_defs'].items()\": [\"\
+    qualified_method_name = f'{class_name}.{method_name}'\", 'G.add_node(qualified_method_name)',\
+    \ 'class_method_details_lookup[qualified_method_name] = method_details', 'G.add_edge(class_name,\
+    \ qualified_method_name)']}]) {\n        :G.add_node(class_name);\n        while\
+    \ ([\"qualified_method_name = f'{class_name}.{method_name}'\", 'G.add_node(qualified_method_name)',\
+    \ 'class_method_details_lookup[qualified_method_name] = method_details', 'G.add_edge(class_name,\
+    \ qualified_method_name)']) {\n          :qualified_method_name = f'{class_name}.{method_name}';\n\
+    \          :G.add_node(qualified_method_name);\n          :class_method_details_lookup[qualified_method_name]\
+    \ = method_details;\n          :G.add_edge(class_name, qualified_method_name);\n\
+    \        }\n      }\n    }\n    class ['edge_data = {}', {'if target_details':\
+    \ [\"edge_data['target_inputs'] = target_details.get('inputs')\", \"edge_data['target_returns']\
+    \ = list(set(target_details.get('returns', [])))\"]}, {\"if source_details and\
+    \ 'call_inputs' in source_details and (target in source_details['call_inputs'])\"\
+    : [\"edge_data['target_inputs'] = source_details['call_inputs'][target]\"]}, {'return':\
+    \ ['edge_data']}] {\n      :edge_data = {};\n      if ([\"edge_data['target_inputs']\
+    \ = target_details.get('inputs')\", \"edge_data['target_returns'] = list(set(target_details.get('returns',\
+    \ [])))\"]) {\n        :edge_data['target_inputs'] = target_details.get('inputs');\n\
+    \        :edge_data['target_returns'] = list(set(target_details.get('returns',\
+    \ [])));\n      }\n      if ([\"edge_data['target_inputs'] = source_details['call_inputs'][target]\"\
+    ]) {\n        :edge_data['target_inputs'] = source_details['call_inputs'][target];\n\
+    \      }\n      :return;\n      :edge_data;\n    }\n    class ['target_details\
+    \ = class_method_details_lookup.get(init_method or target) or function_details_lookup.get(target)',\
+    \ 'source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source)',\
+    \ 'G.add_edge(source, target, **get_edge_data_from_details(target_details, source_details,\
+    \ target))'] {\n      :target_details = class_method_details_lookup.get(init_method\
+    \ or target) or function_details_lookup.get(target);\n      :source_details =\
+    \ function_details_lookup.get(source) or class_method_details_lookup.get(source);\n\
+    \      :G.add_edge(source, target, **get_edge_data_from_details(target_details,\
+    \ source_details, target));\n    }\n    class [\"class_names = [list(class_def.keys())[0]\
+    \ for class_def in file_summary['class_defs']]\", {'for called in calls': [\"\
+    called_class_name = called.split('.')[0]\", {\"if called.startswith('self.')\"\
+    : [\"method_name = called.replace('self.', '')\", 'fully_qualified_name = f\"\
+    {source_name.split(\\'.\\')[0]}.{method_name}\"', {'if fully_qualified_name in\
+    \ class_method_details_lookup': ['add_edge_with_data(source_name, fully_qualified_name)',\
+    \ 'continue']}]}, {'if called in function_details_lookup or called in class_method_details_lookup\
+    \ or f\"{source_name.split(\\'.\\')[0]}.{called}\" in class_method_details_lookup':\
+    \ ['add_edge_with_data(source_name, called)'], 'elif called_class_name in class_names':\
+    \ ['init_method = None', \"init_method_name = f'{called}.__init__'\", {'if init_method_name\
+    \ in class_method_details_lookup': ['init_method = init_method_name']}, 'add_edge_with_data(source_name,\
+    \ called, init_method)'], 'else': ['G.add_node(called)', 'add_edge_with_data(source_name,\
+    \ called)']}]}] {\n      :class_names = [list(class_def.keys())[0] for class_def\
+    \ in file_summary['class_defs']];\n      while ([\"called_class_name = called.split('.')[0]\"\
+    , {\"if called.startswith('self.')\": [\"method_name = called.replace('self.',\
+    \ '')\", 'fully_qualified_name = f\"{source_name.split(\\'.\\')[0]}.{method_name}\"\
+    ', {'if fully_qualified_name in class_method_details_lookup': ['add_edge_with_data(source_name,\
+    \ fully_qualified_name)', 'continue']}]}, {'if called in function_details_lookup\
+    \ or called in class_method_details_lookup or f\"{source_name.split(\\'.\\')[0]}.{called}\"\
+    \ in class_method_details_lookup': ['add_edge_with_data(source_name, called)'],\
+    \ 'elif called_class_name in class_names': ['init_method = None', \"init_method_name\
+    \ = f'{called}.__init__'\", {'if init_method_name in class_method_details_lookup':\
+    \ ['init_method = init_method_name']}, 'add_edge_with_data(source_name, called,\
+    \ init_method)'], 'else': ['G.add_node(called)', 'add_edge_with_data(source_name,\
+    \ called)']}]) {\n        :called_class_name = called.split('.')[0];\n       \
+    \ if ([\"method_name = called.replace('self.', '')\", 'fully_qualified_name =\
+    \ f\"{source_name.split(\\'.\\')[0]}.{method_name}\"', {'if fully_qualified_name\
+    \ in class_method_details_lookup': ['add_edge_with_data(source_name, fully_qualified_name)',\
+    \ 'continue']}]) {\n          :method_name = called.replace('self.', '');\n  \
+    \        :fully_qualified_name = f\"{source_name.split('.')[0]}.{method_name}\"\
+    ;\n          if (['add_edge_with_data(source_name, fully_qualified_name)', 'continue'])\
+    \ {\n            :add_edge_with_data(source_name, fully_qualified_name);\n   \
+    \         :continue;\n          }\n        }\n        if (['add_edge_with_data(source_name,\
+    \ called)']) {\n          :add_edge_with_data(source_name, called);\n        }\n\
+    \      }\n    }\n    while (['G.add_node(function_name)']) {\n      :G.add_node(function_name);\n\
+    \    }\n    while ([\"add_edges_for_calls(func_name, details['calls'])\"]) {\n\
+    \      :add_edges_for_calls(func_name, details['calls']);\n    }\n    while ([\"\
+    add_edges_for_calls(qualified_method_name, details['calls'])\"]) {\n      :add_edges_for_calls(qualified_method_name,\
+    \ details['calls']);\n    }\n    while (['source, target = edge', 'target_details\
+    \ = function_details_lookup.get(target) or class_method_details_lookup.get(target)',\
+    \ 'source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source)',\
+    \ 'edge_data = get_edge_data_from_details(target_details, source_details, target)',\
+    \ 'G[source][target].update(edge_data)']) {\n      :source, target = edge;\n \
+    \     :target_details = function_details_lookup.get(target) or class_method_details_lookup.get(target);\n\
+    \      :source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source);\n\
+    \      :edge_data = get_edge_data_from_details(target_details, source_details,\
+    \ target);\n      :G[source][target].update(edge_data);\n    }\n    :nodes = list(G.nodes);\n\
+    \    :edges = [{'source': edge[0], 'target': edge[1], **edge[2]} for edge in G.edges.data()];\n\
+    \    :nodes_to_remove = [];\n    while ([{\"if node not in [edge['source'] for\
+    \ edge in edges] and node not in [edge['target'] for edge in edges]\": ['nodes_to_remove.append(node)']}])\
+    \ {\n      if (['nodes_to_remove.append(node)']) {\n        :nodes_to_remove.append(node);\n\
+    \      }\n    }\n    :return;\n    :{'nodes': nodes, 'edges': edges};\n  }\n \
+    \ class [\"'\\\\n    Extract control flow tree from AST.\\\\n    Args:\\\\n  \
+    \      nodes: AST nodes\\\\n    Returns:\\\\n        control_flow_tree: control\
+    \ flow tree\\\\n    '\", 'control_flow_tree = []', \"node_keywords_map = {'if':\
+    \ 'If', 'while': 'While', 'for': 'For', 'asyncfor': 'AsyncFor', 'with': 'With',\
+    \ 'asyncwith': 'AsyncWith', 'try': 'Try', 'except': 'ExceptHandler', 'def': 'FunctionDef',\
+    \ 'asyncdef': 'AsyncFunctionDef', 'class': 'ClassDef', 'return': 'Return'}\",\
+    \ {'for node in nodes': [{'if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))':\
+    \ [\"args_str = ', '.join([ast.unparse(arg) for arg in node.args.args])\", \"\
+    control_flow_tree.append({f'def {node.name}({args_str})': extract_control_flow_tree(node.body)})\"\
+    ], 'elif isinstance(node, ast.If)': [\"if_block = {f'if {ast.unparse(node.test)}':\
+    \ extract_control_flow_tree(node.body)}\", 'orelse = node.orelse', {'while orelse\
+    \ and isinstance(orelse[0], ast.If)': [\"if_block.update({f'elif {ast.unparse(orelse[0].test)}':\
+    \ extract_control_flow_tree(orelse[0].body)})\", 'orelse = orelse[0].orelse']},\
+    \ {'if orelse': [\"if_block.update({'else': extract_control_flow_tree(orelse)})\"\
+    ]}, 'control_flow_tree.append(if_block)'], 'elif isinstance(node, ast.Return)':\
+    \ [{'if node.value is not None': [\"control_flow_tree.append({'return': [ast.unparse(node.value)]})\"\
+    ], 'else': [\"control_flow_tree.append({'return': []})\"]}], 'elif isinstance(node,\
+    \ ast.Try)': ['try_block = extract_control_flow_tree(node.body)', 'except_block\
+    \ = []', {'for handler in node.handlers': [\"handler_type = ast.unparse(handler.type)\
+    \ if handler.type is not None else ''\", \"handler_name = ast.unparse(handler.name)\
+    \ if isinstance(handler.name, ast.Name) else ''\", \"except_block.append({f'except\
+    \ {handler_type} as {handler_name}:': extract_control_flow_tree(handler.body)})\"\
+    ]}, \"control_flow_dict = {'try': try_block, 'except': except_block}\", {'if node.orelse':\
+    \ ['else_block = extract_control_flow_tree(node.orelse)', \"control_flow_dict['else']\
+    \ = else_block\"]}, {'if node.finalbody': ['finally_block = extract_control_flow_tree(node.finalbody)',\
+    \ \"control_flow_dict['finally'] = finally_block\"]}, 'control_flow_tree.append(control_flow_dict)'],\
+    \ 'elif isinstance(node, ast.While)': [\"control_flow_tree.append({f'while {ast.unparse(node.test)}':\
+    \ extract_control_flow_tree(node.body)})\"], 'elif isinstance(node, ast.For)':\
+    \ [\"control_flow_tree.append({f'for {ast.unparse(node.target)} in {ast.unparse(node.iter)}':\
+    \ extract_control_flow_tree(node.body)})\"], 'elif isinstance(node, ast.With)':\
+    \ ['control_flow_tree.append({f\"with {\\', \\'.join([ast.unparse(item) for item\
+    \ in node.items])}\": extract_control_flow_tree(node.body)})'], 'elif isinstance(node,\
+    \ ast.ClassDef)': [\"control_flow_tree.append({f'class {node.name}': extract_control_flow_tree(node.body)})\"\
+    ], 'elif any((isinstance(node, getattr(ast, node_keywords_map[keyword])) for keyword\
+    \ in node_keywords_map.keys()))': ['control_flow_tree.append({ast.unparse(node):\
+    \ []})'], 'else': ['control_flow_tree.append(ast.unparse(node))']}]}, {'return':\
+    \ ['control_flow_tree']}] {\n    :'\\n    Extract control flow tree from AST.\\\
+    n    Args:\\n        nodes: AST nodes\\n    Returns:\\n        control_flow_tree:\
+    \ control flow tree\\n    ';\n    :control_flow_tree = [];\n    :node_keywords_map\
+    \ = {'if': 'If', 'while': 'While', 'for': 'For', 'asyncfor': 'AsyncFor', 'with':\
+    \ 'With', 'asyncwith': 'AsyncWith', 'try': 'Try', 'except': 'ExceptHandler', 'def':\
+    \ 'FunctionDef', 'asyncdef': 'AsyncFunctionDef', 'class': 'ClassDef', 'return':\
+    \ 'Return'};\n    while ([{'if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))':\
+    \ [\"args_str = ', '.join([ast.unparse(arg) for arg in node.args.args])\", \"\
+    control_flow_tree.append({f'def {node.name}({args_str})': extract_control_flow_tree(node.body)})\"\
+    ], 'elif isinstance(node, ast.If)': [\"if_block = {f'if {ast.unparse(node.test)}':\
+    \ extract_control_flow_tree(node.body)}\", 'orelse = node.orelse', {'while orelse\
+    \ and isinstance(orelse[0], ast.If)': [\"if_block.update({f'elif {ast.unparse(orelse[0].test)}':\
+    \ extract_control_flow_tree(orelse[0].body)})\", 'orelse = orelse[0].orelse']},\
+    \ {'if orelse': [\"if_block.update({'else': extract_control_flow_tree(orelse)})\"\
+    ]}, 'control_flow_tree.append(if_block)'], 'elif isinstance(node, ast.Return)':\
+    \ [{'if node.value is not None': [\"control_flow_tree.append({'return': [ast.unparse(node.value)]})\"\
+    ], 'else': [\"control_flow_tree.append({'return': []})\"]}], 'elif isinstance(node,\
+    \ ast.Try)': ['try_block = extract_control_flow_tree(node.body)', 'except_block\
+    \ = []', {'for handler in node.handlers': [\"handler_type = ast.unparse(handler.type)\
+    \ if handler.type is not None else ''\", \"handler_name = ast.unparse(handler.name)\
+    \ if isinstance(handler.name, ast.Name) else ''\", \"except_block.append({f'except\
+    \ {handler_type} as {handler_name}:': extract_control_flow_tree(handler.body)})\"\
+    ]}, \"control_flow_dict = {'try': try_block, 'except': except_block}\", {'if node.orelse':\
+    \ ['else_block = extract_control_flow_tree(node.orelse)', \"control_flow_dict['else']\
+    \ = else_block\"]}, {'if node.finalbody': ['finally_block = extract_control_flow_tree(node.finalbody)',\
+    \ \"control_flow_dict['finally'] = finally_block\"]}, 'control_flow_tree.append(control_flow_dict)'],\
+    \ 'elif isinstance(node, ast.While)': [\"control_flow_tree.append({f'while {ast.unparse(node.test)}':\
+    \ extract_control_flow_tree(node.body)})\"], 'elif isinstance(node, ast.For)':\
+    \ [\"control_flow_tree.append({f'for {ast.unparse(node.target)} in {ast.unparse(node.iter)}':\
+    \ extract_control_flow_tree(node.body)})\"], 'elif isinstance(node, ast.With)':\
+    \ ['control_flow_tree.append({f\"with {\\', \\'.join([ast.unparse(item) for item\
+    \ in node.items])}\": extract_control_flow_tree(node.body)})'], 'elif isinstance(node,\
+    \ ast.ClassDef)': [\"control_flow_tree.append({f'class {node.name}': extract_control_flow_tree(node.body)})\"\
+    ], 'elif any((isinstance(node, getattr(ast, node_keywords_map[keyword])) for keyword\
+    \ in node_keywords_map.keys()))': ['control_flow_tree.append({ast.unparse(node):\
+    \ []})'], 'else': ['control_flow_tree.append(ast.unparse(node))']}]) {\n     \
+    \ if ([\"args_str = ', '.join([ast.unparse(arg) for arg in node.args.args])\"\
+    , \"control_flow_tree.append({f'def {node.name}({args_str})': extract_control_flow_tree(node.body)})\"\
+    ]) {\n        :args_str = ', '.join([ast.unparse(arg) for arg in node.args.args]);\n\
+    \        :control_flow_tree.append({f'def {node.name}({args_str})': extract_control_flow_tree(node.body)});\n\
+    \      }\n    }\n    :return;\n    :control_flow_tree;\n  }\n  class [\"'\\\\\
+    n    Reorganize control flow sturcture to match the code graph.\\\\n    Args:\\\
+    \\n        file_details: file details\\\\n        control_flow_structure: control\
+    \ flow structure\\\\n    Returns:\\\\n        reorganized_control_flow_structure:\
+    \ reorganized control flow structure\\\\n    '\", \"targets = [edge['target']\
+    \ for edge in code_graph['edges']]\", \"starting_points = [node for node in code_graph['nodes']\
+    \ if node not in targets]\", {'def reorganize_structure(structure, start_points)':\
+    \ ['organized, seen = ([], set())', {'for start in start_points': [{'for element\
+    \ in structure': [{'if isinstance(element, dict)': ['key = next(iter(element))',\
+    \ {'if start in key': ['element_id = json.dumps(element)', {'if element_id not\
+    \ in seen': ['organized.append(element)', 'seen.add(element_id)']}]}], 'elif isinstance(element,\
+    \ str) and start in element': ['organized.append(element)']}]}]}, 'remaining =\
+    \ [elem for elem in structure if json.dumps(elem) not in seen]', 'organized.extend(remaining)',\
+    \ {'return': ['organized']}]}, {'return': ['reorganize_structure(control_flow_structure,\
+    \ starting_points)']}] {\n    :'\\n    Reorganize control flow sturcture to match\
+    \ the code graph.\\n    Args:\\n        file_details: file details\\n        control_flow_structure:\
+    \ control flow structure\\n    Returns:\\n        reorganized_control_flow_structure:\
+    \ reorganized control flow structure\\n    ';\n    :targets = [edge['target']\
+    \ for edge in code_graph['edges']];\n    :starting_points = [node for node in\
+    \ code_graph['nodes'] if node not in targets];\n    class ['organized, seen =\
+    \ ([], set())', {'for start in start_points': [{'for element in structure': [{'if\
+    \ isinstance(element, dict)': ['key = next(iter(element))', {'if start in key':\
+    \ ['element_id = json.dumps(element)', {'if element_id not in seen': ['organized.append(element)',\
+    \ 'seen.add(element_id)']}]}], 'elif isinstance(element, str) and start in element':\
+    \ ['organized.append(element)']}]}]}, 'remaining = [elem for elem in structure\
+    \ if json.dumps(elem) not in seen]', 'organized.extend(remaining)', {'return':\
+    \ ['organized']}] {\n      :organized, seen = ([], set());\n      while ([{'for\
+    \ element in structure': [{'if isinstance(element, dict)': ['key = next(iter(element))',\
+    \ {'if start in key': ['element_id = json.dumps(element)', {'if element_id not\
+    \ in seen': ['organized.append(element)', 'seen.add(element_id)']}]}], 'elif isinstance(element,\
+    \ str) and start in element': ['organized.append(element)']}]}]) {\n        while\
+    \ ([{'if isinstance(element, dict)': ['key = next(iter(element))', {'if start\
+    \ in key': ['element_id = json.dumps(element)', {'if element_id not in seen':\
+    \ ['organized.append(element)', 'seen.add(element_id)']}]}], 'elif isinstance(element,\
+    \ str) and start in element': ['organized.append(element)']}]) {\n          if\
+    \ (['key = next(iter(element))', {'if start in key': ['element_id = json.dumps(element)',\
+    \ {'if element_id not in seen': ['organized.append(element)', 'seen.add(element_id)']}]}])\
+    \ {\n            :key = next(iter(element));\n            if (['element_id = json.dumps(element)',\
+    \ {'if element_id not in seen': ['organized.append(element)', 'seen.add(element_id)']}])\
+    \ {\n              :element_id = json.dumps(element);\n              if (['organized.append(element)',\
+    \ 'seen.add(element_id)']) {\n                :organized.append(element);\n  \
+    \              :seen.add(element_id);\n              }\n            }\n      \
+    \    }\n        }\n      }\n      :remaining = [elem for elem in structure if\
+    \ json.dumps(elem) not in seen];\n      :organized.extend(remaining);\n      :return;\n\
+    \      :organized;\n    }\n    :return;\n    :reorganize_structure(control_flow_structure,\
+    \ starting_points);\n  }\n  class [\"'\\\\n    Get plantUML code for each element.\\\
+    \\n    Args:\\\\n        element: element\\\\n        indentation: current indentation\
+    \ level\\\\n    Returns:\\\\n        plantuml_str: plantUML code for each element\\\
+    \\n    '\", \"plantuml_str = ''\", {'if isinstance(element, dict)': ['key = next(iter(element))',\
+    \ 'value = element[key]', {\"if key.startswith('def ') or key.startswith('class\
+    \ ')\": [\"plantuml_str += f'{indentation}class {value} {{\\\\n'\", \"inner_indentation\
+    \ = indentation + '  '\"], \"elif key.startswith('if ')\": [\"plantuml_str +=\
+    \ f'{indentation}if ({value}) {{\\\\n'\", \"inner_indentation = indentation +\
+    \ '  '\"], \"elif key.startswith('for ') or key.startswith('while ') or key.startswith('asyncfor\
+    \ ')\": [\"plantuml_str += f'{indentation}while ({value}) {{\\\\n'\", \"inner_indentation\
+    \ = indentation + '  '\"], \"elif key.startswith('try ')\": [\"plantuml_str +=\
+    \ f'{indentation}try {{\\\\n'\", \"inner_indentation = indentation + '  '\"],\
+    \ \"elif key.startswith('except ')\": [\"plantuml_str += f'{indentation}catch\
+    \ ({value}) {{\\\\n'\", \"inner_indentation = indentation + '  '\"], 'else': [\"\
+    plantuml_str += f'{indentation}:{key};\\\\n'\", 'inner_indentation = indentation']},\
+    \ {'if isinstance(value, list)': [{'for child in value': ['plantuml_str += get_plantUML_element(child,\
+    \ inner_indentation)']}]}, {\"if key.startswith('def ') or key.startswith('class\
+    \ ')\": [\"plantuml_str += f'{indentation}}}\\\\n'\"], \"elif key.startswith('if\
+    \ ') or key.startswith('for ') or key.startswith('while ') or key.startswith('asyncfor\
+    \ ') or key.startswith('try ') or key.startswith('except ')\": [\"plantuml_str\
+    \ += f'{indentation}}}\\\\n'\"]}], 'elif isinstance(element, str)': [\"plantuml_str\
+    \ += f'{indentation}:{element};\\\\n'\"]}, {'return': ['plantuml_str']}] {\n \
+    \   :'\\n    Get plantUML code for each element.\\n    Args:\\n        element:\
+    \ element\\n        indentation: current indentation level\\n    Returns:\\n \
+    \       plantuml_str: plantUML code for each element\\n    ';\n    :plantuml_str\
+    \ = '';\n    if (['key = next(iter(element))', 'value = element[key]', {\"if key.startswith('def\
+    \ ') or key.startswith('class ')\": [\"plantuml_str += f'{indentation}class {value}\
+    \ {{\\\\n'\", \"inner_indentation = indentation + '  '\"], \"elif key.startswith('if\
+    \ ')\": [\"plantuml_str += f'{indentation}if ({value}) {{\\\\n'\", \"inner_indentation\
+    \ = indentation + '  '\"], \"elif key.startswith('for ') or key.startswith('while\
+    \ ') or key.startswith('asyncfor ')\": [\"plantuml_str += f'{indentation}while\
+    \ ({value}) {{\\\\n'\", \"inner_indentation = indentation + '  '\"], \"elif key.startswith('try\
+    \ ')\": [\"plantuml_str += f'{indentation}try {{\\\\n'\", \"inner_indentation\
+    \ = indentation + '  '\"], \"elif key.startswith('except ')\": [\"plantuml_str\
+    \ += f'{indentation}catch ({value}) {{\\\\n'\", \"inner_indentation = indentation\
+    \ + '  '\"], 'else': [\"plantuml_str += f'{indentation}:{key};\\\\n'\", 'inner_indentation\
+    \ = indentation']}, {'if isinstance(value, list)': [{'for child in value': ['plantuml_str\
+    \ += get_plantUML_element(child, inner_indentation)']}]}, {\"if key.startswith('def\
+    \ ') or key.startswith('class ')\": [\"plantuml_str += f'{indentation}}}\\\\n'\"\
+    ], \"elif key.startswith('if ') or key.startswith('for ') or key.startswith('while\
+    \ ') or key.startswith('asyncfor ') or key.startswith('try ') or key.startswith('except\
+    \ ')\": [\"plantuml_str += f'{indentation}}}\\\\n'\"]}]) {\n      :key = next(iter(element));\n\
+    \      :value = element[key];\n      if ([\"plantuml_str += f'{indentation}class\
+    \ {value} {{\\\\n'\", \"inner_indentation = indentation + '  '\"]) {\n       \
+    \ :plantuml_str += f'{indentation}class {value} {{\\n';\n        :inner_indentation\
+    \ = indentation + '  ';\n      }\n      if ([{'for child in value': ['plantuml_str\
+    \ += get_plantUML_element(child, inner_indentation)']}]) {\n        while (['plantuml_str\
+    \ += get_plantUML_element(child, inner_indentation)']) {\n          :plantuml_str\
+    \ += get_plantUML_element(child, inner_indentation);\n        }\n      }\n   \
+    \   if ([\"plantuml_str += f'{indentation}}}\\\\n'\"]) {\n        :plantuml_str\
+    \ += f'{indentation}}}\\n';\n      }\n    }\n    :return;\n    :plantuml_str;\n\
+    \  }\n  class [\"'\\\\n    Get plantUML code for entire file.\\\\n    Args:\\\\\
+    n        file_details: file details\\\\n    Returns:\\\\n        plantuml_str:\
+    \ plantUML code for entire file\\\\n    '\", \"plantuml_str = '@startuml\\\\n'\"\
+    , {\"for element in file_details['file_info']['control_flow_structure']\": [\"\
+    plantuml_str += get_plantUML_element(element, '  ')\"]}, \"plantuml_str += 'end\\\
+    \\n@enduml'\", {'return': ['plantuml_str']}] {\n    :'\\n    Get plantUML code\
+    \ for entire file.\\n    Args:\\n        file_details: file details\\n    Returns:\\\
+    n        plantuml_str: plantUML code for entire file\\n    ';\n    :plantuml_str\
+    \ = '@startuml\\n';\n    while ([\"plantuml_str += get_plantUML_element(element,\
+    \ '  ')\"]) {\n      :plantuml_str += get_plantUML_element(element, '  ');\n \
+    \   }\n    :plantuml_str += 'end\\n@enduml';\n    :return;\n    :plantuml_str;\n\
+    \  }\nend\n@enduml"
+functions:
+  code_graph:
+    function_name: code_graph
+    function_code: "def code_graph(file_summary: Dict[str, Union[Dict, str]]) -> Dict[str,\
+      \ Union[List[str], Dict[str, List[str]]]]:\n    \"\"\"\n    Create a dictionary\
+      \ representation of file details.\n    Args:\n        file_summary: Dict[str,\
+      \ Union[Dict, str]]: The details extracted from the file.\n    Returns:\n  \
+      \      dict: A dictionary with nodes and edges representing the relationships\
+      \ in the code.\n    \"\"\"\n    G = nx.DiGraph()\n    function_details_lookup\
+      \ = {}\n    for function_def in file_summary['function_defs']:\n        function_details_lookup.update(function_def)\n\
+      \    class_method_details_lookup = {}\n    for class_def in file_summary['class_defs']:\n\
+      \        for class_name, class_details in class_def.items():\n            G.add_node(class_name)\n\
+      \            for method_name, method_details in class_details['method_defs'].items():\n\
+      \                qualified_method_name = f'{class_name}.{method_name}'\n   \
+      \             G.add_node(qualified_method_name)\n                class_method_details_lookup[qualified_method_name]\
+      \ = method_details\n                G.add_edge(class_name, qualified_method_name)\n\
+      \n    def get_edge_data_from_details(target_details: dict, source_details: dict,\
+      \ target: str) -> dict:\n        edge_data = {}\n        if target_details:\n\
+      \            edge_data['target_inputs'] = target_details.get('inputs')\n   \
+      \         edge_data['target_returns'] = list(set(target_details.get('returns',\
+      \ [])))\n        if source_details and 'call_inputs' in source_details and (target\
+      \ in source_details['call_inputs']):\n            edge_data['target_inputs']\
+      \ = source_details['call_inputs'][target]\n        return edge_data\n\n    def\
+      \ add_edge_with_data(source: str, target: str, init_method: Optional[str]=None)\
+      \ -> None:\n        target_details = class_method_details_lookup.get(init_method\
+      \ or target) or function_details_lookup.get(target)\n        source_details\
+      \ = function_details_lookup.get(source) or class_method_details_lookup.get(source)\n\
+      \        G.add_edge(source, target, **get_edge_data_from_details(target_details,\
+      \ source_details, target))\n\n    def add_edges_for_calls(source_name, calls):\n\
+      \        class_names = [list(class_def.keys())[0] for class_def in file_summary['class_defs']]\n\
+      \        for called in calls:\n            called_class_name = called.split('.')[0]\n\
+      \            if called.startswith('self.'):\n                method_name = called.replace('self.',\
+      \ '')\n                fully_qualified_name = f\"{source_name.split('.')[0]}.{method_name}\"\
+      \n                if fully_qualified_name in class_method_details_lookup:\n\
+      \                    add_edge_with_data(source_name, fully_qualified_name)\n\
+      \                    continue\n            if called in function_details_lookup\
+      \ or called in class_method_details_lookup or f\"{source_name.split('.')[0]}.{called}\"\
+      \ in class_method_details_lookup:\n                add_edge_with_data(source_name,\
+      \ called)\n            elif called_class_name in class_names:\n            \
+      \    init_method = None\n                init_method_name = f'{called}.__init__'\n\
+      \                if init_method_name in class_method_details_lookup:\n     \
+      \               init_method = init_method_name\n                add_edge_with_data(source_name,\
+      \ called, init_method)\n            else:\n                G.add_node(called)\n\
+      \                add_edge_with_data(source_name, called)\n    for function_name\
+      \ in function_details_lookup:\n        G.add_node(function_name)\n    for func_name,\
+      \ details in function_details_lookup.items():\n        add_edges_for_calls(func_name,\
+      \ details['calls'])\n    for qualified_method_name, details in class_method_details_lookup.items():\n\
+      \        add_edges_for_calls(qualified_method_name, details['calls'])\n    for\
+      \ edge in G.edges:\n        source, target = edge\n        target_details =\
+      \ function_details_lookup.get(target) or class_method_details_lookup.get(target)\n\
+      \        source_details = function_details_lookup.get(source) or class_method_details_lookup.get(source)\n\
+      \        edge_data = get_edge_data_from_details(target_details, source_details,\
+      \ target)\n        G[source][target].update(edge_data)\n    nodes = list(G.nodes)\n\
+      \    edges = [{'source': edge[0], 'target': edge[1], **edge[2]} for edge in\
+      \ G.edges.data()]\n    nodes_to_remove = []\n    for node in nodes:\n      \
+      \  if node not in [edge['source'] for edge in edges] and node not in [edge['target']\
+      \ for edge in edges]:\n            nodes_to_remove.append(node)\n    return\
+      \ {'nodes': nodes, 'edges': edges}"
+    function_docstring: "\n    Create a dictionary representation of file details.\n\
+      \    Args:\n        file_summary: Dict[str, Union[Dict, str]]: The details extracted\
+      \ from the file.\n    Returns:\n        dict: A dictionary with nodes and edges\
+      \ representing the relationships in the code.\n    "
+    function_inputs:
+    - file_summary
+    function_defaults: []
+    function_returns:
+    - '{''nodes'': nodes, ''edges'': edges}'
+    - edge_data
+    function_calls:
+    - nx.DiGraph
+    - function_details_lookup.update
+    - class_def.items
+    - G.add_node
+    - class_details['method_defs'].items
+    - G.add_edge
+    - target_details.get
+    - list
+    - set
+    - class_method_details_lookup.get
+    - function_details_lookup.get
+    - get_edge_data_from_details
+    - class_def.keys
+    - called.split
+    - called.startswith
+    - called.replace
+    - source_name.split
+    - add_edge_with_data
+    - function_details_lookup.items
+    - add_edges_for_calls
+    - class_method_details_lookup.items
+    - G[source][target].update
+    - G.edges.data
+    - nodes_to_remove.append
+    function_call_inputs:
+      nx.DiGraph: []
+      function_details_lookup.update:
+      - function_def
+      class_def.items: []
+      G.add_node:
+      - class_name
+      - qualified_method_name
+      - called
+      - function_name
+      class_details['method_defs'].items: []
+      G.add_edge:
+      - class_name
+      - qualified_method_name
+      - source
+      - target
+      target_details.get:
+      - '''inputs'''
+      - '''returns'''
+      - '[]'
+      list:
+      - set(target_details.get('returns', []))
+      - class_def.keys()
+      - G.nodes
+      set:
+      - target_details.get('returns', [])
+      class_method_details_lookup.get:
+      - init_method or target
+      - source
+      - target
+      - source
+      function_details_lookup.get:
+      - target
+      - source
+      - target
+      - source
+      get_edge_data_from_details:
+      - target_details
+      - source_details
+      - target
+      - target_details
+      - source_details
+      - target
+      class_def.keys: []
+      called.split:
+      - '''.'''
+      called.startswith:
+      - '''self.'''
+      called.replace:
+      - '''self.'''
+      - ''''''
+      source_name.split:
+      - '''.'''
+      - '''.'''
+      add_edge_with_data:
+      - source_name
+      - fully_qualified_name
+      - source_name
+      - called
+      - source_name
+      - called
+      - init_method
+      - source_name
+      - called
+      function_details_lookup.items: []
+      add_edges_for_calls:
+      - func_name
+      - details['calls']
+      - qualified_method_name
+      - details['calls']
+      class_method_details_lookup.items: []
+      G[source][target].update:
+      - edge_data
+      G.edges.data: []
+      nodes_to_remove.append:
+      - node
+    function_variables:
+    - class_names
+    - called_class_name
+    - fully_qualified_name
+    - G
+    - edges
+    - edge_data
+    - method_name
+    - init_method
+    - source_details
+    - class_method_details_lookup
+    - init_method_name
+    - nodes
+    - qualified_method_name
+    - nodes_to_remove
+    - function_details_lookup
+    - target_details
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  get_edge_data_from_details:
+    function_name: get_edge_data_from_details
+    function_code: "def get_edge_data_from_details(target_details: dict, source_details:\
+      \ dict, target: str) -> dict:\n    edge_data = {}\n    if target_details:\n\
+      \        edge_data['target_inputs'] = target_details.get('inputs')\n       \
+      \ edge_data['target_returns'] = list(set(target_details.get('returns', [])))\n\
+      \    if source_details and 'call_inputs' in source_details and (target in source_details['call_inputs']):\n\
+      \        edge_data['target_inputs'] = source_details['call_inputs'][target]\n\
+      \    return edge_data"
+    function_docstring: null
+    function_inputs:
+    - target_details
+    - source_details
+    - target
+    function_defaults: []
+    function_returns:
+    - edge_data
+    function_calls:
+    - target_details.get
+    - list
+    - set
+    function_call_inputs:
+      target_details.get:
+      - '''inputs'''
+      - '''returns'''
+      - '[]'
+      list:
+      - set(target_details.get('returns', []))
+      set:
+      - target_details.get('returns', [])
+    function_variables:
+    - edge_data
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  add_edge_with_data:
+    function_name: add_edge_with_data
+    function_code: "def add_edge_with_data(source: str, target: str, init_method:\
+      \ Optional[str]=None) -> None:\n    target_details = class_method_details_lookup.get(init_method\
+      \ or target) or function_details_lookup.get(target)\n    source_details = function_details_lookup.get(source)\
+      \ or class_method_details_lookup.get(source)\n    G.add_edge(source, target,\
+      \ **get_edge_data_from_details(target_details, source_details, target))"
+    function_docstring: null
+    function_inputs:
+    - source
+    - target
+    - init_method
+    function_defaults:
+    - None
+    function_returns: []
+    function_calls:
+    - class_method_details_lookup.get
+    - function_details_lookup.get
+    - G.add_edge
+    - get_edge_data_from_details
+    function_call_inputs:
+      class_method_details_lookup.get:
+      - init_method or target
+      - source
+      function_details_lookup.get:
+      - target
+      - source
+      G.add_edge:
+      - source
+      - target
+      get_edge_data_from_details:
+      - target_details
+      - source_details
+      - target
+    function_variables:
+    - source_details
+    - target_details
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  add_edges_for_calls:
+    function_name: add_edges_for_calls
+    function_code: "def add_edges_for_calls(source_name, calls):\n    class_names\
+      \ = [list(class_def.keys())[0] for class_def in file_summary['class_defs']]\n\
+      \    for called in calls:\n        called_class_name = called.split('.')[0]\n\
+      \        if called.startswith('self.'):\n            method_name = called.replace('self.',\
+      \ '')\n            fully_qualified_name = f\"{source_name.split('.')[0]}.{method_name}\"\
+      \n            if fully_qualified_name in class_method_details_lookup:\n    \
+      \            add_edge_with_data(source_name, fully_qualified_name)\n       \
+      \         continue\n        if called in function_details_lookup or called in\
+      \ class_method_details_lookup or f\"{source_name.split('.')[0]}.{called}\" in\
+      \ class_method_details_lookup:\n            add_edge_with_data(source_name,\
+      \ called)\n        elif called_class_name in class_names:\n            init_method\
+      \ = None\n            init_method_name = f'{called}.__init__'\n            if\
+      \ init_method_name in class_method_details_lookup:\n                init_method\
+      \ = init_method_name\n            add_edge_with_data(source_name, called, init_method)\n\
+      \        else:\n            G.add_node(called)\n            add_edge_with_data(source_name,\
+      \ called)"
+    function_docstring: null
+    function_inputs:
+    - source_name
+    - calls
+    function_defaults: []
+    function_returns: []
+    function_calls:
+    - list
+    - class_def.keys
+    - called.split
+    - called.startswith
+    - called.replace
+    - source_name.split
+    - add_edge_with_data
+    - G.add_node
+    function_call_inputs:
+      list:
+      - class_def.keys()
+      class_def.keys: []
+      called.split:
+      - '''.'''
+      called.startswith:
+      - '''self.'''
+      called.replace:
+      - '''self.'''
+      - ''''''
+      source_name.split:
+      - '''.'''
+      - '''.'''
+      add_edge_with_data:
+      - source_name
+      - fully_qualified_name
+      - source_name
+      - called
+      - source_name
+      - called
+      - init_method
+      - source_name
+      - called
+      G.add_node:
+      - called
+    function_variables:
+    - class_names
+    - fully_qualified_name
+    - init_method
+    - method_name
+    - init_method_name
+    - called_class_name
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  extract_control_flow_tree:
+    function_name: extract_control_flow_tree
+    function_code: "def extract_control_flow_tree(nodes: List[ast.AST]) -> List[Union[str,\
+      \ dict]]:\n    \"\"\"\n    Extract control flow tree from AST.\n    Args:\n\
+      \        nodes: AST nodes\n    Returns:\n        control_flow_tree: control\
+      \ flow tree\n    \"\"\"\n    control_flow_tree = []\n    node_keywords_map =\
+      \ {'if': 'If', 'while': 'While', 'for': 'For', 'asyncfor': 'AsyncFor', 'with':\
+      \ 'With', 'asyncwith': 'AsyncWith', 'try': 'Try', 'except': 'ExceptHandler',\
+      \ 'def': 'FunctionDef', 'asyncdef': 'AsyncFunctionDef', 'class': 'ClassDef',\
+      \ 'return': 'Return'}\n    for node in nodes:\n        if isinstance(node, (ast.FunctionDef,\
+      \ ast.AsyncFunctionDef)):\n            args_str = ', '.join([ast.unparse(arg)\
+      \ for arg in node.args.args])\n            control_flow_tree.append({f'def {node.name}({args_str})':\
+      \ extract_control_flow_tree(node.body)})\n        elif isinstance(node, ast.If):\n\
+      \            if_block = {f'if {ast.unparse(node.test)}': extract_control_flow_tree(node.body)}\n\
+      \            orelse = node.orelse\n            while orelse and isinstance(orelse[0],\
+      \ ast.If):\n                if_block.update({f'elif {ast.unparse(orelse[0].test)}':\
+      \ extract_control_flow_tree(orelse[0].body)})\n                orelse = orelse[0].orelse\n\
+      \            if orelse:\n                if_block.update({'else': extract_control_flow_tree(orelse)})\n\
+      \            control_flow_tree.append(if_block)\n        elif isinstance(node,\
+      \ ast.Return):\n            if node.value is not None:\n                control_flow_tree.append({'return':\
+      \ [ast.unparse(node.value)]})\n            else:\n                control_flow_tree.append({'return':\
+      \ []})\n        elif isinstance(node, ast.Try):\n            try_block = extract_control_flow_tree(node.body)\n\
+      \            except_block = []\n            for handler in node.handlers:\n\
+      \                handler_type = ast.unparse(handler.type) if handler.type is\
+      \ not None else ''\n                handler_name = ast.unparse(handler.name)\
+      \ if isinstance(handler.name, ast.Name) else ''\n                except_block.append({f'except\
+      \ {handler_type} as {handler_name}:': extract_control_flow_tree(handler.body)})\n\
+      \            control_flow_dict = {'try': try_block, 'except': except_block}\n\
+      \            if node.orelse:\n                else_block = extract_control_flow_tree(node.orelse)\n\
+      \                control_flow_dict['else'] = else_block\n            if node.finalbody:\n\
+      \                finally_block = extract_control_flow_tree(node.finalbody)\n\
+      \                control_flow_dict['finally'] = finally_block\n            control_flow_tree.append(control_flow_dict)\n\
+      \        elif isinstance(node, ast.While):\n            control_flow_tree.append({f'while\
+      \ {ast.unparse(node.test)}': extract_control_flow_tree(node.body)})\n      \
+      \  elif isinstance(node, ast.For):\n            control_flow_tree.append({f'for\
+      \ {ast.unparse(node.target)} in {ast.unparse(node.iter)}': extract_control_flow_tree(node.body)})\n\
+      \        elif isinstance(node, ast.With):\n            control_flow_tree.append({f\"\
+      with {', '.join([ast.unparse(item) for item in node.items])}\": extract_control_flow_tree(node.body)})\n\
+      \        elif isinstance(node, ast.ClassDef):\n            control_flow_tree.append({f'class\
+      \ {node.name}': extract_control_flow_tree(node.body)})\n        elif any((isinstance(node,\
+      \ getattr(ast, node_keywords_map[keyword])) for keyword in node_keywords_map.keys())):\n\
+      \            control_flow_tree.append({ast.unparse(node): []})\n        else:\n\
+      \            control_flow_tree.append(ast.unparse(node))\n    return control_flow_tree"
+    function_docstring: "\n    Extract control flow tree from AST.\n    Args:\n  \
+      \      nodes: AST nodes\n    Returns:\n        control_flow_tree: control flow\
+      \ tree\n    "
+    function_inputs:
+    - nodes
+    function_defaults: []
+    function_returns:
+    - control_flow_tree
+    function_calls:
+    - isinstance
+    - ''', ''.join'
+    - ast.unparse
+    - control_flow_tree.append
+    - extract_control_flow_tree
+    - if_block.update
+    - except_block.append
+    - any
+    - getattr
+    - node_keywords_map.keys
+    function_call_inputs:
+      isinstance:
+      - node
+      - (ast.FunctionDef, ast.AsyncFunctionDef)
+      - node
+      - ast.If
+      - orelse[0]
+      - ast.If
+      - node
+      - ast.Return
+      - node
+      - ast.Try
+      - handler.name
+      - ast.Name
+      - node
+      - ast.While
+      - node
+      - ast.For
+      - node
+      - ast.With
+      - node
+      - ast.ClassDef
+      - node
+      - getattr(ast, node_keywords_map[keyword])
+      ''', ''.join':
+      - '[ast.unparse(arg) for arg in node.args.args]'
+      - '[ast.unparse(item) for item in node.items]'
+      ast.unparse:
+      - arg
+      - node.test
+      - orelse[0].test
+      - node.value
+      - handler.type
+      - handler.name
+      - node.test
+      - node.target
+      - node.iter
+      - item
+      - node
+      - node
+      control_flow_tree.append:
+      - '{f''def {node.name}({args_str})'': extract_control_flow_tree(node.body)}'
+      - if_block
+      - '{''return'': [ast.unparse(node.value)]}'
+      - '{''return'': []}'
+      - control_flow_dict
+      - '{f''while {ast.unparse(node.test)}'': extract_control_flow_tree(node.body)}'
+      - '{f''for {ast.unparse(node.target)} in {ast.unparse(node.iter)}'': extract_control_flow_tree(node.body)}'
+      - '{f"with {'', ''.join([ast.unparse(item) for item in node.items])}": extract_control_flow_tree(node.body)}'
+      - '{f''class {node.name}'': extract_control_flow_tree(node.body)}'
+      - '{ast.unparse(node): []}'
+      - ast.unparse(node)
+      extract_control_flow_tree:
+      - node.body
+      - node.body
+      - orelse[0].body
+      - orelse
+      - node.body
+      - handler.body
+      - node.orelse
+      - node.finalbody
+      - node.body
+      - node.body
+      - node.body
+      - node.body
+      if_block.update:
+      - '{f''elif {ast.unparse(orelse[0].test)}'': extract_control_flow_tree(orelse[0].body)}'
+      - '{''else'': extract_control_flow_tree(orelse)}'
+      except_block.append:
+      - '{f''except {handler_type} as {handler_name}:'': extract_control_flow_tree(handler.body)}'
+      any:
+      - (isinstance(node, getattr(ast, node_keywords_map[keyword])) for keyword in
+        node_keywords_map.keys())
+      getattr:
+      - ast
+      - node_keywords_map[keyword]
+      node_keywords_map.keys: []
+    function_variables:
+    - try_block
+    - control_flow_tree
+    - handler_name
+    - else_block
+    - args_str
+    - if_block
+    - handler_type
+    - orelse
+    - node_keywords_map
+    - control_flow_dict
+    - except_block
+    - finally_block
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  reorganize_control_flow:
+    function_name: reorganize_control_flow
+    function_code: "def reorganize_control_flow(code_graph, control_flow_structure):\n\
+      \    \"\"\"\n    Reorganize control flow sturcture to match the code graph.\n\
+      \    Args:\n        file_details: file details\n        control_flow_structure:\
+      \ control flow structure\n    Returns:\n        reorganized_control_flow_structure:\
+      \ reorganized control flow structure\n    \"\"\"\n    targets = [edge['target']\
+      \ for edge in code_graph['edges']]\n    starting_points = [node for node in\
+      \ code_graph['nodes'] if node not in targets]\n\n    def reorganize_structure(structure,\
+      \ start_points):\n        organized, seen = ([], set())\n        for start in\
+      \ start_points:\n            for element in structure:\n                if isinstance(element,\
+      \ dict):\n                    key = next(iter(element))\n                  \
+      \  if start in key:\n                        element_id = json.dumps(element)\n\
+      \                        if element_id not in seen:\n                      \
+      \      organized.append(element)\n                            seen.add(element_id)\n\
+      \                elif isinstance(element, str) and start in element:\n     \
+      \               organized.append(element)\n        remaining = [elem for elem\
+      \ in structure if json.dumps(elem) not in seen]\n        organized.extend(remaining)\n\
+      \        return organized\n    return reorganize_structure(control_flow_structure,\
+      \ starting_points)"
+    function_docstring: "\n    Reorganize control flow sturcture to match the code\
+      \ graph.\n    Args:\n        file_details: file details\n        control_flow_structure:\
+      \ control flow structure\n    Returns:\n        reorganized_control_flow_structure:\
+      \ reorganized control flow structure\n    "
+    function_inputs:
+    - code_graph
+    - control_flow_structure
+    function_defaults: []
+    function_returns:
+    - reorganize_structure(control_flow_structure, starting_points)
+    - organized
+    function_calls:
+    - set
+    - isinstance
+    - next
+    - iter
+    - json.dumps
+    - organized.append
+    - seen.add
+    - organized.extend
+    - reorganize_structure
+    function_call_inputs:
+      set: []
+      isinstance:
+      - element
+      - dict
+      - element
+      - str
+      next:
+      - iter(element)
+      iter:
+      - element
+      json.dumps:
+      - element
+      - elem
+      organized.append:
+      - element
+      - element
+      seen.add:
+      - element_id
+      organized.extend:
+      - remaining
+      reorganize_structure:
+      - control_flow_structure
+      - starting_points
+    function_variables:
+    - targets
+    - element_id
+    - key
+    - remaining
+    - starting_points
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  reorganize_structure:
+    function_name: reorganize_structure
+    function_code: "def reorganize_structure(structure, start_points):\n    organized,\
+      \ seen = ([], set())\n    for start in start_points:\n        for element in\
+      \ structure:\n            if isinstance(element, dict):\n                key\
+      \ = next(iter(element))\n                if start in key:\n                \
+      \    element_id = json.dumps(element)\n                    if element_id not\
+      \ in seen:\n                        organized.append(element)\n            \
+      \            seen.add(element_id)\n            elif isinstance(element, str)\
+      \ and start in element:\n                organized.append(element)\n    remaining\
+      \ = [elem for elem in structure if json.dumps(elem) not in seen]\n    organized.extend(remaining)\n\
+      \    return organized"
+    function_docstring: null
+    function_inputs:
+    - structure
+    - start_points
+    function_defaults: []
+    function_returns:
+    - organized
+    function_calls:
+    - set
+    - isinstance
+    - next
+    - iter
+    - json.dumps
+    - organized.append
+    - seen.add
+    - organized.extend
+    function_call_inputs:
+      set: []
+      isinstance:
+      - element
+      - dict
+      - element
+      - str
+      next:
+      - iter(element)
+      iter:
+      - element
+      json.dumps:
+      - element
+      - elem
+      organized.append:
+      - element
+      - element
+      seen.add:
+      - element_id
+      organized.extend:
+      - remaining
+    function_variables:
+    - remaining
+    - key
+    - element_id
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  get_plantUML_element:
+    function_name: get_plantUML_element
+    function_code: "def get_plantUML_element(element, indentation=''):\n    \"\"\"\
+      \n    Get plantUML code for each element.\n    Args:\n        element: element\n\
+      \        indentation: current indentation level\n    Returns:\n        plantuml_str:\
+      \ plantUML code for each element\n    \"\"\"\n    plantuml_str = ''\n    if\
+      \ isinstance(element, dict):\n        key = next(iter(element))\n        value\
+      \ = element[key]\n        if key.startswith('def ') or key.startswith('class\
+      \ '):\n            plantuml_str += f'{indentation}class {value} {{\\n'\n   \
+      \         inner_indentation = indentation + '  '\n        elif key.startswith('if\
+      \ '):\n            plantuml_str += f'{indentation}if ({value}) {{\\n'\n    \
+      \        inner_indentation = indentation + '  '\n        elif key.startswith('for\
+      \ ') or key.startswith('while ') or key.startswith('asyncfor '):\n         \
+      \   plantuml_str += f'{indentation}while ({value}) {{\\n'\n            inner_indentation\
+      \ = indentation + '  '\n        elif key.startswith('try '):\n            plantuml_str\
+      \ += f'{indentation}try {{\\n'\n            inner_indentation = indentation\
+      \ + '  '\n        elif key.startswith('except '):\n            plantuml_str\
+      \ += f'{indentation}catch ({value}) {{\\n'\n            inner_indentation =\
+      \ indentation + '  '\n        else:\n            plantuml_str += f'{indentation}:{key};\\\
+      n'\n            inner_indentation = indentation\n        if isinstance(value,\
+      \ list):\n            for child in value:\n                plantuml_str += get_plantUML_element(child,\
+      \ inner_indentation)\n        if key.startswith('def ') or key.startswith('class\
+      \ '):\n            plantuml_str += f'{indentation}}}\\n'\n        elif key.startswith('if\
+      \ ') or key.startswith('for ') or key.startswith('while ') or key.startswith('asyncfor\
+      \ ') or key.startswith('try ') or key.startswith('except '):\n            plantuml_str\
+      \ += f'{indentation}}}\\n'\n    elif isinstance(element, str):\n        plantuml_str\
+      \ += f'{indentation}:{element};\\n'\n    return plantuml_str"
+    function_docstring: "\n    Get plantUML code for each element.\n    Args:\n  \
+      \      element: element\n        indentation: current indentation level\n  \
+      \  Returns:\n        plantuml_str: plantUML code for each element\n    "
+    function_inputs:
+    - element
+    - indentation
+    function_defaults:
+    - ''''''
+    function_returns:
+    - plantuml_str
+    function_calls:
+    - isinstance
+    - next
+    - iter
+    - key.startswith
+    - get_plantUML_element
+    function_call_inputs:
+      isinstance:
+      - element
+      - dict
+      - value
+      - list
+      - element
+      - str
+      next:
+      - iter(element)
+      iter:
+      - element
+      key.startswith:
+      - '''def '''
+      - '''class '''
+      - '''if '''
+      - '''for '''
+      - '''while '''
+      - '''asyncfor '''
+      - '''try '''
+      - '''except '''
+      - '''def '''
+      - '''class '''
+      - '''if '''
+      - '''for '''
+      - '''while '''
+      - '''asyncfor '''
+      - '''try '''
+      - '''except '''
+      get_plantUML_element:
+      - child
+      - inner_indentation
+    function_variables:
+    - inner_indentation
+    - value
+    - key
+    - plantuml_str
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  get_plantUML:
+    function_name: get_plantUML
+    function_code: "def get_plantUML(file_details):\n    \"\"\"\n    Get plantUML\
+      \ code for entire file.\n    Args:\n        file_details: file details\n   \
+      \ Returns:\n        plantuml_str: plantUML code for entire file\n    \"\"\"\n\
+      \    plantuml_str = '@startuml\\n'\n    for element in file_details['file_info']['control_flow_structure']:\n\
+      \        plantuml_str += get_plantUML_element(element, '  ')\n    plantuml_str\
+      \ += 'end\\n@enduml'\n    return plantuml_str"
+    function_docstring: "\n    Get plantUML code for entire file.\n    Args:\n   \
+      \     file_details: file details\n    Returns:\n        plantuml_str: plantUML\
+      \ code for entire file\n    "
+    function_inputs:
+    - file_details
+    function_defaults: []
+    function_returns:
+    - plantuml_str
+    function_calls:
+    - get_plantUML_element
+    function_call_inputs:
+      get_plantUML_element:
+      - element
+      - '''  '''
+    function_variables:
+    - plantuml_str
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  get_code_graph:
+    function_name: get_code_graph
+    function_code: "def get_code_graph(file_details):\n    \"\"\"\n    Add code graph\
+      \ and control flow to file details.\n    Args:\n        file_details: file details\n\
+      \    Returns:\n        file_details: file details\n    \"\"\"\n    file_details['file_info']['entire_code_graph']\
+      \ = code_graph(file_details['file_info']['file_summary'])\n    file_details['file_info']['file_summary']\
+      \ = json.dumps(file_details['file_info']['file_summary']).replace('\"', '')\n\
+      \    try:\n        file_ast = file_details['file_info']['file_ast']\n      \
+      \  file_details['file_info']['control_flow_structure'] = reorganize_control_flow(file_details['file_info']['entire_code_graph'],\
+      \ extract_control_flow_tree(file_ast.body))\n        file_details['file_info']['plantUML']\
+      \ = get_plantUML(file_details)\n    except Exception as e:\n        file_details['file_info']['control_flow_structure']\
+      \ = [str(e)]\n        file_details['file_info']['plantUML'] = str(e)\n    del\
+      \ file_details['file_info']['file_ast']\n    return file_details"
+    function_docstring: "\n    Add code graph and control flow to file details.\n\
+      \    Args:\n        file_details: file details\n    Returns:\n        file_details:\
+      \ file details\n    "
+    function_inputs:
+    - file_details
+    function_defaults: []
+    function_returns:
+    - file_details
+    function_calls:
+    - code_graph
+    - json.dumps(file_details['file_info']['file_summary']).replace
+    - json.dumps
+    - reorganize_control_flow
+    - extract_control_flow_tree
+    - get_plantUML
+    - str
+    function_call_inputs:
+      code_graph:
+      - file_details['file_info']['file_summary']
+      json.dumps(file_details['file_info']['file_summary']).replace:
+      - '''"'''
+      - ''''''
+      json.dumps:
+      - file_details['file_info']['file_summary']
+      reorganize_control_flow:
+      - file_details['file_info']['entire_code_graph']
+      - extract_control_flow_tree(file_ast.body)
+      extract_control_flow_tree:
+      - file_ast.body
+      get_plantUML:
+      - file_details
+      str:
+      - e
+      - e
+    function_variables:
+    - file_ast
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+classes: {}
