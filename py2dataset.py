@@ -27,7 +27,6 @@ Requirements:
     c. Call py2dataset with derived parameters.
 """
 import sys
-import argparse
 import logging
 from pathlib import Path
 from typing import Dict, List
@@ -247,128 +246,77 @@ def main():
     --html (bool, optional): Generate HTML output if True. Defaults to False.
     --I (str, optional): Interactive mode. Defaults to False.
     """
+    if "--help" in sys.argv:
+        print(__doc__)
+        sys.exit()
 
-    class PathArgument(argparse.Action):
-        def __call__(self, parser, namespace, values, option_string=None):
-            cleaned_value = values.strip('"').strip("'")
-            setattr(namespace, self.dest, cleaned_value)
-
+    # helper function to convert user t or f input to bool
     def get_bool_from_input(input_str: str, current_value: bool) -> bool:
-        """
-        Get a boolean value from user input or retain the current value if the input is invalid.
-        """
-        return (
-            True
-            if input_str.lower() in ["t", "true"]
-            else False
-            if input_str.lower() in ["f", "false"]
-            else current_value
-        )
+        if input_str.lower() in ["t", "true"]:
+            return True
+        elif input_str.lower() in ["f", "false"]:
+            return False
+        return current_value
+        
+    # Default values
+    params = {
+        'start': ".",
+        'output_dir': "./dataset/",
+        'questions_pathname': "./py2dataset_questions.json",
+        'model_config_pathname': "./py2dataset_model_config.yaml",
+        'use_llm': False,
+        'quiet': False,
+        'single_process': False,
+        'detailed': False,
+        'html': False,
+        'I': False
+    }
 
-    # parse each command line entry
-    parser = argparse.ArgumentParser(
-        description="Process Python files to generate datasets."
-    )
-    parser.add_argument(
-        "--start",
-        default=".",
-        action=PathArgument,
-        help="Starting directory for Python files. Defaults to current working directory.",
-    )
-    parser.add_argument(
-        "--output_dir",
-        default="./dataset/",
-        action=PathArgument,
-        help="Directory to write the output files. Defaults to ./dataset/.",
-    )
-    parser.add_argument(
-        "--questions_pathname",
-        default="./py2dataset_questions.json",
-        action=PathArgument,
-        help="Path and filename of the questions file. Defaults to ./py2dataset_questions.json.",
-    )
-    parser.add_argument(
-        "--model_config_pathname",
-        default="./py2dataset_model_config.yaml",
-        action=PathArgument,
-        help="Path and filename of the model configuration file. Defaults to ./py2dataset_model_config.yaml.",
-    )
-    parser.add_argument(
-        "--use_llm",
-        action="store_true",
-        help="Use LLM for generating JSON answers. Defaults to False.",
-    )
-    parser.add_argument("--quiet", action="store_true", help="Limit logging output.")
-    parser.add_argument(
-        "--single_process",
-        action="store_true",
-        help="Use a single process for processing Python files. Defaults to False.",
-    )
-    parser.add_argument(
-        "--detailed", action="store_true", help="Include detailed analysis if True."
-    )
-    parser.add_argument(
-        "--html", action="store_true", help="Generate HTML output if True."
-    )
-    parser.add_argument(
-        "--I",
-        "--interactive",
-        action="store_true",
-        dest="interactive",
-        help="Interactive mode.",
-    )
-    args = parser.parse_args()
+    # Process command-line arguments
+    arg_string = " ".join(sys.argv[1:])  
+    for arg in params:  
+        if "--" + arg in arg_string:
+            if isinstance(params[arg], bool):
+                params[arg] = True  
+                arg_string = arg_string.replace("--" + arg, "")  
+            else:
+                value_segment = arg_string.split("--" + arg + " ")[1]
+                params[arg] = value_segment.split(" --")[0].strip('"')
+                arg_string = arg_string.replace("--" + arg + " " + params[arg], "")
 
     # Interactive mode adjustments
-    if args.interactive:
-        print("Input new value or press enter to keep current value.")
-        pathname_params = [
-            "start",
-            "output_dir",
-            "questions_pathname",
-            "model_config_pathname",
-        ]
-        bool_params = ["use_llm", "quiet", "single_process", "detailed", "html"]
-        for param in pathname_params:
-            setattr(
-                args,
-                param,
-                input(f"{param} [{getattr(args, param)}]: ") or getattr(args, param),
-            )
-        for param in bool_params:
-            setattr(
-                args,
-                param,
-                get_bool_from_input(
-                    input(f"{param} [{getattr(args, param)}] (t or f): "),
-                    getattr(args, param),
-                ),
-            )
+    print("Interactive mode. Enter new values or press enter to keep.")
+    if params['I']:
+        for arg in params:
+            user_input = input(f"{arg} [{params[arg]}]: ").strip()
+            if isinstance(params[arg], bool):
+                params[arg] = get_bool_from_input(user_input, params[arg])
+            elif user_input:
+                params[arg] = user_input
+            print(f"{arg}: {params[arg]}")
 
     # Validate the start directory
-    if not (os.path.isdir(args.start) or args.start.startswith("https://github.com/")):
-        print(
-            f"Invalid start directory '{args.start}'. Using current working directory."
-        )
-        args.start = os.getcwd()
+    if not (os.path.isdir(params['start']) or params['start'].startswith("https://github.com/")):
+        print(f"Invalid start directory '{params['start']}'. Using current working directory.")
+        params['start'] = os.getcwd()
 
-    # if the start directory is a github repository, clone it and change the start directory to the local repository
-    if args.start.startswith("https://github.com/"):
-        args.start = clone_github_repo(args.start)
+    # If the start directory is a github repository, clone it
+    if params['start'].startswith("https://github.com/"):
+        params['start'] = clone_github_repo(params['start'])
 
-    # Call py2dataset with args
+    # Call py2dataset with the parameters
     py2dataset(
-        start_dir=args.start,
-        output_dir=args.output_dir,
-        questions_pathname=args.questions_pathname,
-        model_config_pathname=args.model_config_pathname,
-        use_llm=args.use_llm,
-        quiet=args.quiet,
-        single_process=args.single_process,
-        detailed=args.detailed,
-        html=args.html,
+        start_dir=params['start'],
+        output_dir=params['output_dir'],
+        questions_pathname=params['questions_pathname'],
+        model_config_pathname=params['model_config_pathname'],
+        use_llm=params['use_llm'],
+        quiet=params['quiet'],
+        single_process=params['single_process'],
+        detailed=params['detailed'],
+        html=params['html'],
     )
-
 
 if __name__ == "__main__":
     main()
+
