@@ -47,7 +47,7 @@ Repeat :For each Python file;
 - Answer questions and format answers;
 
 Repeat :For each question;
-:Parse the AST obtained data to answer question;
+:Use the AST obtained data to answer question;
 if (use_llm and purpose question) then (yes)
   :Use the llm to describe the code's purpose;
   if (detailed) then (yes)
