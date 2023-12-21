@@ -136,6 +136,7 @@ def py2dataset(
         single_process (bool): Use a single process for file processing if use_llm. Defaults to False.
         detailed (bool): Include detailed analysis if True. Defaults to False.
         html (bool): Generate HTML outputs if True. Defaults to False.
+        skip_regenration (bool): Skip regeneration of existing instruction.json.
     Returns:
         Dict[str, List[Dict]]: Dictionary of generated datasets.
     """

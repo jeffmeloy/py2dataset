@@ -51,6 +51,7 @@ Clone the repository and install dependencies:
 - `--detailed`: Include detailed analysis. Default: False.
 - `--html`: Generate HTML output. Default: False.
 - `--I`: Interactive mode. Default: False.
+- `--skip_regenration`: Skip regeneration of existing instruction.json if any generated in previous run
 
 ## Questions for datasets
 
@@ -76,7 +77,7 @@ The following questions are answered by parsing the AST:
 
 If --use_llm, the dataset includes the llm response to the file_purpose question in the `--questions_pathname` file
 
-If --use_llm and --detailed, the dataset includes the purpose and signicance of each code object
+If --use_llm and --detailed, the dataset includes the purpose and significance of each code object
 
 ## Code Structure
 
