@@ -57,7 +57,8 @@ def process_single_python_file(
     model_config: Dict = None,
     single_process_mode: bool = False,
     detailed_analysis: bool = False,
-) -> None:
+    skip_regenration:bool =False,
+    ) -> None:
     """
     Processes a single Python file to generate question-answer pairs and instructions.
 
@@ -90,21 +91,25 @@ def process_single_python_file(
         logging.error(f"Failed to get file details for {python_file_path}")
         return
 
-    instruct_data = get_python_datasets(
-        python_file_path,
-        file_details,
-        base_name,
-        questions_dict,
-        model_config,
-        detailed_analysis,
-    )
-
-    if instruct_data:
-        save_python_data(
-            file_details, instruct_data, base_name, relative_path, output_dir
+    path_to_instruct=Path(output_dir) / relative_path.parent / f"{base_name}.instruct.json"
+    if not( path_to_instruct.exists() and skip_regenration ):
+        instruct_data = get_python_datasets(
+            python_file_path,
+            file_details,
+            base_name,
+            questions_dict,
+            model_config,
+            detailed_analysis,
         )
+
+        if instruct_data:
+            save_python_data(
+                file_details, instruct_data, base_name, relative_path, output_dir
+            )
+        else:
+            logging.error(f"Failed to get instruct data for {python_file_path}")
     else:
-        logging.error(f"Failed to get instruct data for {python_file_path}")
+        logging.info(f'Skipping re-generation of instruct.json, already exists at {path_to_instruct}')
 
 
 def py2dataset(
@@ -117,6 +122,7 @@ def py2dataset(
     single_process: bool = False,
     detailed: bool = False,
     html: bool = False,
+    skip_regenration: bool = False,
 ) -> Dict[str, List[Dict]]:
     """
     Generates datasets by processing Python files within a specified directory.
@@ -130,6 +136,7 @@ def py2dataset(
         single_process (bool): Use a single process for file processing if use_llm. Defaults to False.
         detailed (bool): Include detailed analysis if True. Defaults to False.
         html (bool): Generate HTML outputs if True. Defaults to False.
+        skip_regenration (bool): Skip regeneration of existing instruction.json.
     Returns:
         Dict[str, List[Dict]]: Dictionary of generated datasets.
     """
@@ -167,6 +174,7 @@ def py2dataset(
                 model_config,
                 single_process,
                 detailed,
+                skip_regenration,
             )
         else:
             # Spawn new process for each file to manage memory and performance
@@ -182,6 +190,7 @@ def py2dataset(
                     None,
                     single_process,
                     detailed,
+                    skip_regenration,
                 ),
             )
             proc.start()
@@ -245,6 +254,7 @@ def main():
     --detailed (bool, optional): Include detailed analysis if True. Defaults to False.
     --html (bool, optional): Generate HTML output if True. Defaults to False.
     --I (str, optional): Interactive mode. Defaults to False.
+    --skip_regenration (bool, optional): If True, the regeneration of instruction.json for a python file is skipped if that already exists from any of previous or parallel runs. Particularly helpful in case LLM is used on large repository
     """
     if "--help" in sys.argv:
         print(__doc__)
@@ -269,7 +279,8 @@ def main():
         'single_process': False,
         'detailed': False,
         'html': False,
-        'I': False
+        'I': False,
+        'skip_regenration':False
     }
 
     # Process command-line arguments
@@ -315,8 +326,8 @@ def main():
         single_process=params['single_process'],
         detailed=params['detailed'],
         html=params['html'],
+        skip_regenration=params['skip_regenration'],
     )
 
 if __name__ == "__main__":
     main()
-

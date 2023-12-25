@@ -14,6 +14,7 @@ def main():
     --single_process: Use a single process to process Python files. Defaults to False.
     --detailed: Include detailed analysis. Defaults to False.
     --html: Generate HTML output. Defaults to False.
+    --skip_regenration: Skip regeneration of existing instruction.json. Defaults to False
     --I: Interactive mode. Defaults to False.;
 
 :py2dataset.py:
