@@ -60,99 +60,99 @@ def get_default_questions() -> List[Dict]:
     questions = [
         {
             "id": "file_dependencies",
-            "text": "Dependencies of Python file: '{filename}'?",
-            "type": "file",
+            "text": "Dependencies in Python file: `{filename}`?",
+            "type": "file"
         },
         {
             "id": "entire_code_graph",
-            "text": "Call code graph of Python file: '{filename}'?",
-            "type": "file",
+            "text": "Call code graph in Python file: `{filename}`?",
+            "type": "file"
         },
         {
             "id": "file_functions",
-            "text": "Functions defined in Python file: '{filename}'?",
-            "type": "file",
-        },
+            "text": "Functions in Python file: `{filename}`?",
+            "type": "file"
+        },      
         {
             "id": "file_classes",
-            "text": "Classes defined in Python file: '{filename}'?",
-            "type": "file",
+            "text": "Classes in Python file: `{filename}`?",
+            "type": "file"
         },
         {
             "id": "function_inputs",
-            "text": "Inputs to function: '{function_name}' in Python file: '{filename}'?",
-            "type": "function",
+            "text": "Inputs to `{function_name}` in Python file: `{filename}`?",
+            "type": "function"
         },
         {
             "id": "function_docstring",
-            "text": "Docstring of function: '{function_name}' in Python file: '{filename}'?",
-            "type": "function",
+            "text": "Docstring of `{function_name}` in Python file: `{filename}`?",
+            "type": "function"
         },
         {
             "id": "function_calls",
-            "text": "Calls made in function: '{function_name}' in Python file: '{filename}'?",
-            "type": "function",
+            "text": "Calls made in `{function_name}` in Python file: `{filename}`?",
+            "type": "function"
         },
         {
             "id": "function_variables",
-            "text": "Variables defined in function: '{function_name}' in Python file: '{filename}'?",
-            "type": "function",
-        },
+            "text": "Variables in `{function_name}` in Python file: `{filename}`?",
+            "type": "function"
+        }, 
         {
             "id": "function_returns",
-            "text": "Returns from function: '{function_name}' in Python file: '{filename}'?",
-            "type": "function",
+            "text": "Returns from `{function_name}` in Python file: `{filename}`?",
+            "type": "function"
         },
         {
             "id": "class_methods",
-            "text": "Methods defined in class: '{class_name}' in Python file: '{filename}'?",
-            "type": "class",
+            "text": "Methods in `{class_name}` in Python file: `{filename}`?",
+            "type": "class"
         },
         {
             "id": "class_docstring",
-            "text": "Docstring of class: '{class_name}' in Python file: '{filename}'?",
-            "type": "class",
+            "text": "Docstring of `{class_name}` in Python file: `{filename}`?",
+            "type": "class"
         },
         {
             "id": "class_attributes",
-            "text": "Attributes of class: '{class_name}' in Python file: '{filename}'?",
-            "type": "class",
-        },
-        {
-            "id": "class_variables",
-            "text": "Variables defined in class: '{class_name}' in Python file: '{filename}'?",
-            "type": "class",
+            "text": "Attributes of `{class_name}` in Python file: `{filename}`?",
+            "type": "class"
         },
         {
             "id": "class_inheritance",
-            "text": "Inheritance of class: '{class_name}' in Python file: '{filename}'?",
-            "type": "class",
+            "text": "Inheritance of `{class_name}` in Python file: `{filename}`?",
+            "type": "class"
         },
         {
             "id": "method_inputs",
-            "text": "Inputs to method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
-            "type": "method",
+            "text": "Inputs to `{method_name}` in Python file: `{filename}`?",
+            "type": "method"
         },
         {
             "id": "method_docstring",
-            "text": "Docstring of method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
-            "type": "method",
+            "text": "Docstring of `{method_name}` in Python file: `{filename}`?",
+            "type": "method"
         },
         {
             "id": "method_calls",
-            "text": "Calls made in method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
-            "type": "method",
+            "text": "Calls made in `{method_name}` in Python file: `{filename}`?",
+            "type": "method"
+        },
+        {
+            "id": "method_variables",
+            "text": "Variables in `{method_name}` in Python file: `{filename}`?",
+            "type": "method"
         },
         {
             "id": "method_returns",
-            "text": "Returns from method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?",
-            "type": "method",
+            "text": "Returns from `{method_name}` in Python file: `{filename}`?",
+            "type": "method"
         },
-        {
+        {   
             "id": "file_purpose",
-            "text": "1) Describe the Purpose and Processing Summary of Python file: '{filename}'; 2) Provide an itemized and detailed description of each applicable function, class, and method; 3) Explain what each input, output, and variable does in the code.",
-            "type": "file",
-        },
+            "text": "1) Describe the Purpose and Processing summary of Python file: `{filename}`; 2) Summarize the Significance of applicable Function, Class, and Method; 3) Explain what each Input, Output, and Variable does in the code.",
+            "type": "file"
+        } 
     ]
     return questions
 
@@ -165,12 +165,13 @@ def get_default_model_config() -> Dict:
         Dict: The default model config dictionary
     """
     model_config = {
-        "prompt_template": "You are an AI coding instructor. Given this Context:\n'{context}'\n\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:",
+        "prompt_template": "Provide complete structured response for a formal software audit. Given this Context:\n'{context}'\n\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:",
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_inference_function": "from_pretrained",
             "model_params": {
                 "model_path": "TheBloke/WizardCoder-Python-13B-V1.0-GGUF",
+                "model_file": "wizardcoder-python-13b-v1.0.Q5_K_S.gguf",
                 "model_type": "llama",
                 "local_files_only": False,
                 ## MODEL CONFIGURATION PARAMETERS (set for current model with: GPU 4090-24GB VRAM, CPU 5950x-32 threads, 64GB RAM) 

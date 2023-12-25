@@ -11,12 +11,12 @@
     },
     {
         "id": "file_functions",
-        "text": "Functions defined in Python file: `{filename}`?",
+        "text": "Functions in Python file: `{filename}`?",
         "type": "file"
     },      
     {
         "id": "file_classes",
-        "text": "Classes defined in Python file: `{filename}`?",
+        "text": "Classes in Python file: `{filename}`?",
         "type": "file"
     },
     {
@@ -36,7 +36,7 @@
     },
     {
         "id": "function_variables",
-        "text": "Variables defined in `{function_name}` in Python file: `{filename}`?",
+        "text": "Variables in `{function_name}` in Python file: `{filename}`?",
         "type": "function"
     }, 
     {
@@ -46,7 +46,7 @@
     },
     {
         "id": "class_methods",
-        "text": "Methods defined in `{class_name}` in Python file: `{filename}`?",
+        "text": "Methods in `{class_name}` in Python file: `{filename}`?",
         "type": "class"
     },
     {
@@ -57,11 +57,6 @@
     {
         "id": "class_attributes",
         "text": "Attributes of `{class_name}` in Python file: `{filename}`?",
-        "type": "class"
-    },
-    {
-        "id": "class_variables",
-        "text": "Variables defined in `{class_name}` in Python file: `{filename}`?",
         "type": "class"
     },
     {
@@ -82,6 +77,11 @@
     {
         "id": "method_calls",
         "text": "Calls made in `{method_name}` in Python file: `{filename}`?",
+        "type": "method"
+    },
+    {
+        "id": "method_variables",
+        "text": "Variables in `{method_name}` in Python file: `{filename}`?",
         "type": "method"
     },
     {

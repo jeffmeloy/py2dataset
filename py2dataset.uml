@@ -4,18 +4,19 @@
 
 def main():
     Command-line entry point for processing Python files and generating datasets.
-    Supported command-line arguments:
-    --start <starting directory>: Starting directory for Python files or GitHub repository Python files. Defaults to current working directory.
-    --output_dir <output directory>: Directory to write the output files. Defaults to ./dataset/.
-    --questions_pathname <question file pathname>: Path and filename of the questions file. Defaults to ./py2dataset_questions.json.
-    --model_config_pathname <model configuration file pathname>: Path and filename of the model configuration file. Defaults to ./py2dataset_model_config.yaml.
-    --use_llm: Use llm for generating JSON answers. Defaults to False.
-    --quiet: Limit logging output. Defaults to False.
-    --single_process: Use a single process to process Python files. Defaults to False.
-    --detailed: Include detailed analysis. Defaults to False.
-    --html: Generate HTML output. Defaults to False.
-    --skip_regenration: Skip regeneration of existing instruction.json. Defaults to False
-    --I: Interactive mode. Defaults to False.;
+    Optional command-line arguments:
+    --start (str, optional): Starting directory for Python files or GitHub repository Python files. Default: cwd.
+    --output_dir (str, optional): Directory to write the output files. Default: ./dataset/.
+    --questions_pathname (str, optional): Path and filename of the questions file. Default: ./py2dataset_questions.json.
+    --model_config_pathname (str, optional): Path and filename of the model configuration file. Default: ./py2dataset_model_config.yaml.
+    --use_llm (bool, optional): Use llm to answer code purpose question. Default: False.
+    --quiet (bool, optional): Limit logging output. Default: False.
+    --single_process (bool, optional): Use a single process to process Python files. Default: False.
+    --detailed (bool, optional): Include detailed analysis. Default: False.
+    --html (bool, optional): Generate HTML output. Default: False.
+    --I (str, optional): Enable interactive mode. Default: False.
+    --skip_regen (str, optional): Skip regeneration of existing instruct.json files. Default: False.
+    --help: Display main() docstring.;
 
 :py2dataset.py:
 - Parse command line arguments

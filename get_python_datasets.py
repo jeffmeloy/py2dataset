@@ -30,7 +30,7 @@ import json
 from typing import Dict, List, Tuple
 
 
-def group_json(input_json):
+def group_json(input_json: Dict) -> Dict:
     """
     Group JSON formatted dictionary by key.
     Args:
@@ -38,14 +38,16 @@ def group_json(input_json):
     Returns:
         Dict: The grouped JSON formatted dictionary.
     """
-    output_json = {"Code Elements": {}}   
+    output_json = {"Code Elements": {}}
     for key, value in input_json["Code Elements"].items():
         if "`" in key:
             new_key = f"{key.split()[-1]} {key.split()[0]}"
             output_json["Code Elements"].setdefault(new_key, []).append(value)
         else:
             output_json["Code Elements"].setdefault(key, []).append(value)
-    output_json["Code Elements"] = {k: ", ".join(v) for k, v in output_json["Code Elements"].items()}
+    output_json["Code Elements"] = {
+        k: ", ".join(v) for k, v in output_json["Code Elements"].items()
+    }
     output_json["Code Elements"] = dict(sorted(output_json["Code Elements"].items()))
     return output_json
 
@@ -58,6 +60,7 @@ def clean_and_get_unique_elements(input_str: str) -> str:
     Returns:
         str: The cleaned string.
     """
+
     def element_generator(input_str):
         start, brace_level = 0, 0
         for i, char in enumerate(input_str):
@@ -178,16 +181,7 @@ class DatasetGenerator:
         Returns:
             str: The generated response.
         """
-
-        def get_context_and_prompt(query, context, code_qa_list):
-            full_context = f"{context}\nCODE Q and A:\n{code_qa_list}"
-            prompt = self.model_config["prompt_template"].format(
-                context=full_context, query=query
-            )
-            context_size = len(self.llm.tokenize(prompt))
-            return prompt, context_size
-
-        # Creating a list of dictionaries for Q and A pairs to be used as additional LLM context
+        # List of dictionaries for Q and A pairs to be used as additional LLM context
         excluded_instructions = ["Call code graph", "Docstring"]
         code_qa_list = [
             {item["instruction"].split(" in Python file:")[0]: item["output"]}
@@ -200,12 +194,14 @@ class DatasetGenerator:
 
         # Manage context length for LLM starting with the longest and most comprehensive
         context_strategies = [
-            lambda: "```python\n" + str(context) + "\n```",
-            lambda: "```python\n"
-            + str(self.file_details["file_info"]["file_code_simplified"])
-            + "\n```",
-            lambda: self.get_string_from_info(
-                self.file_details["file_info"], "file_summary"
+            lambda: "```python\n{}\n```".format(str(context)),
+            lambda: "```python\n{}\n```".format(
+                str(self.file_details["file_info"]["file_code_simplified"])
+            ),
+            lambda: "```python\n{}\n```".format(
+                self.get_string_from_info(
+                    self.file_details["file_info"], "file_summary"
+                )
             ),
             lambda: "",
         ]
@@ -214,7 +210,11 @@ class DatasetGenerator:
         ]
         for strategy in context_strategies:
             context = strategy()
-            prompt, context_size = get_context_and_prompt(query, context, code_qa_list)
+            full_context = f"{context}\nCODE Q and A:\n{code_qa_list}"
+            prompt = self.model_config["prompt_template"].format(
+                context=full_context, query=query
+            )
+            context_size = len(self.llm.tokenize(prompt))
             if context_size <= 0.70 * max_context_length:
                 break
             else:
@@ -232,7 +232,9 @@ class DatasetGenerator:
             code_elements_json = json.dumps(
                 {"Code Elements": code_elements_combined}, indent=4
             )
-            code_elements_json = json.dumps(group_json(json.loads(code_elements_json)), indent = 4)
+            code_elements_json = json.dumps(
+                group_json(json.loads(code_elements_json)), indent=4
+            )
             response += "\n" + code_elements_json  # Appending the JSON formatted string
             logging.info(f"***Overall Response: {response}")
 
@@ -241,9 +243,9 @@ class DatasetGenerator:
 
         if self.detailed:  # Get llm response for each code_qa_list item
             for item in code_qa_list:
-                instruction = (
-                    f"Describe the purpose and significance of these objects within the code: '{item}'"
-                )
+                instruct_key = list(item.keys())[0]
+                instruct_value = list(item.values())[0]
+                instruction = f"Describe the purpose and significance of these {instruct_key}: [{instruct_value}] within the code."
                 item_prompt = f"\n### Instruction:\nUsing this context:\n{context}\n\n{instruction}.\n### Response:"
                 try:
                     item_response = re.sub(r"\n\s*\n", "\n\n", self.llm(item_prompt))
@@ -256,14 +258,9 @@ class DatasetGenerator:
                 # replace the output value in self.instruct_list with the item.key + this_response
                 for i, instruct_item in enumerate(self.instruct_list):
                     if instruct_item["instruction"].startswith(list(item.keys())[0]):
-                        instruct_item["output"] = (
-                            list(item.keys())[0]
-                            + ":"
-                            + list(item.values())[0]
-                            + "\n\n"
-                            + "Purpose and Significance:\n"
-                            + item_response
-                        )
+                        instruct_item[
+                            "output"
+                        ] = f"{instruct_value}\n\nPurpose and Significance:\n{item_response}"
                         break
 
         return response
@@ -290,10 +287,12 @@ class DatasetGenerator:
             response = clean_and_get_unique_elements(str(info.get(question_id, "")))
 
         if question_type == "file":
-            context = (
-                "```python\n"
-                + str(self.file_details["file_info"]["file_code"])
-                + "\n```"
+            context = "".join(
+                [
+                    "```python\n",
+                    str(self.file_details["file_info"]["file_code"]),
+                    "\n```",
+                ]
             )
         if response and response != "None":
             response_str = str(response).strip()
@@ -338,14 +337,14 @@ class DatasetGenerator:
             for class_name, class_info in self.file_details["classes"].items():
                 for key, method_info in class_info.items():
                     if key.startswith("class_method_"):
-                        method_name = key[len("class_method_") :]
+                        method_name = f"{class_name}.{key[len('class_method_'):]}"
                         context = method_info["method_code"]
                         mapping = {"class_name": class_name, "method_name": method_name}
                         query = question_text.format(filename=self.base_name, **mapping)
                         self.process_question(
                             question_type, question_id, query, context, method_info
                         )
-        else:  # if question_type == 'function' or question_type == 'class'
+        else:  # question_type is 'function' or 'class'
             for name, info in self.file_details[
                 self.question_mapping[question_type]
             ].items():
@@ -364,7 +363,7 @@ class DatasetGenerator:
                     mapping[
                         f"{question_type}_variables"
                     ] = clean_and_get_unique_elements(combined_string)
-                    
+
                     if question_type == "class":
                         methods_string = self.get_string_from_info(
                             info, f"{question_type}_methods"

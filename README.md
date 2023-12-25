@@ -51,7 +51,8 @@ Clone the repository and install dependencies:
 - `--detailed`: Include detailed analysis. Default: False.
 - `--html`: Generate HTML output. Default: False.
 - `--I`: Interactive mode. Default: False.
-- `--skip_regenration (bool)`: Skip regeneration of existing instruction.json might be generated in previous or parallel runs. Default: False.
+- `--skip_regen`: Skip regeneration of existing instruct.json files. Default: False.
+- `--help`: Display main() docstring.
 
 ## Questions for datasets
 

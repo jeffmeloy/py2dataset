@@ -154,50 +154,10 @@ def convert_json_to_html(directory: str) -> None:
             logging.info(f"Failed saving: {html_file_path}")
 
 
-def convert_json_to_markdown(directory: str) -> None:
-    """
-    Convert JSON files within a given directory to Markdown format.
-    Args:
-        directory (str): The directory where the JSON files are located.
-    Returns:
-        None
-    """
-
-    def escape_markdown(text: str) -> str:
-        """Escape Markdown special characters in the provided text."""
-        markdown_special_chars = "\\`*_{}[]()#+-.!"
-        for char in markdown_special_chars:
-            text = text.replace(char, f"\\{char}")
-        return text
-
-    for json_file in Path(directory).rglob("*.json"):
-        dataset = read_file(json_file)
-        if not dataset:
-            continue
-
-        markdown_content = "# Data Report\n\n"
-        # Create Markdown table headers
-        headers = dataset[0].keys()
-        markdown_content += "| " + " | ".join(headers) + " |\n"
-        markdown_content += "| " + " | ".join(["---"] * len(headers)) + " |\n"
-
-        # Create Markdown table rows
-        for entry in dataset:
-            row = "| " + " | ".join(escape_markdown(str(entry[key])) for key in headers) + " |\n"
-            markdown_content += row
-
-        markdown_file_path = json_file.with_suffix(".md")
-        try:
-            with open(markdown_file_path, "w", encoding="utf-8") as file:
-                file.write(markdown_content)
-        except Exception as e:
-            logging.error(f"Failed to save Markdown file {markdown_file_path}: {e}")
-            
-
 def combine_json_files(directory: str, html: bool = False) -> Dict[str, List[Dict]]:
     """
     Combine all JSON files in the output directory into 'instruct.json', and
-    then remove duplicates.
+    then remove duplicates. Also generate a 'training.json' file.
     Args:
         directory (str): The directory where the output files are located.
     Returns:
@@ -205,67 +165,50 @@ def combine_json_files(directory: str, html: bool = False) -> Dict[str, List[Dic
     """
     logging.info(f"Combining JSON files in {directory}")
 
-    def remove_duplicate_dataset_entries(
-        dataset: List[Dict], key1: str, key2: str
-    ) -> List[Dict]:
-        """
-        Remove duplicate entries from the provided dataset based on the provided keys.
-        Args:
-            dataset (List[Dict]): The dataset to remove duplicates from.
-            key1 (str): The first key to check for duplicates.
-            key2 (str): The second key to check for duplicates.
-        Returns:
-            A dataset without duplicate entries.
-        """
-        seen = set()
-        result = []
-        for item in dataset:
-            if (item[key1], item[key2]) not in seen:
-                seen.add((item[key1], item[key2]))
-                result.append(item)
-        return result
+    # Generate instruct.json file
+    combined_data = []
+    seen = set()
+    for json_file in Path(directory).rglob("*.json"):
+        # skip the training.json file
+        if json_file.name == "training.json":
+            continue
 
-    instruct_data = []
-    for file_name in ["instruct.json"]:
-        file_path = Path(directory) / file_name
-        combined_data = []
-        for json_file in Path(directory).rglob(f"*.{file_name}"):
-            try:
-                json_file_data = read_file(json_file)
-                combined_data.extend(json_file_data)
-                combined_data = remove_duplicate_dataset_entries(
-                    combined_data, "instruction", "output"
-                )
-                instruct_data = combined_data.copy()
-                purpose_data = [
-                    item
-                    for item in combined_data
-                    if item["instruction"].startswith("1) Describe the Purpose")
-                ]
+        try:
+            file_data = read_file(json_file)
+            if file_data:
+                combined_data.extend(file_data)
+        except Exception:
+            logging.info(f"Failed reading: {json_file}")
 
-                code_output = []
-                for item in purpose_data:
-                    instruction = (
-                        "Define a Python code file that is described as follows:\n"
-                        + item["output"]
-                    )
-                    code_output.append(
-                        {"instruction": instruction, "output": item["input"]}
-                    )
-                write_file(code_output, Path(directory) / "training.json")
-            except Exception as e:
-                logging.info(f"Error processing: {json_file}: {e}")
+    combined_data = [
+        item
+        for item in combined_data
+        if (item["instruction"], item["output"]) not in seen
+        and not seen.add((item["instruction"], item["output"]))
+    ]
+    write_file(combined_data, Path(directory) / "instruct.json")
 
-        write_file(combined_data, file_path)
+    # Generate training.json file
+    purpose_data = [
+        item
+        for item in combined_data
+        if item["instruction"].startswith("1) Describe the Purpose")
+    ]
+    code_output = [
+        {
+            "instruction": f"Define a Python code file that is described as follows:\n{item['output']}",
+            "output": item["input"],
+        }
+        for item in purpose_data
+    ]
+    write_file(code_output, Path(directory) / "training.json")
 
-    # Save html / markdown file for each json file in the output directory
-    # convert_json_to_markdown(directory)
     if html:
         logging.info("Converting JSON files to HTML")
         convert_json_to_html(directory)
-    
-    return {"instruct_list": instruct_data}
-    
+
+    return {"instruct_list": combined_data}
+
 
 def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -> None:
     """
@@ -277,10 +220,8 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
     Returns:
         None
     """
+    # create graph
     graph_type = "entire_code_graph"
-    output_file = output_subdir / f"{base_name}.{graph_type}.png"
-
-    # Create graphs, add nodes, and add edges
     G = nx.DiGraph()
     G.add_nodes_from(file_details["file_info"][graph_type]["nodes"])
     for edge in file_details["file_info"][graph_type]["edges"]:
@@ -295,7 +236,8 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
                     if k in ["target_inputs", "target_returns"]
                 },
             )
-    # Draw graphs
+
+    # draw graph
     plt.figure(figsize=(20, 20))
     pos = nx.spring_layout(G)
     nx.draw(
@@ -318,12 +260,18 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
             label.append(f"\nReturns: {', '.join(edge[2]['target_returns'])}")
         edge_labels[(edge[0], edge[1])] = "\n".join(label)
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
-    plt.savefig(output_file)  # Save the figure
-    plt.close()  # Close the figure
+
+    # save graph
+    output_file = output_subdir / f"{base_name}.{graph_type}.png"
+    plt.savefig(output_file)
+    plt.close()
 
 
 def save_python_data(
-    file_details: dict, instruct_list: list, base_name: str, relative_path: Path, output_dir: str
+    file_details: dict,
+    instruct_list: list,
+    relative_path: Path,
+    output_dir: str,
 ) -> None:
     """
     Save Python file details as a YAML file, the instruction data as a JSON file, and code graphs.
@@ -335,14 +283,12 @@ def save_python_data(
     Returns:
         None
     """
-    # want output subdir to include the absolute path to the output dir + the directories between the output dir and the file
+    # save the instrunct.json file
     output_subdir = Path(output_dir) / relative_path.parent
     output_subdir.mkdir(parents=True, exist_ok=True)
-
-    # write instrunct.json files
+    base_name = relative_path.name
     file_names = [f"{base_name}.instruct.json", f"{base_name}.details.yaml"]
     contents = [instruct_list, file_details]
-
     for file_name, content in zip(file_names, contents):
         write_file(content, output_subdir / file_name)
 

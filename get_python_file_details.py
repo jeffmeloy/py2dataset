@@ -36,7 +36,7 @@ from typing import Dict, List, Union
 from get_code_graph import get_code_graph
 
 
-def remove_docstring(code: str) -> str:
+def remove_docstring(code: str, tree: ast.AST) -> str:
     """
     Remove docstrings from the provided Python code.
     This includes top-level module docstrings and docstrings in
@@ -48,9 +48,6 @@ def remove_docstring(code: str) -> str:
     Returns:
         str: The source code with docstrings removed.
     """
-    tree = ast.parse(code)
-
-    # Remove top-level docstring if present
     if (
         tree.body
         and isinstance(tree.body[0], ast.Expr)
@@ -86,7 +83,7 @@ def get_all_calls(node: ast.AST, calls=None) -> Dict[str, List[str]]:
                               to lists of their arguments.
     """
     if calls is None:
-        calls = [] 
+        calls = []
     if isinstance(node, ast.Call):
         calls.append((ast.unparse(node.func), [ast.unparse(arg) for arg in node.args]))
     elif isinstance(node, ast.ClassDef):
@@ -128,7 +125,7 @@ class CodeVisitor(ast.NodeVisitor):
             Populate file_info with details about the file.
     """
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, tree: ast.AST) -> None:
         """
         Initialize a new instance of the class.
         Args:
@@ -140,6 +137,7 @@ class CodeVisitor(ast.NodeVisitor):
         self.file_info: Dict[str, Union[str, List[str]]] = {}
         self.current_class: str = None
         self.constants: List[str] = []
+        self.tree = tree
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """
@@ -176,12 +174,12 @@ class CodeVisitor(ast.NodeVisitor):
             node: ast.AST: The node to visit.
         """
         for child in ast.iter_child_nodes(node):
-            child.parent = node  # Set the parent attribute
+            child.parent = node  
             self.visit(child)
 
     def visit_Assign(self, node: ast.Assign):
         """
-        Get self.constants 
+        Get self.constants
         Args:
             node: ast.Assign: The node to visit.
         """
@@ -195,7 +193,7 @@ class CodeVisitor(ast.NodeVisitor):
                         value_repr = ast.unparse(value)
                     constant_assignment = f"{target.id}={value_repr}"
                     self.constants.append(constant_assignment)
-        self.generic_visit(node)  
+        self.generic_visit(node)
 
     def extract_details(
         self, node: ast.AST, node_type: str
@@ -210,6 +208,23 @@ class CodeVisitor(ast.NodeVisitor):
         """
         node_walk = list(ast.walk(node))
         call_data = get_all_calls(node)
+        node_inputs = (
+            [arg.arg for arg in node.args.args]
+            if node_type in ["function", "method"]
+            else None
+        )
+        node_variables = list(
+            {
+                ast.unparse(target)
+                for subnode in node_walk
+                if isinstance(subnode, ast.Assign)
+                for target in subnode.targets
+                if isinstance(target, ast.Name)
+            }
+        )
+        if node_inputs:
+            node_variables = list(set(node_inputs + node_variables))
+
         details = {
             f"{node_type}_name": node.name,
             f"{node_type}_code": ast.unparse(node),
@@ -221,9 +236,7 @@ class CodeVisitor(ast.NodeVisitor):
                 ),
                 None,
             ),
-            f"{node_type}_inputs": [arg.arg for arg in node.args.args]
-            if node_type in ["function", "method"]
-            else None,
+            f"{node_type}_inputs": node_inputs,
             f"{node_type}_defaults": [ast.unparse(d) for d in node.args.defaults]
             if node_type in ["function", "method"]
             else None,
@@ -234,15 +247,7 @@ class CodeVisitor(ast.NodeVisitor):
             ],
             f"{node_type}_calls": list(call_data.keys()),
             f"{node_type}_call_inputs": call_data,
-            f"{node_type}_variables": list(
-                {
-                    ast.unparse(target)
-                    for subnode in node_walk
-                    if isinstance(subnode, ast.Assign)
-                    for target in subnode.targets
-                    if isinstance(target, ast.Name)
-                }
-            ),
+            f"{node_type}_variables": node_variables,
             f"{node_type}_decorators": list(
                 {ast.unparse(decorator) for decorator in node.decorator_list}
                 if node.decorator_list
@@ -266,9 +271,7 @@ class CodeVisitor(ast.NodeVisitor):
             ),
         }
         if node_type in ["class", "method"]:
-            if (
-                node_type == "method" and self.current_class
-            ):  # find attributes defined as self.attribute
+            if node_type == "method" and self.current_class:  # find attributes defined as self.attribute
                 attributes = [
                     target.attr
                     for subnode in node_walk
@@ -278,9 +281,8 @@ class CodeVisitor(ast.NodeVisitor):
                     and isinstance(target.value, ast.Name)
                     and target.value.id == "self"
                 ]
-                self.classes[self.current_class].setdefault(
-                    "class_attributes", []
-                ).extend(attributes)
+                class_attributes = self.classes[self.current_class].setdefault("class_attributes", [])
+                class_attributes += attributes
             if node_type == "class":
                 details.update(
                     {
@@ -295,7 +297,6 @@ class CodeVisitor(ast.NodeVisitor):
                             subnode.name
                             for subnode in node.body
                             if isinstance(subnode, ast.FunctionDef)
-                            and subnode.name != "__init__"
                         ],
                         "class_inheritance": [ast.unparse(base) for base in node.bases]
                         if node.bases
@@ -304,7 +305,6 @@ class CodeVisitor(ast.NodeVisitor):
                             subnode.name
                             for subnode in node.body
                             if isinstance(subnode, ast.FunctionDef)
-                            and subnode.name != "__init__"
                             and any(
                                 isinstance(decorator, ast.Name)
                                 and decorator.id == "staticmethod"
@@ -347,23 +347,28 @@ class CodeVisitor(ast.NodeVisitor):
             }
             for func_name, details in self.functions.items()
         ]
-        
-        class_defs = []
-        for class_name, class_details in self.classes.items():
-            method_defs = {}
-            for method_name, details in class_details.items():
-                if method_name.startswith("class_method_"):
-                    method_defs[method_name[len("class_method_") :]] = {
-                        "inputs": details["method_inputs"],
-                        "calls": details["method_calls"],
-                        "call_inputs": details["method_call_inputs"],
-                        "returns": details["method_returns"],
+
+        class_defs = [
+            {
+                class_name: {
+                    "method_defs": {
+                        method_name[len("class_method_") :]: {
+                            "inputs": details["method_inputs"],
+                            "calls": details["method_calls"],
+                            "call_inputs": details["method_call_inputs"],
+                            "returns": details["method_returns"],
+                        }
+                        for method_name, details in class_details.items()
+                        if method_name.startswith("class_method_")
                     }
-            class_defs.append({class_name: {"method_defs": method_defs}})
+                }
+            }
+            for class_name, class_details in self.classes.items()
+        ]
 
         self.file_info = {
             "file_code": self.code,
-            "file_ast" : node,
+            "file_ast": node,
             "file_dependencies": list(file_dependencies),
             "file_functions": list(self.functions.keys()),
             "file_classes": list(self.classes.keys()),
@@ -373,7 +378,7 @@ class CodeVisitor(ast.NodeVisitor):
                 "function_defs": function_defs,
                 "class_defs": class_defs,
             },
-            "file_code_simplified": remove_docstring(ast.unparse(node)),
+            "file_code_simplified": remove_docstring(ast.unparse(node), self.tree),
         }
 
 
@@ -392,7 +397,8 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
     except (PermissionError, SyntaxError, IOError) as e:
         logging.warning(f"{e} error in file: {file_path}")
         return None
-    visitor = CodeVisitor(code)
+
+    visitor = CodeVisitor(code, tree)
     visitor.analyze(tree)
     file_details = {
         "file_info": visitor.file_info,
