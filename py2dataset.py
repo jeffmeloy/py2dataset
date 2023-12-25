@@ -53,14 +53,13 @@ from save_output import combine_json_files, save_python_data
 
 def process_single_python_file(
     python_pathname: str,
-    start: str,
+    relative_path: Path,
     output_dir: str,
     model_config_pathname: str,
     questions: Dict,
     use_llm: bool,
     model_config: Dict,
     detailed: bool,
-    skip_regen: bool,
 ) -> None:
     """
     Processes a single Python file to generate question-answer pairs and instructions.
@@ -73,14 +72,7 @@ def process_single_python_file(
         use_llm (bool): Use llm to answer code purpose question.
         model_config (Dict): Configuration dictionary for the LLM.
         detailed (bool): Perform detailed analysis if True.
-        skip_regen (bool): Skip regeneration of existing instruct.json files.
     """
-    relative_path = Path(os.path.relpath(python_pathname, os.path.dirname(start)))
-    base_pathname = Path(output_dir) / relative_path
-    instruct_pathname = base_pathname.with_suffix(".py.instruct.json")
-    if instruct_pathname.exists() and skip_regen:
-        return
-
     logging.info(f"Processing file: {python_pathname}")
     if model_config is None and use_llm:
         model_config = get_model(model_config_pathname)
@@ -148,18 +140,22 @@ def py2dataset(
 
     params = {
         "python_pathname": "",
-        "start": get_start_dir(start),
+        "relative_path": "",
         "output_dir": get_output_dir(output_dir),
         "model_config_pathname": model_config_pathname,
         "questions": get_questions(questions_pathname),
         "use_llm": use_llm,
         "model_config": model_config,
-        "detailed": detailed,
-        "skip_regen": skip_regen,
+        "detailed": detailed
     }
 
     for python_pathname in Path(start).rglob("[!_]*.py"):
         params["python_pathname"] = str(python_pathname)
+        params["relative_path"] = Path(os.path.relpath(python_pathname, os.path.dirname(get_start_dir(start))))
+        base_pathname = Path(params["output_dir"]) / params["relative_path"]
+        instruct_pathname = base_pathname.with_suffix(".py.instruct.json")
+        if instruct_pathname.exists() and skip_regen:
+            continue
         # process each python file in a separate process to manage memory
         if params["model_config"] is None and params["use_llm"]:
             proc = Process(target=process_single_python_file, kwargs=params)
