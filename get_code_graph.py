@@ -291,7 +291,7 @@ def reorganize_control_flow(code_graph, control_flow_structure):
     Returns:
         reorganized_control_flow_structure: reorganized control flow structure
     """
-    # Get starting points from the code graph
+    # Get starting points from the code graph as those
     targets = [edge["target"] for edge in code_graph["edges"]]
     starting_points = [node for node in code_graph["nodes"] if node not in targets]
 
@@ -385,7 +385,7 @@ def get_plantUML_element(element, indentation=""):
 
 def get_plantUML(file_details):
     """
-    Get plantUML code for entire file.
+    Get plantUML activity diagram code for entire file.
     Args:
         file_details: file details
     Returns:

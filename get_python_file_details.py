@@ -114,7 +114,7 @@ class CodeVisitor(ast.NodeVisitor):
         functions(Dict): details about functions in the code.
         classes (Dict): details about classes in the code.
         file_info (Dict): details about the file.
-    Methods:
+    Methods: 
         visit_FunctionDef(node: ast.FunctionDef) -> None:
             Extract details about a function.
         visit_ClassDef(node: ast.ClassDef) -> None:

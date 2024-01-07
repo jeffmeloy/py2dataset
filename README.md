@@ -76,9 +76,10 @@ The following questions are answered by parsing the AST:
 - Calls made in method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
 - Returns from method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
 
-If --use_llm, the dataset includes the llm response to the file_purpose question in the `--questions_pathname` file
+If --use_llm, the dataset includes the llm response to the file_purpose question in the `--questions_pathname` file:
+- '1) Describe the Purpose and Processing summary of Python file: `{filename}`; 2) Summarize the Significance of applicable Function, Class, and Method; 3) Explain what each Input, Output, and Variable does in the code.'
 
-If --use_llm and --detailed, the dataset includes the purpose and signicance of each code object
+If --use_llm and --detailed, the instruct dataset includes the llm assessment of the purpose and signicance of each of the code objects identified from parsing the AST. 
 
 ## Code Structure
 

@@ -45,6 +45,7 @@ import yaml
 # Setting up a basic logger
 logging.basicConfig(level=logging.INFO)
 
+# defaults if provided inputs fail
 QUESTIONS_FILE = "py2dataset_questions.json"
 MODEL_CONFIG_FILE = "py2dataset_model_config.yaml"
 OUTPUT_DIR = "datasets"
@@ -61,98 +62,98 @@ def get_default_questions() -> List[Dict]:
         {
             "id": "file_dependencies",
             "text": "Dependencies in Python file: `{filename}`?",
-            "type": "file"
+            "type": "file",
         },
         {
             "id": "entire_code_graph",
             "text": "Call code graph in Python file: `{filename}`?",
-            "type": "file"
+            "type": "file",
         },
         {
             "id": "file_functions",
             "text": "Functions in Python file: `{filename}`?",
-            "type": "file"
-        },      
+            "type": "file",
+        },
         {
             "id": "file_classes",
             "text": "Classes in Python file: `{filename}`?",
-            "type": "file"
+            "type": "file",
         },
         {
             "id": "function_inputs",
             "text": "Inputs to `{function_name}` in Python file: `{filename}`?",
-            "type": "function"
+            "type": "function",
         },
         {
             "id": "function_docstring",
             "text": "Docstring of `{function_name}` in Python file: `{filename}`?",
-            "type": "function"
+            "type": "function",
         },
         {
             "id": "function_calls",
             "text": "Calls made in `{function_name}` in Python file: `{filename}`?",
-            "type": "function"
+            "type": "function",
         },
         {
             "id": "function_variables",
             "text": "Variables in `{function_name}` in Python file: `{filename}`?",
-            "type": "function"
-        }, 
+            "type": "function",
+        },
         {
             "id": "function_returns",
             "text": "Returns from `{function_name}` in Python file: `{filename}`?",
-            "type": "function"
+            "type": "function",
         },
         {
             "id": "class_methods",
             "text": "Methods in `{class_name}` in Python file: `{filename}`?",
-            "type": "class"
+            "type": "class",
         },
         {
             "id": "class_docstring",
             "text": "Docstring of `{class_name}` in Python file: `{filename}`?",
-            "type": "class"
+            "type": "class",
         },
         {
             "id": "class_attributes",
             "text": "Attributes of `{class_name}` in Python file: `{filename}`?",
-            "type": "class"
+            "type": "class",
         },
         {
             "id": "class_inheritance",
             "text": "Inheritance of `{class_name}` in Python file: `{filename}`?",
-            "type": "class"
+            "type": "class",
         },
         {
             "id": "method_inputs",
             "text": "Inputs to `{method_name}` in Python file: `{filename}`?",
-            "type": "method"
+            "type": "method",
         },
         {
             "id": "method_docstring",
             "text": "Docstring of `{method_name}` in Python file: `{filename}`?",
-            "type": "method"
+            "type": "method",
         },
         {
             "id": "method_calls",
             "text": "Calls made in `{method_name}` in Python file: `{filename}`?",
-            "type": "method"
+            "type": "method",
         },
         {
             "id": "method_variables",
             "text": "Variables in `{method_name}` in Python file: `{filename}`?",
-            "type": "method"
+            "type": "method",
         },
         {
             "id": "method_returns",
             "text": "Returns from `{method_name}` in Python file: `{filename}`?",
-            "type": "method"
+            "type": "method",
         },
-        {   
+        {
             "id": "file_purpose",
             "text": "1) Describe the Purpose and Processing summary of Python file: `{filename}`; 2) Summarize the Significance of applicable Function, Class, and Method; 3) Explain what each Input, Output, and Variable does in the code.",
-            "type": "file"
-        } 
+            "type": "file",
+        },
     ]
     return questions
 
@@ -165,7 +166,9 @@ def get_default_model_config() -> Dict:
         Dict: The default model config dictionary
     """
     model_config = {
-        "prompt_template": "Provide complete structured response for a formal software audit. Given this Context:\n'{context}'\n\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:",
+        "system_prompt": "Provide complete structured response for a formal software audit, given this Context:\n'{context}'\n",
+        "instruction_prompt": "\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step.\n{query}\n",
+        "prompt_template": "### System: {system_prompt}### Instruction:{instruction_prompt}### Response:",
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_inference_function": "from_pretrained",
@@ -174,7 +177,7 @@ def get_default_model_config() -> Dict:
                 "model_file": "wizardcoder-python-13b-v1.0.Q5_K_S.gguf",
                 "model_type": "llama",
                 "local_files_only": False,
-                ## MODEL CONFIGURATION PARAMETERS (set for current model with: GPU 4090-24GB VRAM, CPU 5950x-32 threads, 64GB RAM) 
+                ## MODEL CONFIGURATION PARAMETERS (set for current model with: GPU 4090-24GB VRAM, CPU 5950x-32 threads, 64GB RAM)
                 # avx2 and gpu_layers are not compatible
                 # "lib": "avx2",
                 "threads": 16,
@@ -264,13 +267,13 @@ def instantiate_model(model_config: Dict) -> object:
         return None
 
 
-def get_model(model_config_pathname: str) -> tuple[object, str]:
+def get_model(model_config_pathname: str) -> object:
     """
     Returns an instantiated model and prompt template based on the model configuration.
     Agrs:
         model_config_pathname (str): The pathname of the model config file
     Returns:
-        Tuple[object, str]: The instantiated model and prompt template
+        Tuple[object, str]: The instantiated model
     """
     try:
         if not model_config_pathname:
@@ -284,6 +287,7 @@ def get_model(model_config_pathname: str) -> tuple[object, str]:
         )
         model_config = get_default_model_config()
     model_config["model"] = instantiate_model(model_config["inference_model"])
+
     return model_config
 
 

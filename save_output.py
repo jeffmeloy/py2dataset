@@ -117,7 +117,7 @@ def convert_json_to_html(directory: str) -> None:
         column_count = len(dataset[0].keys())
         column_width = (
             100 / column_count
-        )  # Calculate the width for each column based on the number of columns
+        ) 
         for key in dataset[0].keys():
             html_content += f"<th style='width: {column_width}%;'>{key}</th>"
         html_content += """
@@ -125,19 +125,16 @@ def convert_json_to_html(directory: str) -> None:
                 </thead>
                 <tbody>
         """
-        html_rows = []  # List to store each row's HTML content
+        html_rows = []  
         for entry in dataset:
             row_parts = ["<tr>"]
             for key in entry:
-                # Convert \n to HTML line breaks
                 value = escape(str(entry[key]))
                 value = preserve_spacing(value)
                 value = value.replace("\n", "<br/>")
                 row_parts.append(f"<td>{value}</td>")
             row_parts.append("</tr>")
-            html_rows.append("".join(row_parts))  # Join all parts of the row and append to the list
-
-        # After the loop, join all rows
+            html_rows.append("".join(row_parts)) 
         html_content += "".join(html_rows)
 
         html_content += """
@@ -169,7 +166,6 @@ def combine_json_files(directory: str, html: bool = False) -> Dict[str, List[Dic
     combined_data = []
     seen = set()
     for json_file in Path(directory).rglob("*.json"):
-        # skip the training.json file
         if json_file.name == "training.json":
             continue
 
@@ -274,7 +270,7 @@ def save_python_data(
     output_dir: str,
 ) -> None:
     """
-    Save Python file details as a YAML file, the instruction data as a JSON file, and code graphs.
+    Save file_details as .yaml, the instruct_list as 'json, and code graph as .png
     Args:
         file_details (dict): The details extracted from the Python file.
         instruct_list (list): The instruction data extracted from the Python file.
@@ -283,7 +279,6 @@ def save_python_data(
     Returns:
         None
     """
-    # save the instrunct.json file
     output_subdir = Path(output_dir) / relative_path.parent
     output_subdir.mkdir(parents=True, exist_ok=True)
     base_name = relative_path.name

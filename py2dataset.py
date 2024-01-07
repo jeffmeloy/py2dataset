@@ -146,16 +146,21 @@ def py2dataset(
         "questions": get_questions(questions_pathname),
         "use_llm": use_llm,
         "model_config": model_config,
-        "detailed": detailed
+        "detailed": detailed,
     }
 
     for python_pathname in Path(start).rglob("[!_]*.py"):
         params["python_pathname"] = str(python_pathname)
-        params["relative_path"] = Path(os.path.relpath(python_pathname, os.path.dirname(get_start_dir(start))))
+        params["relative_path"] = Path(
+            os.path.relpath(python_pathname, os.path.dirname(get_start_dir(start)))
+        )
+
+        # determine if corresponding instruct.json exists and skip if skip_regen
         base_pathname = Path(params["output_dir"]) / params["relative_path"]
         instruct_pathname = base_pathname.with_suffix(".py.instruct.json")
         if instruct_pathname.exists() and skip_regen:
             continue
+        
         # process each python file in a separate process to manage memory
         if params["model_config"] is None and params["use_llm"]:
             proc = Process(target=process_single_python_file, kwargs=params)
@@ -250,7 +255,7 @@ def main():
     }
 
     arg_string = " ".join(sys.argv[1:])
-    for arg in params: # parse command-line arguments
+    for arg in params:  # parse command-line arguments
         if "--" + arg in arg_string:
             if isinstance(params[arg], bool):
                 params[arg] = True
@@ -260,7 +265,7 @@ def main():
                 params[arg] = value_segment.split(" --")[0].strip('"')
                 arg_string = arg_string.replace("--" + arg + " " + params[arg], "")
 
-    if params["I"]: # query user for parameters to change
+    if params["I"]:  # query user for parameters to change
         print("Interactive mode, enter new values or press enter to keep.")
         for arg in params:
             if arg != "I":

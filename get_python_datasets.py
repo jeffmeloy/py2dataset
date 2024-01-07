@@ -77,7 +77,8 @@ def clean_and_get_unique_elements(input_str: str) -> str:
         for element in element_generator(input_str)
         if element.strip()
     ]
-    return ", ".join(cleaned_elements)
+    returned_elements = ", ".join(cleaned_elements)
+    return returned_elements
 
 
 class DatasetGenerator:
@@ -208,13 +209,18 @@ class DatasetGenerator:
         max_context_length = self.model_config["inference_model"]["model_params"][
             "context_length"
         ]
+
+        prompt_template = self.model_config["prompt_template"].format(
+            system_prompt=self.model_config["system_prompt"],
+            instruction_prompt=self.model_config["instruction_prompt"],
+        )
+
         for strategy in context_strategies:
             context = strategy()
-            full_context = f"{context}\nCODE Q and A:\n{code_qa_list}"
-            prompt = self.model_config["prompt_template"].format(
-                context=full_context, query=query
-            )
+            full_context = f"{context}\nCode Elements:\n{code_qa_list}"
+            prompt = prompt_template.format(context=full_context, query=query)
             context_size = len(self.llm.tokenize(prompt))
+            print(f"Context size: {context_size}")
             if context_size <= 0.70 * max_context_length:
                 break
             else:
@@ -237,7 +243,6 @@ class DatasetGenerator:
             )
             response += "\n" + code_elements_json  # Appending the JSON formatted string
             logging.info(f"***Overall Response: {response}")
-
         except Exception as error:
             logging.error(f"Failed to generate model response: {error}")
 
@@ -245,13 +250,15 @@ class DatasetGenerator:
             for item in code_qa_list:
                 instruct_key = list(item.keys())[0]
                 instruct_value = list(item.values())[0]
-                instruction = f"Describe the purpose and significance of these {instruct_key}: [{instruct_value}] within the code."
-                item_prompt = f"\n### Instruction:\nUsing this context:\n{context}\n\n{instruction}.\n### Response:"
+                query = f"Describe the purpose and significance of these {instruct_key}: [{instruct_value}] within the code."
+                prompt_template = self.model_config["prompt_template"].format(
+                    system_prompt=self.model_config["system_prompt"],
+                    instruction_prompt=self.model_config["instruction_prompt"],
+                )
+                prompt = prompt_template.format(context=context, query=query)
                 try:
-                    item_response = re.sub(r"\n\s*\n", "\n\n", self.llm(item_prompt))
-                    logging.info(
-                        f"\n***Itemized Response: {instruction}\n{item_response}"
-                    )
+                    item_response = re.sub(r"\n\s*\n", "\n\n", self.llm(prompt))
+                    logging.info(f"\n***Itemized Response: {query}\n{item_response}")
                 except Exception as error:
                     logging.error(f"Failed to generate model response: {error}")
 

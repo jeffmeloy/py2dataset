@@ -1,31 +1,47 @@
-prompt_template: "Provide complete structured response for a formal software audit. Given this Context:\n'{context}'\n\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:"
+# context is the Python source code
+system_prompt: "Provide complete structured response for a formal software audit, given this Context:\n'{context}'\n"
+
+# query is the "text" from the py2dataset_question.json where the "id" is "file_purpose"  
+instruction_prompt: "\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step.\n{query}\n"
+
+# Uncomment out the desired prompt template 
+# chatML
+#prompt_template: "<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{instruction_prompt}<|im_end|>\n<|im_start|>assistant\n"
+
+# System / Instruction / Response
+#prompt_template: "### System: {system_prompt}### Instruction:{instruction_prompt}### Response:"
+
+# System / User / Assistant
+prompt_template: "{system_prompt} USER: {instruction_prompt} ASSISTANT:"
+
+# llama2
+#prompt_template: "<s>[INST] <<SYS>> {system_prompt} <</SYS>> {instruction_prompt} [/INST]"
+
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
   model_params:
-    model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
-    model_file: "wizardcoder-python-13b-v1.0.Q5_K_S.gguf"
-    model_type: "llama"
+    model_path: "TheBloke/OpenHermes-2.5-Mistral-7B-16k-GGUF"
+    model_file: "openhermes-2.5-mistral-7b-16k.Q5_K_M.gguf"
+    model_type: "mistral"
     local_files_only: false
-    #model_path: "./models/wizardcoder-python-13b-v1.0.Q4_0.gguf"
+    #model_path: "./models/openhermes-2.5-mistral-7b-16k.Q5_K_M.gguf"
+    #model_type: "mistral"
+    #local_files_only: true
+    #model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
+    #model_file: "wizardcoder-python-13b-v1.0.Q5_K_S.gguf"
+    #model_type: "llama"
+    #local_files_only: false
+    #model_path: "./models/wizardcoder-python-13b-v1.0.Q5_K_S.gguf"
     #model_type: "llama"
     #local_files_only: true
-    #model_path: "TheBloke/WizardCoder-Guanaco-15B-V1.1-GGML"
-    #model_type: "gpt_bigcode"
-    #local_files_only: false
-    #model_path: "TheBloke/Starcoderplus-Guanaco-GPT4-15B-V1.0-GGML"
-    #model_type: "gpt_bigcode"
-    #local_files_only: false
-    #model_path: "TheBloke/Octocoder-GGML"
-    #model_type: "gpt_bigcode"
-    #local_files_only: false  
-
-    ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 32 threads, 64GB RAM)
-    #avx2 and gpu_layers are not compatible 
+    ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 64GB RAM)
+    #if you want to use gpu_layers, comment out the lib line; 
+    #if you want to use CPU only, comment out the gpu_layers line 
     #lib: "avx2"
-    threads: 16
-    batch_size: 256 
-    context_length: 13000
-    max_new_tokens: 13000
     gpu_layers: 100
+    threads: 16
+    batch_size: 512
+    context_length: 50000
+    max_new_tokens: 50000
     reset: true
