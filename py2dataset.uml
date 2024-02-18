@@ -64,8 +64,10 @@ Repeat while (More Python Files?) is (yes)
 :Combine all qa and instruct JSON files and create other datasets
 - `instruct.json` - instruction/input/output dataset
 - `instruct.html` - html formated file, if --html
-- `train.json` - instruction/output dataset, if --use_llm
-- `train.html` - html formated file, if --html;
+- `document_code.json` - document/code dataset, if --use_llm
+- `document_code.html` - html formated file, if --html;
+- `sharegpt.json` - system/human/gpt dataset, if --use_llm
+- `sharegpt.html` - html formated file, if --html;
 
 :End;
 
