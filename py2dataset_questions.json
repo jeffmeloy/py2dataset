@@ -91,7 +91,7 @@
     },
     {   
         "id": "file_purpose",
-        "text": "1) Describe the Purpose and Processing summary of Python file: `{filename}`; 2) Summarize the Significance of applicable Function, Class, and Method; 3) Explain what each Input, Output, and Variable does in the code.",
+        "text": "1) Describe the overall Purpose and Processing Approach of Python file: `{filename}`; 2) Define API Signatures for each applicable Function and Class Method; 3) Derive Functional Requirements to specify the code's behavior and purpose; 4) Explain what each variable does in the code.",
         "type": "file"
     } 
 ]

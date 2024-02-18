@@ -75,7 +75,7 @@ def write_file(data: Dict, file_path: Path) -> None:
 
 def convert_json_to_html(directory: str) -> None:
     """
-    Convert JSON files within a given directory to HTML format.
+    Convert JSON files within a given directory to HTML format and save .html file.
     Args:
         directory (str): The directory where the JSON files are located.
     Returns:
@@ -115,9 +115,7 @@ def convert_json_to_html(directory: str) -> None:
                     <tr>
         """
         column_count = len(dataset[0].keys())
-        column_width = (
-            100 / column_count
-        ) 
+        column_width = round(100 / column_count, 2)
         for key in dataset[0].keys():
             html_content += f"<th style='width: {column_width}%;'>{key}</th>"
         html_content += """
@@ -125,7 +123,7 @@ def convert_json_to_html(directory: str) -> None:
                 </thead>
                 <tbody>
         """
-        html_rows = []  
+        html_rows = []
         for entry in dataset:
             row_parts = ["<tr>"]
             for key in entry:
@@ -134,7 +132,7 @@ def convert_json_to_html(directory: str) -> None:
                 value = value.replace("\n", "<br/>")
                 row_parts.append(f"<td>{value}</td>")
             row_parts.append("</tr>")
-            html_rows.append("".join(row_parts)) 
+            html_rows.append("".join(row_parts))
         html_content += "".join(html_rows)
 
         html_content += """
@@ -151,7 +149,9 @@ def convert_json_to_html(directory: str) -> None:
             logging.info(f"Failed saving: {html_file_path}")
 
 
-def combine_json_files(directory: str, html: bool = False) -> Dict[str, List[Dict]]:
+def combine_json_files(
+    directory: str, html: bool, questions: Dict
+) -> Dict[str, List[Dict]]:
     """
     Combine all JSON files in the output directory into 'instruct.json', and
     then remove duplicates. Also generate a 'training.json' file.
@@ -162,42 +162,73 @@ def combine_json_files(directory: str, html: bool = False) -> Dict[str, List[Dic
     """
     logging.info(f"Combining JSON files in {directory}")
 
-    # Generate instruct.json file
-    combined_data = []
-    seen = set()
+    # Save instruct.json file
+    combined_data, code_filename = [], []
+    skip_files = {"instruct.json", "shargpt.json", "document_code.json"}
     for json_file in Path(directory).rglob("*.json"):
-        if json_file.name == "training.json":
+        if json_file.name in skip_files:
             continue
-
         try:
             file_data = read_file(json_file)
             if file_data:
                 combined_data.extend(file_data)
-        except Exception:
-            logging.info(f"Failed reading: {json_file}")
-
-    combined_data = [
-        item
-        for item in combined_data
-        if (item["instruction"], item["output"]) not in seen
-        and not seen.add((item["instruction"], item["output"]))
-    ]
+                cleaned_name = (
+                    json_file.relative_to(directory)
+                    .with_suffix("")
+                    .as_posix()
+                    .replace(".instruct", "")
+                )
+                code_filename.append(cleaned_name)
+        except Exception as e:
+            logging.info(f"Failed reading: {json_file}. Error: {e}")
     write_file(combined_data, Path(directory) / "instruct.json")
 
-    # Generate training.json file
+    # Generate document_code.json file
+    purpose_question = [
+        item["text"] for item in questions if item["id"] == "file_purpose"
+    ][0]
+    purpose_question = purpose_question.split("{filename}")[0]
     purpose_data = [
         item
         for item in combined_data
-        if item["instruction"].startswith("1) Describe the Purpose")
+        if item["instruction"].startswith(purpose_question)
     ]
-    code_output = [
+    document_code = [
         {
-            "instruction": f"Define a Python code file that is described as follows:\n{item['output']}",
-            "output": item["input"],
+            "document": item["output"],
+            "code": item["input"],
         }
         for item in purpose_data
     ]
-    write_file(code_output, Path(directory) / "training.json")
+    for i, item in enumerate(document_code):
+        item["code filename"] = code_filename[i]
+    write_file(document_code, Path(directory) / "document_code.json")
+
+    # Generate sharegpt.json file
+    sharegpt = [
+        {
+            "conversation": [
+                {"from": "system", "value": f"code documentation: {item['document']}"},
+                {
+                    "from": "human",
+                    "value": "Output the Python code described by the code documentation.",
+                },
+                {"from": "gpt", "value": item["code"]},
+            ],
+            "nbytes": "0",
+            "source": item["code filename"],
+        }
+        for item in document_code
+    ]
+
+    # Compute the number of bytes for each conversation and update the nbytes field
+    for item in sharegpt:
+        nbytes = 0
+        for conv in item["conversation"]:
+            nbytes += len(conv["value"].encode("utf-8"))
+        item["nbytes"] = nbytes
+
+    write_file(sharegpt, Path(directory) / "shargpt.json")
 
     if html:
         logging.info("Converting JSON files to HTML")
@@ -264,17 +295,15 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
 
 
 def save_python_data(
-    file_details: dict,
-    instruct_list: list,
-    relative_path: Path,
-    output_dir: str,
+    file_details: dict, instruct_list: list, relative_path: Path, output_dir: str
 ) -> None:
     """
-    Save file_details as .yaml, the instruct_list as 'json, and code graph as .png
+    Save the details of the Python file as a YAML file, the instruction data as JSON files,
+    and generate and save code graphs.
     Args:
         file_details (dict): The details extracted from the Python file.
         instruct_list (list): The instruction data extracted from the Python file.
-        relative_path (Path): The relative path to the Python file.
+        relative_path (Path): The relative path of the Python file.
         output_dir (str): The directory where the output files will be saved.
     Returns:
         None
@@ -282,12 +311,11 @@ def save_python_data(
     output_subdir = Path(output_dir) / relative_path.parent
     output_subdir.mkdir(parents=True, exist_ok=True)
     base_name = relative_path.name
-    file_names = [f"{base_name}.instruct.json", f"{base_name}.details.yaml"]
-    contents = [instruct_list, file_details]
-    for file_name, content in zip(file_names, contents):
-        write_file(content, output_subdir / file_name)
+    write_file(instruct_list, output_subdir / f"{base_name}.instruct.json")
+    write_file(file_details, output_subdir / f"{base_name}.details.yaml")
 
+    # Generating and saving the code graph
     try:
         create_code_graph(file_details, base_name, output_subdir)
     except Exception as e:
-        logging.info(f"Error creating graph for {base_name}: {e}")
+        logging.error(f"Error creating graph for {base_name}: {e}", exc_info=True)

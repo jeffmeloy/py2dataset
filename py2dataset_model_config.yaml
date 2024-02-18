@@ -1,47 +1,37 @@
 # context is the Python source code
-system_prompt: "Provide complete structured response for a formal software audit, given this Context:\n'{context}'\n"
+system_prompt: "Lang: English. Format: unformatted, outline. Task: Create structured software documentation using this code Context:\n'{context}'\n"
 
-# query is the "text" from the py2dataset_question.json where the "id" is "file_purpose"  
-instruction_prompt: "\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step.\n{query}\n"
+# query is the "text" value from py2dataset_question.json for the "id":"file_purpose" question
+instruction_prompt: "Create outline structured code documentation for these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n" 
 
 # Uncomment out the desired prompt template 
 # chatML
-#prompt_template: "<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{instruction_prompt}<|im_end|>\n<|im_start|>assistant\n"
+# prompt_template: "<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{instruction_prompt}<|im_end|>\n<|im_start|>assistant\n"
 
 # System / Instruction / Response
-#prompt_template: "### System: {system_prompt}### Instruction:{instruction_prompt}### Response:"
+# prompt_template: "{system_prompt} ### Instruction:{instruction_prompt} ### Response:"
 
 # System / User / Assistant
-prompt_template: "{system_prompt} USER: {instruction_prompt} ASSISTANT:"
+# prompt_template: "{system_prompt} USER: {instruction_prompt} ASSISTANT:"
+
+# system / human / documentation
+prompt_template: "system:\n{system_prompt}\n\ninstruction:n{instruction_prompt}\n\ndocumentation:\n"
 
 # llama2
-#prompt_template: "<s>[INST] <<SYS>> {system_prompt} <</SYS>> {instruction_prompt} [/INST]"
+# prompt_template: "<s>[INST] <<SYS>> {system_prompt} <</SYS>> {instruction_prompt} [/INST]"
 
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
-  model_params:
-    model_path: "TheBloke/OpenHermes-2.5-Mistral-7B-16k-GGUF"
-    model_file: "openhermes-2.5-mistral-7b-16k.Q5_K_M.gguf"
+  model_params: 
+    model_path: "./models/WestLake-7B-v2.Q8_0.gguf"
     model_type: "mistral"
-    local_files_only: false
-    #model_path: "./models/openhermes-2.5-mistral-7b-16k.Q5_K_M.gguf"
-    #model_type: "mistral"
-    #local_files_only: true
-    #model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
-    #model_file: "wizardcoder-python-13b-v1.0.Q5_K_S.gguf"
-    #model_type: "llama"
-    #local_files_only: false
-    #model_path: "./models/wizardcoder-python-13b-v1.0.Q5_K_S.gguf"
-    #model_type: "llama"
-    #local_files_only: true
-    ## MODEL CONFIGURATION PARAMETERS (GPU 4090 - 24GB VRAM, CPU 5950x - 64GB RAM)
-    #if you want to use gpu_layers, comment out the lib line; 
-    #if you want to use CPU only, comment out the gpu_layers line 
+    local_files_only: true
+    ## MODEL CONFIGURATION PARAMETERS - adjust for compute resources
     #lib: "avx2"
-    gpu_layers: 100
     threads: 16
     batch_size: 512
-    context_length: 50000
-    max_new_tokens: 50000
+    context_length: 20000
+    max_new_tokens: 20000
+    gpu_layers: 100
     reset: true

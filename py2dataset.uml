@@ -3,51 +3,51 @@
 : python py2dataset.py 
 
 def main():
-    command-line entry point for processing Python files and generating datasets.
-    optional command-line arguments:
-    --start (str, optional): starting directory for Python files or GitHub repository Python files, default: cwd
-    --output_dir (str, optional): directory to write the output files, default: ./dataset/.
-    --questions_pathname (str, optional): path and filename of the questions file, default: ./py2dataset_questions.json
-    --model_config_pathname (str, optional): path and filename of the model configuration file, default: ./py2dataset_model_config.yaml
-    --use_llm (bool, optional): use llm to answer code purpose question, default: FALSE
-    --quiet (bool, optional): limit logging output, default: FALSE
-    --single_process (bool, optional): Use a single process to process Python files. Default: False
-    --detailed (bool, optional): include detailed analysis, default: FALSE
-    --html (bool, optional): generate HTML output, default: FALSE
-    --I (str, optional): enable interactive mode, default: FALSE
-    --skip_regen (str, optional): skip regeneration of existing instruct.json files, default: FALSE
+    Command-line entry point for processing Python files and generating datasets.
+    Optional command-line arguments:
+    --start (str, optional): Starting directory for Python files or GitHub repository Python files. Default: cwd.
+    --output_dir (str, optional): Directory to write the output files. Default: ./dataset/.
+    --questions_pathname (str, optional): Path and filename of the questions file. Default: ./py2dataset_questions.json.
+    --model_config_pathname (str, optional): Path and filename of the model configuration file. Default: ./py2dataset_model_config.yaml.
+    --use_llm (bool, optional): Use llm to answer code purpose question. Default: False.
+    --quiet (bool, optional): Limit logging output. Default: False.
+    --single_process (bool, optional): Use a single process to process Python files. Default: False.
+    --detailed (bool, optional): Include detailed analysis. Default: False.
+    --html (bool, optional): Generate HTML output. Default: False.
+    --I (str, optional): Enable interactive mode. Default: False.
+    --skip_regen (str, optional): Skip regeneration of existing instruct.json files. Default: False.
     --help: Display main() docstring.;
 
 :py2dataset.py:
-- parse command line arguments
-- read questions
-- obtain Python File listing within <starting directory>;
+- Parse command line arguments
+- Read questions
+- Obtain Python File listing within <starting directory>;
 
-Repeat :for each Python file;
+Repeat :For each Python file;
 
 :get_python_file_details.py:
-- extract code details from AST
-- generate code relationship graphs;
+- Extract code details from AST
+- Generate code relationship graphs;
 :get_python_dataset.py: 
-- answer questions and format answers;
+- Answer questions and format answers;
 
 Repeat :For each question;
-:use the AST obtained data to answer question;
-if (--use_llm and purpose question?) then (yes)
+:Use the AST obtained data to answer question;
+if (use_llm and purpose question) then (yes)
   :Use the llm to describe the code's purpose;
-  if (--detailed?) then (yes)
-    :use an llm to describe purpose and signifiance of each code object;
+  if (detailed) then (yes)
+    :Use llm to describe purpose and signifiance of each code object;
   else (no)
   endif
 else (no)
 endif
      
-:construct instruct.json data
+:Construct instruct.json data
 - instruction = current question
 - input = code element
 - output = answer to current question;
 
-Repeat while (more questions?) is (yes)
+Repeat while (More questions?) is (yes)
 ->no;
 
 :save_output.py:
@@ -55,18 +55,18 @@ save datasets and code file details
 - <filename>.instruct.json
 - <filename>.details.yaml';
 
-:save code graph
+:Save code graph
 - <filename>.external.png;
 
-Repeat while (more Python files?) is (yes)
+Repeat while (More Python Files?) is (yes)
 ->no;
 
-:combine all qa and instruct JSON files and create other datasets
+:Combine all qa and instruct JSON files and create other datasets
 - `instruct.json` - instruction/input/output dataset
 - `instruct.html` - html formated file, if --html
 - `train.json` - instruction/output dataset, if --use_llm
 - `train.html` - html formated file, if --html;
 
-:end;
+:End;
 
 @enduml

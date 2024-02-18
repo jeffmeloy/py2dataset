@@ -1,4 +1,4 @@
-ctransformers
+ctransformers[cuda]
 networkx
 matplotlib
 PyYAML

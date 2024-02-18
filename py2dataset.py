@@ -149,7 +149,13 @@ def py2dataset(
         "detailed": detailed,
     }
 
-    for python_pathname in Path(start).rglob("[!_]*.py"):
+    for python_pathname in Path(start).rglob("*.py"):
+        
+        if "__pycache__" in python_pathname.parts:
+            continue
+        if python_pathname.name == "__init__.py":
+            continue
+        
         params["python_pathname"] = str(python_pathname)
         params["relative_path"] = Path(
             os.path.relpath(python_pathname, os.path.dirname(get_start_dir(start)))
@@ -169,12 +175,12 @@ def py2dataset(
         else:  # or process all files using use a single process
             process_single_python_file(**params)
 
-    return combine_json_files(output_dir, html)
+    return combine_json_files(output_dir, html, params["questions"])
 
 
 def clone_github_repo(url: str) -> str:
     """
-    Clone repository or pull the latest changes and return local repository path.
+    Clone repository or fetch the latest changes and return local repository path.
     Args:
         url (str): The url of the github repository.
     Returns:

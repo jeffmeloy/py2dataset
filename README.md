@@ -30,6 +30,11 @@ Clone the repository and install dependencies:
     pip install -r requirements.txt 
     ```
 
+If using CUDA then:
+    ```bash
+    pip install ctransformers[cuda]
+    ```
+
 ## Usage
 
 ### Command Line Interface
@@ -71,15 +76,14 @@ The following questions are answered by parsing the AST:
 - Attributes of class: '{class_name}' in Python file: '{filename}'?
 - Variables defined in class: '{class_name}' in Python file: '{filename}'?
 - Inheritance of class: '{class_name}' in Python file: '{filename}'?
-- Inputs to method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
-- Docstring of method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
-- Calls made in method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
-- Returns from method: '{method_name}' in class: '{class_name}' in Python file: '{filename}'?
+- Inputs to method: '{method_name}' in Python file: '{filename}'?
+- Docstring of method: '{method_name}' in Python file: '{filename}'?
+- Calls made in method: '{method_name}' in Python file: '{filename}'?
+- Returns from method: '{method_name}' in Python file: '{filename}'?
 
-If --use_llm, the dataset includes the llm response to the file_purpose question in the `--questions_pathname` file:
-- '1) Describe the Purpose and Processing summary of Python file: `{filename}`; 2) Summarize the Significance of applicable Function, Class, and Method; 3) Explain what each Input, Output, and Variable does in the code.'
+If --use_llm, the dataset includes the llm response to the file_purpose question in the `--questions_pathname` file
 
-If --use_llm and --detailed, the instruct dataset includes the llm assessment of the purpose and signicance of each of the code objects identified from parsing the AST. 
+If --use_llm and --detailed, the dataset includes the purpose and signicance of each code object
 
 ## Code Structure
 
@@ -126,10 +130,31 @@ The script then creates composite datasets by combining the files above and save
 
 - `instruct.json` - complete instruct dataset
 - `instruct.html` - html formated file (optional if --html)
-- `train.json` - instruction/output dataset (optional if --use_llm)
-                 instruction: llm output on file purpose
-                 output: Python file source code
-- `train.html` - html formated file (optional if --use_llm and html)
+- `sharegpt.json` - sharegpt dataset (optional if --use_llm)
+- `sharegpt.html` - html formated file (optional if --use_llm and html)
+
+The sharegpt.json includes a list of conversations. Each turn in a conversation has two dictionaries, a "from" field, which denotes the role of that turn, and a "value" field which contains the actual text. Here is an example of a sharegpt.json entry for each python code file:
+
+```
+    {
+        "conversations": [
+            {
+                "from": "system",
+                "value": "code documentation:" + <code doumentation created by py2dataset model>
+            },
+            {
+                "from": "human",
+                "value": Output the Python code described by the code documentation.
+            },
+            {
+                "from": "gpt",
+                "value": <python code file listing>
+            }
+        ],
+        "nbytes": <size of conversation in bytes>
+        "source": <source code path and filename>
+    },
+```
 
 If an output directory is not specified, the files will be saved in a ./datasets directory within the current working directory. Directory will be created if it does not exist.
 

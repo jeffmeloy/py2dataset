@@ -1,0 +1,2191 @@
+file_info:
+  file_code: "\"\"\"\nReturn file_details dictionary for python source code.\nRequirements:\n\
+    [req00] The `remove_docstring` function shall:\n        a. Accept a Python code\
+    \ string as an argument.\n        b. Remove docstrings and comments from the provided\
+    \ code.\n        c. Return the sanitized code string.\n[req01] The get_all_calls\
+    \ function shall:\n        a. Accept a node of type ast.AST as an argument.\n\
+    \        b. Recursively find all function calls in the subtree rooted at the node.\n\
+    \        c. Return a dictionary of all function calls in the subtree rooted at\
+    \ the node.\n[req02] The `CodeVisitor` class shall:\n        a. Accept the source\
+    \ code as input when instantiated.\n        b. Use the AST to extract details\
+    \ about the code.\n        c. Inherit from `ast.NodeVisitor`.\n        d. Implement\
+    \ `visit_FunctionDef` method to gather details about functions.\n        e. Implement\
+    \ `visit_ClassDef` method to gather details about classes.\n        f. Implement\
+    \ `extract_details` method to parse information about a given node.\n        g.\
+    \ Implement `analyze` method to traverse the AST and 'file_info'. \n        h.\
+    \ Maintain a current class context using the attribute 'current_class'.\n[req03]\
+    \ The `code_graph` function shall:\n        a. Accept the file summary as input.\n\
+    \        b. Construct a directed graph with nodes and edges using networkx library.\n\
+    \        c. Define elements such as function nodes, class nodes, and method nodes.\n\
+    \        d. Specify edges to represent relationships. \n        e. Return a dictionary\
+    \ representation of the code call graph. \n[req04] The `get_python_file_details`\
+    \ function shall:\n        a. Accept a file path as an argument.\n        b. Extract\
+    \ info from Python file using the AST and the `CodeVisitor` class.\n        c.\
+    \ Include the entire code graph in the returned details.\n        d. Return a\
+    \ dictionary encompassing the extracted file details. \n\"\"\"\nimport ast\nimport\
+    \ logging\nimport json\nfrom typing import Dict, List, Union\nfrom get_code_graph\
+    \ import get_code_graph\n\n\ndef remove_docstring(code: str, tree: ast.AST) ->\
+    \ str:\n    \"\"\"\n    Remove docstrings from the provided Python code.\n   \
+    \ This includes top-level module docstrings and docstrings in\n    functions,\
+    \ classes, and async functions.\n    Args:\n        code (str): The source code\
+    \ from which to remove docstrings.\n    Returns:\n        str: The source code\
+    \ with docstrings removed.\n    \"\"\"\n    if (\n        tree.body\n        and\
+    \ isinstance(tree.body[0], ast.Expr)\n        and isinstance(tree.body[0].value,\
+    \ ast.Str)\n    ):\n        tree.body.pop(0)\n\n    for node in ast.walk(tree):\n\
+    \        if (\n            isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef))\n\
+    \            and node.body\n        ):\n            first_body_node = node.body[0]\n\
+    \            if isinstance(first_body_node, ast.Expr) and isinstance(\n      \
+    \          first_body_node.value, ast.Str\n            ):\n                node.body.pop(0)\n\
+    \n    return ast.unparse(tree)\n\n\ndef get_all_calls(node: ast.AST, calls=None)\
+    \ -> Dict[str, List[str]]:\n    \"\"\"\n    Recursively find all function calls\
+    \ in the subtree rooted at `node`,\n    including those in class attributes, list\
+    \ comprehensions, and lambda functions.\n    Args:\n        node (ast.AST): The\
+    \ root node to start the search from.\n        calls (List[Tuple[str, List[str]]],\
+    \ optional): Accumulator for function calls found.\n    Returns:\n        Dict[str,\
+    \ List[str]]: dictionary mapping function calls (as strings) to lists of their\
+    \ arguments.\n    \"\"\"\n    if calls is None:\n        calls = []\n    if isinstance(node,\
+    \ ast.Call):\n        calls.append((ast.unparse(node.func), [ast.unparse(arg)\
+    \ for arg in node.args]))\n    elif isinstance(node, ast.ClassDef):\n        for\
+    \ body_item in node.body:\n            if isinstance(body_item, ast.Assign) and\
+    \ isinstance(\n                body_item.targets[0], ast.Name\n            ):\n\
+    \                get_all_calls(body_item.value, calls)\n\n    for child in ast.iter_child_nodes(node):\n\
+    \        get_all_calls(child, calls)\n\n    # Build the dictionary after traversal\n\
+    \    calls_dict = {}\n    for func, args in calls:\n        if func not in calls_dict:\n\
+    \            calls_dict[func] = []\n        calls_dict[func].extend(args)\n\n\
+    \    return calls_dict\n\n\nclass CodeVisitor(ast.NodeVisitor):\n    \"\"\"\n\
+    \    Visitor class for traversing an AST (Abstract Syntax Tree) and extracting\
+    \ details about the code.\n    Attributes:\n        code (str): The source code.\n\
+    \        functions(Dict): details about functions in the code.\n        classes\
+    \ (Dict): details about classes in the code.\n        file_info (Dict): details\
+    \ about the file.\n    Methods:\n        visit_FunctionDef(node: ast.FunctionDef)\
+    \ -> None:\n            Extract details about a function.\n        visit_ClassDef(node:\
+    \ ast.ClassDef) -> None:\n            Extract details about a class.\n       \
+    \ extract_details(node: ast.AST, node_type: str) -> Dict[str, Union[str, List[str]]]:\n\
+    \            Extract details about a node.\n        analyze(node: ast.AST) ->\
+    \ None:\n            Populate file_info with details about the file.\n    \"\"\
+    \"\n\n    def __init__(self, code: str, tree: ast.AST) -> None:\n        \"\"\"\
+    \n        Initialize a new instance of the class.\n        Args:\n           \
+    \ code: str: The source code.\n        \"\"\"\n        self.code: str = code\n\
+    \        self.functions: Dict[str, Dict[str, Union[str, List[str]]]] = {}\n  \
+    \      self.classes: Dict[str, Dict[str, Union[str, List[str]]]] = {}\n      \
+    \  self.file_info: Dict[str, Union[str, List[str]]] = {}\n        self.current_class:\
+    \ str = None\n        self.constants: List[str] = []\n        self.tree = tree\n\
+    \n    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:\n        \"\"\
+    \"\n        Extract details about a function.\n        Args:\n            node:\
+    \ ast.FunctionDef: The node to visit.\n        \"\"\"\n        details = self.extract_details(\n\
+    \            node, \"method\" if self.current_class else \"function\"\n      \
+    \  )\n        if self.current_class:\n            self.classes[self.current_class][f\"\
+    class_method_{node.name}\"] = details\n        else:\n            self.functions[node.name]\
+    \ = details\n        self.generic_visit(node)\n\n    def visit_ClassDef(self,\
+    \ node: ast.ClassDef) -> None:\n        \"\"\"\n        Extract details about\
+    \ a class.\n        Args:\n            node: ast.ClassDef: The node to visit.\n\
+    \        \"\"\"\n        self.classes[node.name] = self.extract_details(\n   \
+    \         node, \"class\"\n        )  # populate class dictionary when class definition\
+    \ found in AST\n        self.current_class = node.name  # set current_class to\
+    \ indicate inside a class\n        self.generic_visit(node)  # continue AST traversal\
+    \ to the next node\n        self.current_class = None  # reset current_class when\
+    \ finished with this class\n\n    def generic_visit(self, node):\n        \"\"\
+    \"\n        Called if no explicit visitor function exists for a node.\n      \
+    \  Args:\n            node: ast.AST: The node to visit.\n        \"\"\"\n    \
+    \    for child in ast.iter_child_nodes(node):\n            child.parent = node\n\
+    \            self.visit(child)\n\n    def visit_Assign(self, node: ast.Assign):\n\
+    \        \"\"\"\n        Get self.constants\n        Args:\n            node:\
+    \ ast.Assign: The node to visit.\n        \"\"\"\n        if isinstance(node.parent,\
+    \ ast.Module):\n            for target in node.targets:\n                if isinstance(target,\
+    \ ast.Name):\n                    value = node.value\n                    if isinstance(value,\
+    \ ast.Constant) and isinstance(value.value, str):\n                        value_repr\
+    \ = f\"'{value.value}'\"\n                    else:\n                        value_repr\
+    \ = ast.unparse(value)\n                    constant_assignment = f\"{target.id}={value_repr}\"\
+    \n                    self.constants.append(constant_assignment)\n        self.generic_visit(node)\n\
+    \n    def extract_details(\n        self, node: ast.AST, node_type: str\n    )\
+    \ -> Dict[str, Union[str, List[str]]]:\n        \"\"\"\n        Extract details\
+    \ about a node.\n        Args:\n            node: ast.AST: The node to extract\
+    \ details from.\n            node_type: str: The type of node.\n        Returns:\n\
+    \            Dict[str, Union[str, List[str]]]: The details extracted from the\
+    \ node.\n        \"\"\"\n        node_walk = list(ast.walk(node))\n        call_data\
+    \ = get_all_calls(node)\n        node_inputs = (\n            [arg.arg for arg\
+    \ in node.args.args]\n            if node_type in [\"function\", \"method\"]\n\
+    \            else None\n        )\n        node_variables = list(\n          \
+    \  {\n                ast.unparse(target)\n                for subnode in node_walk\n\
+    \                if isinstance(subnode, ast.Assign)\n                for target\
+    \ in subnode.targets\n                if isinstance(target, ast.Name)\n      \
+    \      }\n        )\n        if node_inputs:\n            node_variables = list(set(node_inputs\
+    \ + node_variables))\n\n        details = {\n            f\"{node_type}_name\"\
+    : node.name,\n            f\"{node_type}_code\": ast.unparse(node),\n        \
+    \    f\"{node_type}_docstring\": next(\n                (\n                  \
+    \  n.value.s\n                    for n in node_walk\n                    if isinstance(n,\
+    \ ast.Expr) and isinstance(n.value, ast.Str)\n                ),\n           \
+    \     None,\n            ),\n            f\"{node_type}_inputs\": node_inputs,\n\
+    \            f\"{node_type}_defaults\": [ast.unparse(d) for d in node.args.defaults]\n\
+    \            if node_type in [\"function\", \"method\"]\n            else None,\n\
+    \            f\"{node_type}_returns\": [\n                ast.unparse(subnode.value)\
+    \ if subnode.value is not None else \"None\"\n                for subnode in node_walk\n\
+    \                if isinstance(subnode, ast.Return)\n            ],\n        \
+    \    f\"{node_type}_calls\": list(call_data.keys()),\n            f\"{node_type}_call_inputs\"\
+    : call_data,\n            f\"{node_type}_variables\": node_variables,\n      \
+    \      f\"{node_type}_decorators\": list(\n                {ast.unparse(decorator)\
+    \ for decorator in node.decorator_list}\n                if node.decorator_list\n\
+    \                else set()\n            ),\n            f\"{node_type}_annotations\"\
+    : list(\n                {\n                    ast.unparse(subnode.annotation)\n\
+    \                    for subnode in node_walk\n                    if isinstance(subnode,\
+    \ ast.AnnAssign)\n                    and subnode.annotation is not None\n   \
+    \             }\n            ),\n            f\"{node_type}_properties\": list(\n\
+    \                {\n                    ast.unparse(subnode)\n               \
+    \     for subnode in node_walk\n                    if isinstance(subnode, ast.Attribute)\n\
+    \                    and isinstance(subnode.ctx, ast.Store)\n                }\n\
+    \            ),\n        }\n        if node_type in [\"class\", \"method\"]:\n\
+    \            if (\n                node_type == \"method\" and self.current_class\n\
+    \            ):  # find attributes defined as self.attribute\n               \
+    \ attributes = [\n                    target.attr\n                    for subnode\
+    \ in node_walk\n                    if isinstance(subnode, ast.Assign)\n     \
+    \               for target in subnode.targets\n                    if isinstance(target,\
+    \ ast.Attribute)\n                    and isinstance(target.value, ast.Name)\n\
+    \                    and target.value.id == \"self\"\n                ]\n    \
+    \            class_attributes = self.classes[self.current_class].setdefault(\n\
+    \                    \"class_attributes\", []\n                )\n           \
+    \     class_attributes += attributes\n            if node_type == \"class\":\n\
+    \                details.update(\n                    {\n                    \
+    \    \"class_attributes\": [\n                            target.attr\n      \
+    \                      for subnode in node.body\n                            if\
+    \ isinstance(subnode, ast.Assign)\n                            for target in subnode.targets\n\
+    \                            if isinstance(target, ast.Attribute)\n          \
+    \              ],\n                        \"class_methods\": [\n            \
+    \                subnode.name\n                            for subnode in node.body\n\
+    \                            if isinstance(subnode, ast.FunctionDef)\n       \
+    \                 ],\n                        \"class_inheritance\": [ast.unparse(base)\
+    \ for base in node.bases]\n                        if node.bases\n           \
+    \             else [],\n                        \"class_static_methods\": [\n\
+    \                            subnode.name\n                            for subnode\
+    \ in node.body\n                            if isinstance(subnode, ast.FunctionDef)\n\
+    \                            and any(\n                                isinstance(decorator,\
+    \ ast.Name)\n                                and decorator.id == \"staticmethod\"\
+    \n                                for decorator in subnode.decorator_list\n  \
+    \                          )\n                        ],\n                   \
+    \ }\n                )\n        return details\n\n    def analyze(self, node:\
+    \ ast.AST) -> None:\n        \"\"\"\n        Traverse the AST, list all nodes,\
+    \ and populate 'file_info'\n        Args:\n            node: ast.AST: The node\
+    \ to analyze.\n        \"\"\"\n        # Traverse the AST to capture various code\
+    \ details\n        self.visit(node)\n        node_walk = list(ast.walk(node))\n\
+    \n        file_dependencies = {\n            alias.name\n            for subnode\
+    \ in node_walk\n            if isinstance(subnode, ast.Import)\n            for\
+    \ alias in subnode.names\n        } | {\n            subnode.module\n        \
+    \    for subnode in node_walk\n            if isinstance(subnode, ast.ImportFrom)\n\
+    \        }\n\n        function_defs = [\n            {\n                func_name:\
+    \ {\n                    \"inputs\": details[\"function_inputs\"],\n         \
+    \           \"calls\": details[\"function_calls\"],\n                    \"call_inputs\"\
+    : details[\"function_call_inputs\"],\n                    \"returns\": details[\"\
+    function_returns\"],\n                }\n            }\n            for func_name,\
+    \ details in self.functions.items()\n        ]\n\n        class_defs = [\n   \
+    \         {\n                class_name: {\n                    \"method_defs\"\
+    : {\n                        method_name[len(\"class_method_\") :]: {\n      \
+    \                      \"inputs\": details[\"method_inputs\"],\n             \
+    \               \"calls\": details[\"method_calls\"],\n                      \
+    \      \"call_inputs\": details[\"method_call_inputs\"],\n                   \
+    \         \"returns\": details[\"method_returns\"],\n                        }\n\
+    \                        for method_name, details in class_details.items()\n \
+    \                       if method_name.startswith(\"class_method_\")\n       \
+    \             }\n                }\n            }\n            for class_name,\
+    \ class_details in self.classes.items()\n        ]\n\n        self.file_info =\
+    \ {\n            \"file_code\": self.code,\n            \"file_ast\": node,\n\
+    \            \"file_dependencies\": list(file_dependencies),\n            \"file_functions\"\
+    : list(self.functions.keys()),\n            \"file_classes\": list(self.classes.keys()),\n\
+    \            \"file_constants\": self.constants,\n            \"file_summary\"\
+    : {\n                \"dependencies\": list(file_dependencies),\n            \
+    \    \"function_defs\": function_defs,\n                \"class_defs\": class_defs,\n\
+    \            },\n            \"file_code_simplified\": remove_docstring(ast.unparse(node),\
+    \ self.tree),\n        }\n\n\ndef get_python_file_details(file_path: str) -> Dict[str,\
+    \ Union[Dict, str]]:\n    \"\"\"\n    Extract details from a Python file.\n  \
+    \  Args:\n        file_path: str: The path to the Python file.\n    Returns:\n\
+    \        Dict[str, Union[Dict, str]]: The details extracted from the file.\n \
+    \   \"\"\"\n    try:\n        with open(file_path, \"r\", encoding=\"utf-8\",\
+    \ errors=\"ignore\") as f:\n            code = f.read()\n            tree = ast.parse(code)\n\
+    \    except (PermissionError, SyntaxError, IOError) as e:\n        logging.warning(f\"\
+    {e} error in file: {file_path}\")\n        return None\n\n    visitor = CodeVisitor(code,\
+    \ tree)\n    visitor.analyze(tree)\n    file_details = {\n        \"file_info\"\
+    : visitor.file_info,\n        \"functions\": visitor.functions,\n        \"classes\"\
+    : visitor.classes,\n    }\n\n    # get code graph items and add to file_details\n\
+    \    file_summary = file_details[\"file_info\"][\"file_summary\"]\n    file_ast\
+    \ = file_details[\"file_info\"][\"file_ast\"]\n    entire_code_graph, control_flow_structure,\
+    \ plant_uml = get_code_graph(\n        file_summary, file_ast\n    )\n    file_details[\"\
+    file_info\"][\"entire_code_graph\"] = entire_code_graph\n    file_details[\"file_info\"\
+    ][\"control_flow_structure\"] = control_flow_structure\n    file_details[\"file_info\"\
+    ][\"plant_uml\"] = plant_uml\n    file_details[\"file_info\"][\"file_summary\"\
+    ] = json.dumps(file_summary).replace(\n        '\"', \"\"\n    )\n    del file_details[\"\
+    file_info\"][\"file_ast\"]\n\n    return file_details\n"
+  file_dependencies:
+  - typing
+  - logging
+  - get_code_graph
+  - json
+  - ast
+  file_functions:
+  - remove_docstring
+  - get_all_calls
+  - get_python_file_details
+  file_classes:
+  - CodeVisitor
+  file_constants: []
+  file_summary: '{dependencies: [typing, logging, get_code_graph, json, ast], function_defs:
+    [{remove_docstring: {inputs: [code, tree], calls: [isinstance, tree.body.pop,
+    ast.walk, node.body.pop, ast.unparse], call_inputs: {isinstance: [tree.body[0],
+    ast.Expr, tree.body[0].value, ast.Str, node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef),
+    first_body_node, ast.Expr, first_body_node.value, ast.Str], tree.body.pop: [0],
+    ast.walk: [tree], node.body.pop: [0], ast.unparse: [tree]}, returns: [ast.unparse(tree)]}},
+    {get_all_calls: {inputs: [node, calls], calls: [isinstance, calls.append, ast.unparse,
+    get_all_calls, ast.iter_child_nodes, calls_dict[func].extend], call_inputs: {isinstance:
+    [node, ast.Call, node, ast.ClassDef, body_item, ast.Assign, body_item.targets[0],
+    ast.Name], calls.append: [(ast.unparse(node.func), [ast.unparse(arg) for arg in
+    node.args])], ast.unparse: [node.func, arg], get_all_calls: [body_item.value,
+    calls, child, calls], ast.iter_child_nodes: [node], calls_dict[func].extend: [args]},
+    returns: [calls_dict]}}, {get_python_file_details: {inputs: [file_path], calls:
+    [open, f.read, ast.parse, logging.warning, CodeVisitor, visitor.analyze, get_code_graph,
+    json.dumps(file_summary).replace, json.dumps], call_inputs: {open: [file_path,
+    ''r''], f.read: [], ast.parse: [code], logging.warning: [f''{e} error in file:
+    {file_path}''], CodeVisitor: [code, tree], visitor.analyze: [tree], get_code_graph:
+    [file_summary, file_ast], json.dumps(file_summary).replace: [''\'', ''''], json.dumps:
+    [file_summary]}, returns: [file_details, None]}}], class_defs: [{CodeVisitor:
+    {method_defs: {__init__: {inputs: [self, code, tree], calls: [], call_inputs:
+    {}, returns: []}, visit_FunctionDef: {inputs: [self, node], calls: [self.extract_details,
+    self.generic_visit], call_inputs: {self.extract_details: [node, ''method'' if
+    self.current_class else ''function''], self.generic_visit: [node]}, returns: []},
+    visit_ClassDef: {inputs: [self, node], calls: [self.extract_details, self.generic_visit],
+    call_inputs: {self.extract_details: [node, ''class''], self.generic_visit: [node]},
+    returns: []}, generic_visit: {inputs: [self, node], calls: [ast.iter_child_nodes,
+    self.visit], call_inputs: {ast.iter_child_nodes: [node], self.visit: [child]},
+    returns: []}, visit_Assign: {inputs: [self, node], calls: [isinstance, ast.unparse,
+    self.constants.append, self.generic_visit], call_inputs: {isinstance: [node.parent,
+    ast.Module, target, ast.Name, value, ast.Constant, value.value, str], ast.unparse:
+    [value], self.constants.append: [constant_assignment], self.generic_visit: [node]},
+    returns: []}, extract_details: {inputs: [self, node, node_type], calls: [list,
+    ast.walk, get_all_calls, ast.unparse, isinstance, set, next, call_data.keys, self.classes[self.current_class].setdefault,
+    details.update, any], call_inputs: {list: [ast.walk(node), {ast.unparse(target)
+    for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets
+    if isinstance(target, ast.Name)}, set(node_inputs + node_variables), call_data.keys(),
+    {ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list
+    else set(), {ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode,
+    ast.AnnAssign) and subnode.annotation is not None}, {ast.unparse(subnode) for
+    subnode in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx,
+    ast.Store)}], ast.walk: [node], get_all_calls: [node], ast.unparse: [target, node,
+    d, subnode.value, decorator, subnode.annotation, subnode, base], isinstance: [subnode,
+    ast.Assign, target, ast.Name, n, ast.Expr, n.value, ast.Str, subnode, ast.Return,
+    subnode, ast.AnnAssign, subnode, ast.Attribute, subnode.ctx, ast.Store, subnode,
+    ast.Assign, target, ast.Attribute, target.value, ast.Name, subnode, ast.Assign,
+    target, ast.Attribute, subnode, ast.FunctionDef, subnode, ast.FunctionDef, decorator,
+    ast.Name], set: [node_inputs + node_variables], next: [(n.value.s for n in node_walk
+    if isinstance(n, ast.Expr) and isinstance(n.value, ast.Str)), None], call_data.keys:
+    [], self.classes[self.current_class].setdefault: [''class_attributes'', []], details.update:
+    [{''class_attributes'': [target.attr for subnode in node.body if isinstance(subnode,
+    ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],
+    ''class_methods'': [subnode.name for subnode in node.body if isinstance(subnode,
+    ast.FunctionDef)], ''class_inheritance'': [ast.unparse(base) for base in node.bases]
+    if node.bases else [], ''class_static_methods'': [subnode.name for subnode in
+    node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,
+    ast.Name) and decorator.id == ''staticmethod'' for decorator in subnode.decorator_list))]}],
+    any: [(isinstance(decorator, ast.Name) and decorator.id == ''staticmethod'' for
+    decorator in subnode.decorator_list)]}, returns: [details]}, analyze: {inputs:
+    [self, node], calls: [self.visit, list, ast.walk, isinstance, self.functions.items,
+    len, class_details.items, method_name.startswith, self.classes.items, self.functions.keys,
+    self.classes.keys, remove_docstring, ast.unparse], call_inputs: {self.visit: [node],
+    list: [ast.walk(node), file_dependencies, self.functions.keys(), self.classes.keys(),
+    file_dependencies], ast.walk: [node], isinstance: [subnode, ast.Import, subnode,
+    ast.ImportFrom], self.functions.items: [], len: [''class_method_''], class_details.items:
+    [], method_name.startswith: [''class_method_''], self.classes.items: [], self.functions.keys:
+    [], self.classes.keys: [], remove_docstring: [ast.unparse(node), self.tree], ast.unparse:
+    [node]}, returns: []}}}}]}'
+  file_code_simplified: "import ast\nimport logging\nimport json\nfrom typing import\
+    \ Dict, List, Union\nfrom get_code_graph import get_code_graph\n\ndef remove_docstring(code:\
+    \ str, tree: ast.AST) -> str:\n    if tree.body and isinstance(tree.body[0], ast.Expr)\
+    \ and isinstance(tree.body[0].value, ast.Str):\n        tree.body.pop(0)\n   \
+    \ for node in ast.walk(tree):\n        if isinstance(node, (ast.FunctionDef, ast.ClassDef,\
+    \ ast.AsyncFunctionDef)) and node.body:\n            first_body_node = node.body[0]\n\
+    \            if isinstance(first_body_node, ast.Expr) and isinstance(first_body_node.value,\
+    \ ast.Str):\n                node.body.pop(0)\n    return ast.unparse(tree)\n\n\
+    def get_all_calls(node: ast.AST, calls=None) -> Dict[str, List[str]]:\n    if\
+    \ calls is None:\n        calls = []\n    if isinstance(node, ast.Call):\n   \
+    \     calls.append((ast.unparse(node.func), [ast.unparse(arg) for arg in node.args]))\n\
+    \    elif isinstance(node, ast.ClassDef):\n        for body_item in node.body:\n\
+    \            if isinstance(body_item, ast.Assign) and isinstance(body_item.targets[0],\
+    \ ast.Name):\n                get_all_calls(body_item.value, calls)\n    for child\
+    \ in ast.iter_child_nodes(node):\n        get_all_calls(child, calls)\n    calls_dict\
+    \ = {}\n    for func, args in calls:\n        if func not in calls_dict:\n   \
+    \         calls_dict[func] = []\n        calls_dict[func].extend(args)\n    return\
+    \ calls_dict\n\nclass CodeVisitor(ast.NodeVisitor):\n\n    def __init__(self,\
+    \ code: str, tree: ast.AST) -> None:\n        self.code: str = code\n        self.functions:\
+    \ Dict[str, Dict[str, Union[str, List[str]]]] = {}\n        self.classes: Dict[str,\
+    \ Dict[str, Union[str, List[str]]]] = {}\n        self.file_info: Dict[str, Union[str,\
+    \ List[str]]] = {}\n        self.current_class: str = None\n        self.constants:\
+    \ List[str] = []\n        self.tree = tree\n\n    def visit_FunctionDef(self,\
+    \ node: ast.FunctionDef) -> None:\n        details = self.extract_details(node,\
+    \ 'method' if self.current_class else 'function')\n        if self.current_class:\n\
+    \            self.classes[self.current_class][f'class_method_{node.name}'] = details\n\
+    \        else:\n            self.functions[node.name] = details\n        self.generic_visit(node)\n\
+    \n    def visit_ClassDef(self, node: ast.ClassDef) -> None:\n        self.classes[node.name]\
+    \ = self.extract_details(node, 'class')\n        self.current_class = node.name\n\
+    \        self.generic_visit(node)\n        self.current_class = None\n\n    def\
+    \ generic_visit(self, node):\n        for child in ast.iter_child_nodes(node):\n\
+    \            child.parent = node\n            self.visit(child)\n\n    def visit_Assign(self,\
+    \ node: ast.Assign):\n        if isinstance(node.parent, ast.Module):\n      \
+    \      for target in node.targets:\n                if isinstance(target, ast.Name):\n\
+    \                    value = node.value\n                    if isinstance(value,\
+    \ ast.Constant) and isinstance(value.value, str):\n                        value_repr\
+    \ = f\"'{value.value}'\"\n                    else:\n                        value_repr\
+    \ = ast.unparse(value)\n                    constant_assignment = f'{target.id}={value_repr}'\n\
+    \                    self.constants.append(constant_assignment)\n        self.generic_visit(node)\n\
+    \n    def extract_details(self, node: ast.AST, node_type: str) -> Dict[str, Union[str,\
+    \ List[str]]]:\n        node_walk = list(ast.walk(node))\n        call_data =\
+    \ get_all_calls(node)\n        node_inputs = [arg.arg for arg in node.args.args]\
+    \ if node_type in ['function', 'method'] else None\n        node_variables = list({ast.unparse(target)\
+    \ for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Name)})\n        if node_inputs:\n            node_variables\
+    \ = list(set(node_inputs + node_variables))\n        details = {f'{node_type}_name':\
+    \ node.name, f'{node_type}_code': ast.unparse(node), f'{node_type}_docstring':\
+    \ next((n.value.s for n in node_walk if isinstance(n, ast.Expr) and isinstance(n.value,\
+    \ ast.Str)), None), f'{node_type}_inputs': node_inputs, f'{node_type}_defaults':\
+    \ [ast.unparse(d) for d in node.args.defaults] if node_type in ['function', 'method']\
+    \ else None, f'{node_type}_returns': [ast.unparse(subnode.value) if subnode.value\
+    \ is not None else 'None' for subnode in node_walk if isinstance(subnode, ast.Return)],\
+    \ f'{node_type}_calls': list(call_data.keys()), f'{node_type}_call_inputs': call_data,\
+    \ f'{node_type}_variables': node_variables, f'{node_type}_decorators': list({ast.unparse(decorator)\
+    \ for decorator in node.decorator_list} if node.decorator_list else set()), f'{node_type}_annotations':\
+    \ list({ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode,\
+    \ ast.AnnAssign) and subnode.annotation is not None}), f'{node_type}_properties':\
+    \ list({ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute)\
+    \ and isinstance(subnode.ctx, ast.Store)})}\n        if node_type in ['class',\
+    \ 'method']:\n            if node_type == 'method' and self.current_class:\n \
+    \               attributes = [target.attr for subnode in node_walk if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)\
+    \ and isinstance(target.value, ast.Name) and (target.value.id == 'self')]\n  \
+    \              class_attributes = self.classes[self.current_class].setdefault('class_attributes',\
+    \ [])\n                class_attributes += attributes\n            if node_type\
+    \ == 'class':\n                details.update({'class_attributes': [target.attr\
+    \ for subnode in node.body if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Attribute)], 'class_methods': [subnode.name for subnode\
+    \ in node.body if isinstance(subnode, ast.FunctionDef)], 'class_inheritance':\
+    \ [ast.unparse(base) for base in node.bases] if node.bases else [], 'class_static_methods':\
+    \ [subnode.name for subnode in node.body if isinstance(subnode, ast.FunctionDef)\
+    \ and any((isinstance(decorator, ast.Name) and decorator.id == 'staticmethod'\
+    \ for decorator in subnode.decorator_list))]})\n        return details\n\n   \
+    \ def analyze(self, node: ast.AST) -> None:\n        self.visit(node)\n      \
+    \  node_walk = list(ast.walk(node))\n        file_dependencies = {alias.name for\
+    \ subnode in node_walk if isinstance(subnode, ast.Import) for alias in subnode.names}\
+    \ | {subnode.module for subnode in node_walk if isinstance(subnode, ast.ImportFrom)}\n\
+    \        function_defs = [{func_name: {'inputs': details['function_inputs'], 'calls':\
+    \ details['function_calls'], 'call_inputs': details['function_call_inputs'], 'returns':\
+    \ details['function_returns']}} for func_name, details in self.functions.items()]\n\
+    \        class_defs = [{class_name: {'method_defs': {method_name[len('class_method_'):]:\
+    \ {'inputs': details['method_inputs'], 'calls': details['method_calls'], 'call_inputs':\
+    \ details['method_call_inputs'], 'returns': details['method_returns']} for method_name,\
+    \ details in class_details.items() if method_name.startswith('class_method_')}}}\
+    \ for class_name, class_details in self.classes.items()]\n        self.file_info\
+    \ = {'file_code': self.code, 'file_ast': node, 'file_dependencies': list(file_dependencies),\
+    \ 'file_functions': list(self.functions.keys()), 'file_classes': list(self.classes.keys()),\
+    \ 'file_constants': self.constants, 'file_summary': {'dependencies': list(file_dependencies),\
+    \ 'function_defs': function_defs, 'class_defs': class_defs}, 'file_code_simplified':\
+    \ remove_docstring(ast.unparse(node), self.tree)}\n\ndef get_python_file_details(file_path:\
+    \ str) -> Dict[str, Union[Dict, str]]:\n    try:\n        with open(file_path,\
+    \ 'r', encoding='utf-8', errors='ignore') as f:\n            code = f.read()\n\
+    \            tree = ast.parse(code)\n    except (PermissionError, SyntaxError,\
+    \ IOError) as e:\n        logging.warning(f'{e} error in file: {file_path}')\n\
+    \        return None\n    visitor = CodeVisitor(code, tree)\n    visitor.analyze(tree)\n\
+    \    file_details = {'file_info': visitor.file_info, 'functions': visitor.functions,\
+    \ 'classes': visitor.classes}\n    file_summary = file_details['file_info']['file_summary']\n\
+    \    file_ast = file_details['file_info']['file_ast']\n    entire_code_graph,\
+    \ control_flow_structure, plant_uml = get_code_graph(file_summary, file_ast)\n\
+    \    file_details['file_info']['entire_code_graph'] = entire_code_graph\n    file_details['file_info']['control_flow_structure']\
+    \ = control_flow_structure\n    file_details['file_info']['plant_uml'] = plant_uml\n\
+    \    file_details['file_info']['file_summary'] = json.dumps(file_summary).replace('\"\
+    ', '')\n    del file_details['file_info']['file_ast']\n    return file_details"
+  entire_code_graph:
+    nodes:
+    - CodeVisitor
+    - CodeVisitor.__init__
+    - CodeVisitor.visit_FunctionDef
+    - CodeVisitor.visit_ClassDef
+    - CodeVisitor.generic_visit
+    - CodeVisitor.visit_Assign
+    - CodeVisitor.extract_details
+    - CodeVisitor.analyze
+    - remove_docstring
+    - get_all_calls
+    - get_python_file_details
+    - isinstance
+    - tree.body.pop
+    - ast.walk
+    - node.body.pop
+    - ast.unparse
+    - calls.append
+    - ast.iter_child_nodes
+    - calls_dict[func].extend
+    - open
+    - f.read
+    - ast.parse
+    - logging.warning
+    - visitor.analyze
+    - get_code_graph
+    - json.dumps(file_summary).replace
+    - json.dumps
+    - self.visit
+    - self.constants.append
+    - list
+    - set
+    - next
+    - call_data.keys
+    - self.classes[self.current_class].setdefault
+    - details.update
+    - any
+    - self.functions.items
+    - len
+    - class_details.items
+    - method_name.startswith
+    - self.classes.items
+    - self.functions.keys
+    - self.classes.keys
+    edges:
+    - source: CodeVisitor
+      target: CodeVisitor.__init__
+      target_inputs:
+      - self
+      - code
+      - tree
+      target_returns: []
+    - source: CodeVisitor
+      target: CodeVisitor.visit_FunctionDef
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor
+      target: CodeVisitor.visit_ClassDef
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor
+      target: CodeVisitor.generic_visit
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor
+      target: CodeVisitor.visit_Assign
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor
+      target: CodeVisitor.extract_details
+      target_inputs:
+      - self
+      - node
+      - node_type
+      target_returns:
+      - details
+    - source: CodeVisitor
+      target: CodeVisitor.analyze
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor.visit_FunctionDef
+      target: CodeVisitor.extract_details
+      target_inputs:
+      - self
+      - node
+      - node_type
+      target_returns:
+      - details
+    - source: CodeVisitor.visit_FunctionDef
+      target: CodeVisitor.generic_visit
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor.visit_ClassDef
+      target: CodeVisitor.extract_details
+      target_inputs:
+      - self
+      - node
+      - node_type
+      target_returns:
+      - details
+    - source: CodeVisitor.visit_ClassDef
+      target: CodeVisitor.generic_visit
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor.generic_visit
+      target: ast.iter_child_nodes
+      target_inputs:
+      - node
+    - source: CodeVisitor.generic_visit
+      target: self.visit
+      target_inputs:
+      - child
+    - source: CodeVisitor.visit_Assign
+      target: isinstance
+      target_inputs:
+      - node.parent
+      - ast.Module
+      - target
+      - ast.Name
+      - value
+      - ast.Constant
+      - value.value
+      - str
+    - source: CodeVisitor.visit_Assign
+      target: ast.unparse
+      target_inputs:
+      - value
+    - source: CodeVisitor.visit_Assign
+      target: self.constants.append
+      target_inputs:
+      - constant_assignment
+    - source: CodeVisitor.visit_Assign
+      target: CodeVisitor.generic_visit
+      target_inputs:
+      - self
+      - node
+      target_returns: []
+    - source: CodeVisitor.extract_details
+      target: list
+      target_inputs:
+      - ast.walk(node)
+      - '{ast.unparse(target) for subnode in node_walk if isinstance(subnode, ast.Assign)
+        for target in subnode.targets if isinstance(target, ast.Name)}'
+      - set(node_inputs + node_variables)
+      - call_data.keys()
+      - '{ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list
+        else set()'
+      - '{ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode,
+        ast.AnnAssign) and subnode.annotation is not None}'
+      - '{ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute)
+        and isinstance(subnode.ctx, ast.Store)}'
+    - source: CodeVisitor.extract_details
+      target: ast.walk
+      target_inputs:
+      - node
+    - source: CodeVisitor.extract_details
+      target: get_all_calls
+      target_inputs:
+      - node
+      target_returns:
+      - calls_dict
+    - source: CodeVisitor.extract_details
+      target: ast.unparse
+      target_inputs:
+      - target
+      - node
+      - d
+      - subnode.value
+      - decorator
+      - subnode.annotation
+      - subnode
+      - base
+    - source: CodeVisitor.extract_details
+      target: isinstance
+      target_inputs:
+      - subnode
+      - ast.Assign
+      - target
+      - ast.Name
+      - n
+      - ast.Expr
+      - n.value
+      - ast.Str
+      - subnode
+      - ast.Return
+      - subnode
+      - ast.AnnAssign
+      - subnode
+      - ast.Attribute
+      - subnode.ctx
+      - ast.Store
+      - subnode
+      - ast.Assign
+      - target
+      - ast.Attribute
+      - target.value
+      - ast.Name
+      - subnode
+      - ast.Assign
+      - target
+      - ast.Attribute
+      - subnode
+      - ast.FunctionDef
+      - subnode
+      - ast.FunctionDef
+      - decorator
+      - ast.Name
+    - source: CodeVisitor.extract_details
+      target: set
+      target_inputs:
+      - node_inputs + node_variables
+    - source: CodeVisitor.extract_details
+      target: next
+      target_inputs:
+      - (n.value.s for n in node_walk if isinstance(n, ast.Expr) and isinstance(n.value,
+        ast.Str))
+      - None
+    - source: CodeVisitor.extract_details
+      target: call_data.keys
+      target_inputs: []
+    - source: CodeVisitor.extract_details
+      target: self.classes[self.current_class].setdefault
+      target_inputs:
+      - '''class_attributes'''
+      - '[]'
+    - source: CodeVisitor.extract_details
+      target: details.update
+      target_inputs:
+      - '{''class_attributes'': [target.attr for subnode in node.body if isinstance(subnode,
+        ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],
+        ''class_methods'': [subnode.name for subnode in node.body if isinstance(subnode,
+        ast.FunctionDef)], ''class_inheritance'': [ast.unparse(base) for base in node.bases]
+        if node.bases else [], ''class_static_methods'': [subnode.name for subnode
+        in node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,
+        ast.Name) and decorator.id == ''staticmethod'' for decorator in subnode.decorator_list))]}'
+    - source: CodeVisitor.extract_details
+      target: any
+      target_inputs:
+      - (isinstance(decorator, ast.Name) and decorator.id == 'staticmethod' for decorator
+        in subnode.decorator_list)
+    - source: CodeVisitor.analyze
+      target: self.visit
+      target_inputs:
+      - node
+    - source: CodeVisitor.analyze
+      target: list
+      target_inputs:
+      - ast.walk(node)
+      - file_dependencies
+      - self.functions.keys()
+      - self.classes.keys()
+      - file_dependencies
+    - source: CodeVisitor.analyze
+      target: ast.walk
+      target_inputs:
+      - node
+    - source: CodeVisitor.analyze
+      target: isinstance
+      target_inputs:
+      - subnode
+      - ast.Import
+      - subnode
+      - ast.ImportFrom
+    - source: CodeVisitor.analyze
+      target: self.functions.items
+      target_inputs: []
+    - source: CodeVisitor.analyze
+      target: len
+      target_inputs:
+      - '''class_method_'''
+    - source: CodeVisitor.analyze
+      target: class_details.items
+      target_inputs: []
+    - source: CodeVisitor.analyze
+      target: method_name.startswith
+      target_inputs:
+      - '''class_method_'''
+    - source: CodeVisitor.analyze
+      target: self.classes.items
+      target_inputs: []
+    - source: CodeVisitor.analyze
+      target: self.functions.keys
+      target_inputs: []
+    - source: CodeVisitor.analyze
+      target: self.classes.keys
+      target_inputs: []
+    - source: CodeVisitor.analyze
+      target: remove_docstring
+      target_inputs:
+      - ast.unparse(node)
+      - self.tree
+      target_returns:
+      - ast.unparse(tree)
+    - source: CodeVisitor.analyze
+      target: ast.unparse
+      target_inputs:
+      - node
+    - source: remove_docstring
+      target: isinstance
+      target_inputs:
+      - tree.body[0]
+      - ast.Expr
+      - tree.body[0].value
+      - ast.Str
+      - node
+      - (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)
+      - first_body_node
+      - ast.Expr
+      - first_body_node.value
+      - ast.Str
+    - source: remove_docstring
+      target: tree.body.pop
+      target_inputs:
+      - '0'
+    - source: remove_docstring
+      target: ast.walk
+      target_inputs:
+      - tree
+    - source: remove_docstring
+      target: node.body.pop
+      target_inputs:
+      - '0'
+    - source: remove_docstring
+      target: ast.unparse
+      target_inputs:
+      - tree
+    - source: get_all_calls
+      target: isinstance
+      target_inputs:
+      - node
+      - ast.Call
+      - node
+      - ast.ClassDef
+      - body_item
+      - ast.Assign
+      - body_item.targets[0]
+      - ast.Name
+    - source: get_all_calls
+      target: calls.append
+      target_inputs:
+      - (ast.unparse(node.func), [ast.unparse(arg) for arg in node.args])
+    - source: get_all_calls
+      target: ast.unparse
+      target_inputs:
+      - node.func
+      - arg
+    - source: get_all_calls
+      target: get_all_calls
+      target_inputs:
+      - body_item.value
+      - calls
+      - child
+      - calls
+      target_returns:
+      - calls_dict
+    - source: get_all_calls
+      target: ast.iter_child_nodes
+      target_inputs:
+      - node
+    - source: get_all_calls
+      target: calls_dict[func].extend
+      target_inputs:
+      - args
+    - source: get_python_file_details
+      target: open
+      target_inputs:
+      - file_path
+      - '''r'''
+    - source: get_python_file_details
+      target: f.read
+      target_inputs: []
+    - source: get_python_file_details
+      target: ast.parse
+      target_inputs:
+      - code
+    - source: get_python_file_details
+      target: logging.warning
+      target_inputs:
+      - 'f''{e} error in file: {file_path}'''
+    - source: get_python_file_details
+      target: CodeVisitor
+      target_inputs:
+      - code
+      - tree
+      target_returns: []
+    - source: get_python_file_details
+      target: visitor.analyze
+      target_inputs:
+      - tree
+    - source: get_python_file_details
+      target: get_code_graph
+      target_inputs:
+      - file_summary
+      - file_ast
+    - source: get_python_file_details
+      target: json.dumps(file_summary).replace
+      target_inputs:
+      - '''"'''
+      - ''''''
+    - source: get_python_file_details
+      target: json.dumps
+      target_inputs:
+      - file_summary
+  control_flow_structure:
+  - 'def get_python_file_details(file_path: str)':
+    - try:
+      - with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        - code = f.read()
+        - tree = ast.parse(code)
+      except:
+      - 'except (PermissionError, SyntaxError, IOError) as :':
+        - 'logging.warning(f''{e} error in file: {file_path}'')'
+        - return:
+          - None
+    - visitor = CodeVisitor(code, tree)
+    - visitor.analyze(tree)
+    - 'file_details = {''file_info'': visitor.file_info, ''functions'': visitor.functions,
+      ''classes'': visitor.classes}'
+    - file_summary = file_details['file_info']['file_summary']
+    - file_ast = file_details['file_info']['file_ast']
+    - entire_code_graph, control_flow_structure, plant_uml = get_code_graph(file_summary,
+      file_ast)
+    - file_details['file_info']['entire_code_graph'] = entire_code_graph
+    - file_details['file_info']['control_flow_structure'] = control_flow_structure
+    - file_details['file_info']['plant_uml'] = plant_uml
+    - file_details['file_info']['file_summary'] = json.dumps(file_summary).replace('"',
+      '')
+    - del file_details['file_info']['file_ast']
+    - return:
+      - file_details
+  - import ast
+  - import logging
+  - import json
+  - from typing import Dict, List, Union
+  - from get_code_graph import get_code_graph
+  - 'def remove_docstring(code: str, tree: ast.AST)':
+    - if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Str):
+      - tree.body.pop(0)
+    - for node in ast.walk(tree):
+      - if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)) and node.body:
+        - first_body_node = node.body[0]
+        - if isinstance(first_body_node, ast.Expr) and isinstance(first_body_node.value, ast.Str):
+          - node.body.pop(0)
+    - return:
+      - ast.unparse(tree)
+  - 'def get_all_calls(node: ast.AST, calls)':
+    - if calls is None:
+      - calls = []
+    - if isinstance(node, ast.Call):
+      - calls.append((ast.unparse(node.func), [ast.unparse(arg) for arg in node.args]))
+      elif isinstance(node, ast.ClassDef):
+      - for body_item in node.body:
+        - if isinstance(body_item, ast.Assign) and isinstance(body_item.targets[0], ast.Name):
+          - get_all_calls(body_item.value, calls)
+    - for child in ast.iter_child_nodes(node):
+      - get_all_calls(child, calls)
+    - calls_dict = {}
+    - for (func, args) in calls:
+      - if func not in calls_dict:
+        - calls_dict[func] = []
+      - calls_dict[func].extend(args)
+    - return:
+      - calls_dict
+  - class CodeVisitor:
+    - 'def __init__(self, code: str, tree: ast.AST)':
+      - 'self.code: str = code'
+      - 'self.functions: Dict[str, Dict[str, Union[str, List[str]]]] = {}'
+      - 'self.classes: Dict[str, Dict[str, Union[str, List[str]]]] = {}'
+      - 'self.file_info: Dict[str, Union[str, List[str]]] = {}'
+      - 'self.current_class: str = None'
+      - 'self.constants: List[str] = []'
+      - self.tree = tree
+    - 'def visit_FunctionDef(self, node: ast.FunctionDef)':
+      - details = self.extract_details(node, 'method' if self.current_class else 'function')
+      - if self.current_class:
+        - self.classes[self.current_class][f'class_method_{node.name}'] = details
+        else:
+        - self.functions[node.name] = details
+      - self.generic_visit(node)
+    - 'def visit_ClassDef(self, node: ast.ClassDef)':
+      - self.classes[node.name] = self.extract_details(node, 'class')
+      - self.current_class = node.name
+      - self.generic_visit(node)
+      - self.current_class = None
+    - def generic_visit(self, node):
+      - for child in ast.iter_child_nodes(node):
+        - child.parent = node
+        - self.visit(child)
+    - 'def visit_Assign(self, node: ast.Assign)':
+      - if isinstance(node.parent, ast.Module):
+        - for target in node.targets:
+          - if isinstance(target, ast.Name):
+            - value = node.value
+            - if isinstance(value, ast.Constant) and isinstance(value.value, str):
+              - value_repr = f"'{value.value}'"
+              else:
+              - value_repr = ast.unparse(value)
+            - constant_assignment = f'{target.id}={value_repr}'
+            - self.constants.append(constant_assignment)
+      - self.generic_visit(node)
+    - 'def extract_details(self, node: ast.AST, node_type: str)':
+      - node_walk = list(ast.walk(node))
+      - call_data = get_all_calls(node)
+      - node_inputs = [arg.arg for arg in node.args.args] if node_type in ['function',
+        'method'] else None
+      - node_variables = list({ast.unparse(target) for subnode in node_walk if isinstance(subnode,
+        ast.Assign) for target in subnode.targets if isinstance(target, ast.Name)})
+      - if node_inputs:
+        - node_variables = list(set(node_inputs + node_variables))
+      - 'details = {f''{node_type}_name'': node.name, f''{node_type}_code'': ast.unparse(node),
+        f''{node_type}_docstring'': next((n.value.s for n in node_walk if isinstance(n,
+        ast.Expr) and isinstance(n.value, ast.Str)), None), f''{node_type}_inputs'':
+        node_inputs, f''{node_type}_defaults'': [ast.unparse(d) for d in node.args.defaults]
+        if node_type in [''function'', ''method''] else None, f''{node_type}_returns'':
+        [ast.unparse(subnode.value) if subnode.value is not None else ''None'' for
+        subnode in node_walk if isinstance(subnode, ast.Return)], f''{node_type}_calls'':
+        list(call_data.keys()), f''{node_type}_call_inputs'': call_data, f''{node_type}_variables'':
+        node_variables, f''{node_type}_decorators'': list({ast.unparse(decorator)
+        for decorator in node.decorator_list} if node.decorator_list else set()),
+        f''{node_type}_annotations'': list({ast.unparse(subnode.annotation) for subnode
+        in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation
+        is not None}), f''{node_type}_properties'': list({ast.unparse(subnode) for
+        subnode in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx,
+        ast.Store)})}'
+      - if node_type in ['class', 'method']:
+        - if node_type == 'method' and self.current_class:
+          - attributes = [target.attr for subnode in node_walk if isinstance(subnode,
+            ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)
+            and isinstance(target.value, ast.Name) and (target.value.id == 'self')]
+          - class_attributes = self.classes[self.current_class].setdefault('class_attributes',
+            [])
+          - class_attributes += attributes
+        - if node_type == 'class':
+          - 'details.update({''class_attributes'': [target.attr for subnode in node.body
+            if isinstance(subnode, ast.Assign) for target in subnode.targets if isinstance(target,
+            ast.Attribute)], ''class_methods'': [subnode.name for subnode in node.body
+            if isinstance(subnode, ast.FunctionDef)], ''class_inheritance'': [ast.unparse(base)
+            for base in node.bases] if node.bases else [], ''class_static_methods'':
+            [subnode.name for subnode in node.body if isinstance(subnode, ast.FunctionDef)
+            and any((isinstance(decorator, ast.Name) and decorator.id == ''staticmethod''
+            for decorator in subnode.decorator_list))]})'
+      - return:
+        - details
+    - 'def analyze(self, node: ast.AST)':
+      - self.visit(node)
+      - node_walk = list(ast.walk(node))
+      - file_dependencies = {alias.name for subnode in node_walk if isinstance(subnode,
+        ast.Import) for alias in subnode.names} | {subnode.module for subnode in node_walk
+        if isinstance(subnode, ast.ImportFrom)}
+      - 'function_defs = [{func_name: {''inputs'': details[''function_inputs''], ''calls'':
+        details[''function_calls''], ''call_inputs'': details[''function_call_inputs''],
+        ''returns'': details[''function_returns'']}} for func_name, details in self.functions.items()]'
+      - 'class_defs = [{class_name: {''method_defs'': {method_name[len(''class_method_''):]:
+        {''inputs'': details[''method_inputs''], ''calls'': details[''method_calls''],
+        ''call_inputs'': details[''method_call_inputs''], ''returns'': details[''method_returns'']}
+        for method_name, details in class_details.items() if method_name.startswith(''class_method_'')}}}
+        for class_name, class_details in self.classes.items()]'
+      - 'self.file_info = {''file_code'': self.code, ''file_ast'': node, ''file_dependencies'':
+        list(file_dependencies), ''file_functions'': list(self.functions.keys()),
+        ''file_classes'': list(self.classes.keys()), ''file_constants'': self.constants,
+        ''file_summary'': {''dependencies'': list(file_dependencies), ''function_defs'':
+        function_defs, ''class_defs'': class_defs}, ''file_code_simplified'': remove_docstring(ast.unparse(node),
+        self.tree)}'
+  plant_uml: "@startuml\n  def [{'try': [{\"with open(file_path, 'r', encoding='utf-8',\
+    \ errors='ignore') as f\": ['code = f.read()', 'tree = ast.parse(code)']}], 'except':\
+    \ [{'except (PermissionError, SyntaxError, IOError) as :': [\"logging.warning(f'{e}\
+    \ error in file: {file_path}')\", {'return': ['None']}]}]}, 'visitor = CodeVisitor(code,\
+    \ tree)', 'visitor.analyze(tree)', \"file_details = {'file_info': visitor.file_info,\
+    \ 'functions': visitor.functions, 'classes': visitor.classes}\", \"file_summary\
+    \ = file_details['file_info']['file_summary']\", \"file_ast = file_details['file_info']['file_ast']\"\
+    , 'entire_code_graph, control_flow_structure, plant_uml = get_code_graph(file_summary,\
+    \ file_ast)', \"file_details['file_info']['entire_code_graph'] = entire_code_graph\"\
+    , \"file_details['file_info']['control_flow_structure'] = control_flow_structure\"\
+    , \"file_details['file_info']['plant_uml'] = plant_uml\", 'file_details[\\'file_info\\\
+    '][\\'file_summary\\'] = json.dumps(file_summary).replace(\\'\"\\', \\'\\')',\
+    \ \"del file_details['file_info']['file_ast']\", {'return': ['file_details']}]\
+    \ {\n    :try;\n    :with open(file_path, 'r', encoding='utf-8', errors='ignore')\
+    \ as f;\n    :code = f.read();\n    :tree = ast.parse(code);\n    :visitor = CodeVisitor(code,\
+    \ tree);\n    :visitor.analyze(tree);\n    :file_details = {'file_info': visitor.file_info,\
+    \ 'functions': visitor.functions, 'classes': visitor.classes};\n    :file_summary\
+    \ = file_details['file_info']['file_summary'];\n    :file_ast = file_details['file_info']['file_ast'];\n\
+    \    :entire_code_graph, control_flow_structure, plant_uml = get_code_graph(file_summary,\
+    \ file_ast);\n    :file_details['file_info']['entire_code_graph'] = entire_code_graph;\n\
+    \    :file_details['file_info']['control_flow_structure'] = control_flow_structure;\n\
+    \    :file_details['file_info']['plant_uml'] = plant_uml;\n    :file_details['file_info']['file_summary']\
+    \ = json.dumps(file_summary).replace('\"', '');\n    :del file_details['file_info']['file_ast'];\n\
+    \    :return;\n    :file_details;\n  }\n  :import ast;\n  :import logging;\n \
+    \ :import json;\n  :from typing import Dict, List, Union;\n  :from get_code_graph\
+    \ import get_code_graph;\n  def [{'if tree.body and isinstance(tree.body[0], ast.Expr)\
+    \ and isinstance(tree.body[0].value, ast.Str)': ['tree.body.pop(0)']}, {'for node\
+    \ in ast.walk(tree)': [{'if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef))\
+    \ and node.body': ['first_body_node = node.body[0]', {'if isinstance(first_body_node,\
+    \ ast.Expr) and isinstance(first_body_node.value, ast.Str)': ['node.body.pop(0)']}]}]},\
+    \ {'return': ['ast.unparse(tree)']}] {\n    if (['tree.body.pop(0)']) {\n    \
+    \  :tree.body.pop(0);\n    }\n    while ([{'if isinstance(node, (ast.FunctionDef,\
+    \ ast.ClassDef, ast.AsyncFunctionDef)) and node.body': ['first_body_node = node.body[0]',\
+    \ {'if isinstance(first_body_node, ast.Expr) and isinstance(first_body_node.value,\
+    \ ast.Str)': ['node.body.pop(0)']}]}]) {\n      if (['first_body_node = node.body[0]',\
+    \ {'if isinstance(first_body_node, ast.Expr) and isinstance(first_body_node.value,\
+    \ ast.Str)': ['node.body.pop(0)']}]) {\n        :first_body_node = node.body[0];\n\
+    \        if (['node.body.pop(0)']) {\n          :node.body.pop(0);\n        }\n\
+    \      }\n    }\n    :return;\n    :ast.unparse(tree);\n  }\n  def [{'if calls\
+    \ is None': ['calls = []']}, {'if isinstance(node, ast.Call)': ['calls.append((ast.unparse(node.func),\
+    \ [ast.unparse(arg) for arg in node.args]))'], 'elif isinstance(node, ast.ClassDef)':\
+    \ [{'for body_item in node.body': [{'if isinstance(body_item, ast.Assign) and\
+    \ isinstance(body_item.targets[0], ast.Name)': ['get_all_calls(body_item.value,\
+    \ calls)']}]}]}, {'for child in ast.iter_child_nodes(node)': ['get_all_calls(child,\
+    \ calls)']}, 'calls_dict = {}', {'for (func, args) in calls': [{'if func not in\
+    \ calls_dict': ['calls_dict[func] = []']}, 'calls_dict[func].extend(args)']},\
+    \ {'return': ['calls_dict']}] {\n    if (['calls = []']) {\n      :calls = [];\n\
+    \    }\n    if (['calls.append((ast.unparse(node.func), [ast.unparse(arg) for\
+    \ arg in node.args]))']) {\n      :calls.append((ast.unparse(node.func), [ast.unparse(arg)\
+    \ for arg in node.args]));\n    }\n    while (['get_all_calls(child, calls)'])\
+    \ {\n      :get_all_calls(child, calls);\n    }\n    :calls_dict = {};\n    while\
+    \ ([{'if func not in calls_dict': ['calls_dict[func] = []']}, 'calls_dict[func].extend(args)'])\
+    \ {\n      if (['calls_dict[func] = []']) {\n        :calls_dict[func] = [];\n\
+    \      }\n      :calls_dict[func].extend(args);\n    }\n    :return;\n    :calls_dict;\n\
+    \  }\n  class [{'def __init__(self, code: str, tree: ast.AST)': ['self.code: str\
+    \ = code', 'self.functions: Dict[str, Dict[str, Union[str, List[str]]]] = {}',\
+    \ 'self.classes: Dict[str, Dict[str, Union[str, List[str]]]] = {}', 'self.file_info:\
+    \ Dict[str, Union[str, List[str]]] = {}', 'self.current_class: str = None', 'self.constants:\
+    \ List[str] = []', 'self.tree = tree']}, {'def visit_FunctionDef(self, node: ast.FunctionDef)':\
+    \ [\"details = self.extract_details(node, 'method' if self.current_class else\
+    \ 'function')\", {'if self.current_class': [\"self.classes[self.current_class][f'class_method_{node.name}']\
+    \ = details\"], 'else': ['self.functions[node.name] = details']}, 'self.generic_visit(node)']},\
+    \ {'def visit_ClassDef(self, node: ast.ClassDef)': [\"self.classes[node.name]\
+    \ = self.extract_details(node, 'class')\", 'self.current_class = node.name', 'self.generic_visit(node)',\
+    \ 'self.current_class = None']}, {'def generic_visit(self, node)': [{'for child\
+    \ in ast.iter_child_nodes(node)': ['child.parent = node', 'self.visit(child)']}]},\
+    \ {'def visit_Assign(self, node: ast.Assign)': [{'if isinstance(node.parent, ast.Module)':\
+    \ [{'for target in node.targets': [{'if isinstance(target, ast.Name)': ['value\
+    \ = node.value', {'if isinstance(value, ast.Constant) and isinstance(value.value,\
+    \ str)': ['value_repr = f\"\\'{value.value}\\'\"'], 'else': ['value_repr = ast.unparse(value)']},\
+    \ \"constant_assignment = f'{target.id}={value_repr}'\", 'self.constants.append(constant_assignment)']}]}]},\
+    \ 'self.generic_visit(node)']}, {'def extract_details(self, node: ast.AST, node_type:\
+    \ str)': ['node_walk = list(ast.walk(node))', 'call_data = get_all_calls(node)',\
+    \ \"node_inputs = [arg.arg for arg in node.args.args] if node_type in ['function',\
+    \ 'method'] else None\", 'node_variables = list({ast.unparse(target) for subnode\
+    \ in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Name)})', {'if node_inputs': ['node_variables = list(set(node_inputs\
+    \ + node_variables))']}, \"details = {f'{node_type}_name': node.name, f'{node_type}_code':\
+    \ ast.unparse(node), f'{node_type}_docstring': next((n.value.s for n in node_walk\
+    \ if isinstance(n, ast.Expr) and isinstance(n.value, ast.Str)), None), f'{node_type}_inputs':\
+    \ node_inputs, f'{node_type}_defaults': [ast.unparse(d) for d in node.args.defaults]\
+    \ if node_type in ['function', 'method'] else None, f'{node_type}_returns': [ast.unparse(subnode.value)\
+    \ if subnode.value is not None else 'None' for subnode in node_walk if isinstance(subnode,\
+    \ ast.Return)], f'{node_type}_calls': list(call_data.keys()), f'{node_type}_call_inputs':\
+    \ call_data, f'{node_type}_variables': node_variables, f'{node_type}_decorators':\
+    \ list({ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list\
+    \ else set()), f'{node_type}_annotations': list({ast.unparse(subnode.annotation)\
+    \ for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation\
+    \ is not None}), f'{node_type}_properties': list({ast.unparse(subnode) for subnode\
+    \ in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx,\
+    \ ast.Store)})}\", {\"if node_type in ['class', 'method']\": [{\"if node_type\
+    \ == 'method' and self.current_class\": [\"attributes = [target.attr for subnode\
+    \ in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)\
+    \ and (target.value.id == 'self')]\", \"class_attributes = self.classes[self.current_class].setdefault('class_attributes',\
+    \ [])\", 'class_attributes += attributes']}, {\"if node_type == 'class'\": [\"\
+    details.update({'class_attributes': [target.attr for subnode in node.body if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],\
+    \ 'class_methods': [subnode.name for subnode in node.body if isinstance(subnode,\
+    \ ast.FunctionDef)], 'class_inheritance': [ast.unparse(base) for base in node.bases]\
+    \ if node.bases else [], 'class_static_methods': [subnode.name for subnode in\
+    \ node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,\
+    \ ast.Name) and decorator.id == 'staticmethod' for decorator in subnode.decorator_list))]})\"\
+    ]}]}, {'return': ['details']}]}, {'def analyze(self, node: ast.AST)': ['self.visit(node)',\
+    \ 'node_walk = list(ast.walk(node))', 'file_dependencies = {alias.name for subnode\
+    \ in node_walk if isinstance(subnode, ast.Import) for alias in subnode.names}\
+    \ | {subnode.module for subnode in node_walk if isinstance(subnode, ast.ImportFrom)}',\
+    \ \"function_defs = [{func_name: {'inputs': details['function_inputs'], 'calls':\
+    \ details['function_calls'], 'call_inputs': details['function_call_inputs'], 'returns':\
+    \ details['function_returns']}} for func_name, details in self.functions.items()]\"\
+    , \"class_defs = [{class_name: {'method_defs': {method_name[len('class_method_'):]:\
+    \ {'inputs': details['method_inputs'], 'calls': details['method_calls'], 'call_inputs':\
+    \ details['method_call_inputs'], 'returns': details['method_returns']} for method_name,\
+    \ details in class_details.items() if method_name.startswith('class_method_')}}}\
+    \ for class_name, class_details in self.classes.items()]\", \"self.file_info =\
+    \ {'file_code': self.code, 'file_ast': node, 'file_dependencies': list(file_dependencies),\
+    \ 'file_functions': list(self.functions.keys()), 'file_classes': list(self.classes.keys()),\
+    \ 'file_constants': self.constants, 'file_summary': {'dependencies': list(file_dependencies),\
+    \ 'function_defs': function_defs, 'class_defs': class_defs}, 'file_code_simplified':\
+    \ remove_docstring(ast.unparse(node), self.tree)}\"]}] {\n    def ['self.code:\
+    \ str = code', 'self.functions: Dict[str, Dict[str, Union[str, List[str]]]] =\
+    \ {}', 'self.classes: Dict[str, Dict[str, Union[str, List[str]]]] = {}', 'self.file_info:\
+    \ Dict[str, Union[str, List[str]]] = {}', 'self.current_class: str = None', 'self.constants:\
+    \ List[str] = []', 'self.tree = tree'] {\n      :self.code: str = code;\n    \
+    \  :self.functions: Dict[str, Dict[str, Union[str, List[str]]]] = {};\n      :self.classes:\
+    \ Dict[str, Dict[str, Union[str, List[str]]]] = {};\n      :self.file_info: Dict[str,\
+    \ Union[str, List[str]]] = {};\n      :self.current_class: str = None;\n     \
+    \ :self.constants: List[str] = [];\n      :self.tree = tree;\n    }\n    def [\"\
+    details = self.extract_details(node, 'method' if self.current_class else 'function')\"\
+    , {'if self.current_class': [\"self.classes[self.current_class][f'class_method_{node.name}']\
+    \ = details\"], 'else': ['self.functions[node.name] = details']}, 'self.generic_visit(node)']\
+    \ {\n      :details = self.extract_details(node, 'method' if self.current_class\
+    \ else 'function');\n      if ([\"self.classes[self.current_class][f'class_method_{node.name}']\
+    \ = details\"]) {\n        :self.classes[self.current_class][f'class_method_{node.name}']\
+    \ = details;\n      }\n      :self.generic_visit(node);\n    }\n    def [\"self.classes[node.name]\
+    \ = self.extract_details(node, 'class')\", 'self.current_class = node.name', 'self.generic_visit(node)',\
+    \ 'self.current_class = None'] {\n      :self.classes[node.name] = self.extract_details(node,\
+    \ 'class');\n      :self.current_class = node.name;\n      :self.generic_visit(node);\n\
+    \      :self.current_class = None;\n    }\n    def [{'for child in ast.iter_child_nodes(node)':\
+    \ ['child.parent = node', 'self.visit(child)']}] {\n      while (['child.parent\
+    \ = node', 'self.visit(child)']) {\n        :child.parent = node;\n        :self.visit(child);\n\
+    \      }\n    }\n    def [{'if isinstance(node.parent, ast.Module)': [{'for target\
+    \ in node.targets': [{'if isinstance(target, ast.Name)': ['value = node.value',\
+    \ {'if isinstance(value, ast.Constant) and isinstance(value.value, str)': ['value_repr\
+    \ = f\"\\'{value.value}\\'\"'], 'else': ['value_repr = ast.unparse(value)']},\
+    \ \"constant_assignment = f'{target.id}={value_repr}'\", 'self.constants.append(constant_assignment)']}]}]},\
+    \ 'self.generic_visit(node)'] {\n      if ([{'for target in node.targets': [{'if\
+    \ isinstance(target, ast.Name)': ['value = node.value', {'if isinstance(value,\
+    \ ast.Constant) and isinstance(value.value, str)': ['value_repr = f\"\\'{value.value}\\\
+    '\"'], 'else': ['value_repr = ast.unparse(value)']}, \"constant_assignment = f'{target.id}={value_repr}'\"\
+    , 'self.constants.append(constant_assignment)']}]}]) {\n        while ([{'if isinstance(target,\
+    \ ast.Name)': ['value = node.value', {'if isinstance(value, ast.Constant) and\
+    \ isinstance(value.value, str)': ['value_repr = f\"\\'{value.value}\\'\"'], 'else':\
+    \ ['value_repr = ast.unparse(value)']}, \"constant_assignment = f'{target.id}={value_repr}'\"\
+    , 'self.constants.append(constant_assignment)']}]) {\n          if (['value =\
+    \ node.value', {'if isinstance(value, ast.Constant) and isinstance(value.value,\
+    \ str)': ['value_repr = f\"\\'{value.value}\\'\"'], 'else': ['value_repr = ast.unparse(value)']},\
+    \ \"constant_assignment = f'{target.id}={value_repr}'\", 'self.constants.append(constant_assignment)'])\
+    \ {\n            :value = node.value;\n            if (['value_repr = f\"\\'{value.value}\\\
+    '\"']) {\n              :value_repr = f\"'{value.value}'\";\n            }\n \
+    \           :constant_assignment = f'{target.id}={value_repr}';\n            :self.constants.append(constant_assignment);\n\
+    \          }\n        }\n      }\n      :self.generic_visit(node);\n    }\n  \
+    \  def ['node_walk = list(ast.walk(node))', 'call_data = get_all_calls(node)',\
+    \ \"node_inputs = [arg.arg for arg in node.args.args] if node_type in ['function',\
+    \ 'method'] else None\", 'node_variables = list({ast.unparse(target) for subnode\
+    \ in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Name)})', {'if node_inputs': ['node_variables = list(set(node_inputs\
+    \ + node_variables))']}, \"details = {f'{node_type}_name': node.name, f'{node_type}_code':\
+    \ ast.unparse(node), f'{node_type}_docstring': next((n.value.s for n in node_walk\
+    \ if isinstance(n, ast.Expr) and isinstance(n.value, ast.Str)), None), f'{node_type}_inputs':\
+    \ node_inputs, f'{node_type}_defaults': [ast.unparse(d) for d in node.args.defaults]\
+    \ if node_type in ['function', 'method'] else None, f'{node_type}_returns': [ast.unparse(subnode.value)\
+    \ if subnode.value is not None else 'None' for subnode in node_walk if isinstance(subnode,\
+    \ ast.Return)], f'{node_type}_calls': list(call_data.keys()), f'{node_type}_call_inputs':\
+    \ call_data, f'{node_type}_variables': node_variables, f'{node_type}_decorators':\
+    \ list({ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list\
+    \ else set()), f'{node_type}_annotations': list({ast.unparse(subnode.annotation)\
+    \ for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation\
+    \ is not None}), f'{node_type}_properties': list({ast.unparse(subnode) for subnode\
+    \ in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx,\
+    \ ast.Store)})}\", {\"if node_type in ['class', 'method']\": [{\"if node_type\
+    \ == 'method' and self.current_class\": [\"attributes = [target.attr for subnode\
+    \ in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)\
+    \ and (target.value.id == 'self')]\", \"class_attributes = self.classes[self.current_class].setdefault('class_attributes',\
+    \ [])\", 'class_attributes += attributes']}, {\"if node_type == 'class'\": [\"\
+    details.update({'class_attributes': [target.attr for subnode in node.body if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],\
+    \ 'class_methods': [subnode.name for subnode in node.body if isinstance(subnode,\
+    \ ast.FunctionDef)], 'class_inheritance': [ast.unparse(base) for base in node.bases]\
+    \ if node.bases else [], 'class_static_methods': [subnode.name for subnode in\
+    \ node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,\
+    \ ast.Name) and decorator.id == 'staticmethod' for decorator in subnode.decorator_list))]})\"\
+    ]}]}, {'return': ['details']}] {\n      :node_walk = list(ast.walk(node));\n \
+    \     :call_data = get_all_calls(node);\n      :node_inputs = [arg.arg for arg\
+    \ in node.args.args] if node_type in ['function', 'method'] else None;\n     \
+    \ :node_variables = list({ast.unparse(target) for subnode in node_walk if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Name)});\n\
+    \      if (['node_variables = list(set(node_inputs + node_variables))']) {\n \
+    \       :node_variables = list(set(node_inputs + node_variables));\n      }\n\
+    \      :details = {f'{node_type}_name': node.name, f'{node_type}_code': ast.unparse(node),\
+    \ f'{node_type}_docstring': next((n.value.s for n in node_walk if isinstance(n,\
+    \ ast.Expr) and isinstance(n.value, ast.Str)), None), f'{node_type}_inputs': node_inputs,\
+    \ f'{node_type}_defaults': [ast.unparse(d) for d in node.args.defaults] if node_type\
+    \ in ['function', 'method'] else None, f'{node_type}_returns': [ast.unparse(subnode.value)\
+    \ if subnode.value is not None else 'None' for subnode in node_walk if isinstance(subnode,\
+    \ ast.Return)], f'{node_type}_calls': list(call_data.keys()), f'{node_type}_call_inputs':\
+    \ call_data, f'{node_type}_variables': node_variables, f'{node_type}_decorators':\
+    \ list({ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list\
+    \ else set()), f'{node_type}_annotations': list({ast.unparse(subnode.annotation)\
+    \ for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation\
+    \ is not None}), f'{node_type}_properties': list({ast.unparse(subnode) for subnode\
+    \ in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx,\
+    \ ast.Store)})};\n      if ([{\"if node_type == 'method' and self.current_class\"\
+    : [\"attributes = [target.attr for subnode in node_walk if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)\
+    \ and isinstance(target.value, ast.Name) and (target.value.id == 'self')]\", \"\
+    class_attributes = self.classes[self.current_class].setdefault('class_attributes',\
+    \ [])\", 'class_attributes += attributes']}, {\"if node_type == 'class'\": [\"\
+    details.update({'class_attributes': [target.attr for subnode in node.body if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],\
+    \ 'class_methods': [subnode.name for subnode in node.body if isinstance(subnode,\
+    \ ast.FunctionDef)], 'class_inheritance': [ast.unparse(base) for base in node.bases]\
+    \ if node.bases else [], 'class_static_methods': [subnode.name for subnode in\
+    \ node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,\
+    \ ast.Name) and decorator.id == 'staticmethod' for decorator in subnode.decorator_list))]})\"\
+    ]}]) {\n        if ([\"attributes = [target.attr for subnode in node_walk if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)\
+    \ and isinstance(target.value, ast.Name) and (target.value.id == 'self')]\", \"\
+    class_attributes = self.classes[self.current_class].setdefault('class_attributes',\
+    \ [])\", 'class_attributes += attributes']) {\n          :attributes = [target.attr\
+    \ for subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)\
+    \ and (target.value.id == 'self')];\n          :class_attributes = self.classes[self.current_class].setdefault('class_attributes',\
+    \ []);\n          :class_attributes += attributes;\n        }\n        if ([\"\
+    details.update({'class_attributes': [target.attr for subnode in node.body if isinstance(subnode,\
+    \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],\
+    \ 'class_methods': [subnode.name for subnode in node.body if isinstance(subnode,\
+    \ ast.FunctionDef)], 'class_inheritance': [ast.unparse(base) for base in node.bases]\
+    \ if node.bases else [], 'class_static_methods': [subnode.name for subnode in\
+    \ node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,\
+    \ ast.Name) and decorator.id == 'staticmethod' for decorator in subnode.decorator_list))]})\"\
+    ]) {\n          :details.update({'class_attributes': [target.attr for subnode\
+    \ in node.body if isinstance(subnode, ast.Assign) for target in subnode.targets\
+    \ if isinstance(target, ast.Attribute)], 'class_methods': [subnode.name for subnode\
+    \ in node.body if isinstance(subnode, ast.FunctionDef)], 'class_inheritance':\
+    \ [ast.unparse(base) for base in node.bases] if node.bases else [], 'class_static_methods':\
+    \ [subnode.name for subnode in node.body if isinstance(subnode, ast.FunctionDef)\
+    \ and any((isinstance(decorator, ast.Name) and decorator.id == 'staticmethod'\
+    \ for decorator in subnode.decorator_list))]});\n        }\n      }\n      :return;\n\
+    \      :details;\n    }\n    def ['self.visit(node)', 'node_walk = list(ast.walk(node))',\
+    \ 'file_dependencies = {alias.name for subnode in node_walk if isinstance(subnode,\
+    \ ast.Import) for alias in subnode.names} | {subnode.module for subnode in node_walk\
+    \ if isinstance(subnode, ast.ImportFrom)}', \"function_defs = [{func_name: {'inputs':\
+    \ details['function_inputs'], 'calls': details['function_calls'], 'call_inputs':\
+    \ details['function_call_inputs'], 'returns': details['function_returns']}} for\
+    \ func_name, details in self.functions.items()]\", \"class_defs = [{class_name:\
+    \ {'method_defs': {method_name[len('class_method_'):]: {'inputs': details['method_inputs'],\
+    \ 'calls': details['method_calls'], 'call_inputs': details['method_call_inputs'],\
+    \ 'returns': details['method_returns']} for method_name, details in class_details.items()\
+    \ if method_name.startswith('class_method_')}}} for class_name, class_details\
+    \ in self.classes.items()]\", \"self.file_info = {'file_code': self.code, 'file_ast':\
+    \ node, 'file_dependencies': list(file_dependencies), 'file_functions': list(self.functions.keys()),\
+    \ 'file_classes': list(self.classes.keys()), 'file_constants': self.constants,\
+    \ 'file_summary': {'dependencies': list(file_dependencies), 'function_defs': function_defs,\
+    \ 'class_defs': class_defs}, 'file_code_simplified': remove_docstring(ast.unparse(node),\
+    \ self.tree)}\"] {\n      :self.visit(node);\n      :node_walk = list(ast.walk(node));\n\
+    \      :file_dependencies = {alias.name for subnode in node_walk if isinstance(subnode,\
+    \ ast.Import) for alias in subnode.names} | {subnode.module for subnode in node_walk\
+    \ if isinstance(subnode, ast.ImportFrom)};\n      :function_defs = [{func_name:\
+    \ {'inputs': details['function_inputs'], 'calls': details['function_calls'], 'call_inputs':\
+    \ details['function_call_inputs'], 'returns': details['function_returns']}} for\
+    \ func_name, details in self.functions.items()];\n      :class_defs = [{class_name:\
+    \ {'method_defs': {method_name[len('class_method_'):]: {'inputs': details['method_inputs'],\
+    \ 'calls': details['method_calls'], 'call_inputs': details['method_call_inputs'],\
+    \ 'returns': details['method_returns']} for method_name, details in class_details.items()\
+    \ if method_name.startswith('class_method_')}}} for class_name, class_details\
+    \ in self.classes.items()];\n      :self.file_info = {'file_code': self.code,\
+    \ 'file_ast': node, 'file_dependencies': list(file_dependencies), 'file_functions':\
+    \ list(self.functions.keys()), 'file_classes': list(self.classes.keys()), 'file_constants':\
+    \ self.constants, 'file_summary': {'dependencies': list(file_dependencies), 'function_defs':\
+    \ function_defs, 'class_defs': class_defs}, 'file_code_simplified': remove_docstring(ast.unparse(node),\
+    \ self.tree)};\n    }\n  }\nend\n@enduml"
+functions:
+  remove_docstring:
+    function_name: remove_docstring
+    function_code: "def remove_docstring(code: str, tree: ast.AST) -> str:\n    \"\
+      \"\"\n    Remove docstrings from the provided Python code.\n    This includes\
+      \ top-level module docstrings and docstrings in\n    functions, classes, and\
+      \ async functions.\n    Args:\n        code (str): The source code from which\
+      \ to remove docstrings.\n    Returns:\n        str: The source code with docstrings\
+      \ removed.\n    \"\"\"\n    if tree.body and isinstance(tree.body[0], ast.Expr)\
+      \ and isinstance(tree.body[0].value, ast.Str):\n        tree.body.pop(0)\n \
+      \   for node in ast.walk(tree):\n        if isinstance(node, (ast.FunctionDef,\
+      \ ast.ClassDef, ast.AsyncFunctionDef)) and node.body:\n            first_body_node\
+      \ = node.body[0]\n            if isinstance(first_body_node, ast.Expr) and isinstance(first_body_node.value,\
+      \ ast.Str):\n                node.body.pop(0)\n    return ast.unparse(tree)"
+    function_docstring: "\n    Remove docstrings from the provided Python code.\n\
+      \    This includes top-level module docstrings and docstrings in\n    functions,\
+      \ classes, and async functions.\n    Args:\n        code (str): The source code\
+      \ from which to remove docstrings.\n    Returns:\n        str: The source code\
+      \ with docstrings removed.\n    "
+    function_inputs:
+    - code
+    - tree
+    function_defaults: []
+    function_returns:
+    - ast.unparse(tree)
+    function_calls:
+    - isinstance
+    - tree.body.pop
+    - ast.walk
+    - node.body.pop
+    - ast.unparse
+    function_call_inputs:
+      isinstance:
+      - tree.body[0]
+      - ast.Expr
+      - tree.body[0].value
+      - ast.Str
+      - node
+      - (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)
+      - first_body_node
+      - ast.Expr
+      - first_body_node.value
+      - ast.Str
+      tree.body.pop:
+      - '0'
+      ast.walk:
+      - tree
+      node.body.pop:
+      - '0'
+      ast.unparse:
+      - tree
+    function_variables:
+    - tree
+    - code
+    - first_body_node
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  get_all_calls:
+    function_name: get_all_calls
+    function_code: "def get_all_calls(node: ast.AST, calls=None) -> Dict[str, List[str]]:\n\
+      \    \"\"\"\n    Recursively find all function calls in the subtree rooted at\
+      \ `node`,\n    including those in class attributes, list comprehensions, and\
+      \ lambda functions.\n    Args:\n        node (ast.AST): The root node to start\
+      \ the search from.\n        calls (List[Tuple[str, List[str]]], optional): Accumulator\
+      \ for function calls found.\n    Returns:\n        Dict[str, List[str]]: dictionary\
+      \ mapping function calls (as strings) to lists of their arguments.\n    \"\"\
+      \"\n    if calls is None:\n        calls = []\n    if isinstance(node, ast.Call):\n\
+      \        calls.append((ast.unparse(node.func), [ast.unparse(arg) for arg in\
+      \ node.args]))\n    elif isinstance(node, ast.ClassDef):\n        for body_item\
+      \ in node.body:\n            if isinstance(body_item, ast.Assign) and isinstance(body_item.targets[0],\
+      \ ast.Name):\n                get_all_calls(body_item.value, calls)\n    for\
+      \ child in ast.iter_child_nodes(node):\n        get_all_calls(child, calls)\n\
+      \    calls_dict = {}\n    for func, args in calls:\n        if func not in calls_dict:\n\
+      \            calls_dict[func] = []\n        calls_dict[func].extend(args)\n\
+      \    return calls_dict"
+    function_docstring: "\n    Recursively find all function calls in the subtree\
+      \ rooted at `node`,\n    including those in class attributes, list comprehensions,\
+      \ and lambda functions.\n    Args:\n        node (ast.AST): The root node to\
+      \ start the search from.\n        calls (List[Tuple[str, List[str]]], optional):\
+      \ Accumulator for function calls found.\n    Returns:\n        Dict[str, List[str]]:\
+      \ dictionary mapping function calls (as strings) to lists of their arguments.\n\
+      \    "
+    function_inputs:
+    - node
+    - calls
+    function_defaults:
+    - None
+    function_returns:
+    - calls_dict
+    function_calls:
+    - isinstance
+    - calls.append
+    - ast.unparse
+    - get_all_calls
+    - ast.iter_child_nodes
+    - calls_dict[func].extend
+    function_call_inputs:
+      isinstance:
+      - node
+      - ast.Call
+      - node
+      - ast.ClassDef
+      - body_item
+      - ast.Assign
+      - body_item.targets[0]
+      - ast.Name
+      calls.append:
+      - (ast.unparse(node.func), [ast.unparse(arg) for arg in node.args])
+      ast.unparse:
+      - node.func
+      - arg
+      get_all_calls:
+      - body_item.value
+      - calls
+      - child
+      - calls
+      ast.iter_child_nodes:
+      - node
+      calls_dict[func].extend:
+      - args
+    function_variables:
+    - calls
+    - calls_dict
+    - node
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+  get_python_file_details:
+    function_name: get_python_file_details
+    function_code: "def get_python_file_details(file_path: str) -> Dict[str, Union[Dict,\
+      \ str]]:\n    \"\"\"\n    Extract details from a Python file.\n    Args:\n \
+      \       file_path: str: The path to the Python file.\n    Returns:\n       \
+      \ Dict[str, Union[Dict, str]]: The details extracted from the file.\n    \"\"\
+      \"\n    try:\n        with open(file_path, 'r', encoding='utf-8', errors='ignore')\
+      \ as f:\n            code = f.read()\n            tree = ast.parse(code)\n \
+      \   except (PermissionError, SyntaxError, IOError) as e:\n        logging.warning(f'{e}\
+      \ error in file: {file_path}')\n        return None\n    visitor = CodeVisitor(code,\
+      \ tree)\n    visitor.analyze(tree)\n    file_details = {'file_info': visitor.file_info,\
+      \ 'functions': visitor.functions, 'classes': visitor.classes}\n    file_summary\
+      \ = file_details['file_info']['file_summary']\n    file_ast = file_details['file_info']['file_ast']\n\
+      \    entire_code_graph, control_flow_structure, plant_uml = get_code_graph(file_summary,\
+      \ file_ast)\n    file_details['file_info']['entire_code_graph'] = entire_code_graph\n\
+      \    file_details['file_info']['control_flow_structure'] = control_flow_structure\n\
+      \    file_details['file_info']['plant_uml'] = plant_uml\n    file_details['file_info']['file_summary']\
+      \ = json.dumps(file_summary).replace('\"', '')\n    del file_details['file_info']['file_ast']\n\
+      \    return file_details"
+    function_docstring: "\n    Extract details from a Python file.\n    Args:\n  \
+      \      file_path: str: The path to the Python file.\n    Returns:\n        Dict[str,\
+      \ Union[Dict, str]]: The details extracted from the file.\n    "
+    function_inputs:
+    - file_path
+    function_defaults: []
+    function_returns:
+    - file_details
+    - None
+    function_calls:
+    - open
+    - f.read
+    - ast.parse
+    - logging.warning
+    - CodeVisitor
+    - visitor.analyze
+    - get_code_graph
+    - json.dumps(file_summary).replace
+    - json.dumps
+    function_call_inputs:
+      open:
+      - file_path
+      - '''r'''
+      f.read: []
+      ast.parse:
+      - code
+      logging.warning:
+      - 'f''{e} error in file: {file_path}'''
+      CodeVisitor:
+      - code
+      - tree
+      visitor.analyze:
+      - tree
+      get_code_graph:
+      - file_summary
+      - file_ast
+      json.dumps(file_summary).replace:
+      - '''"'''
+      - ''''''
+      json.dumps:
+      - file_summary
+    function_variables:
+    - tree
+    - code
+    - file_summary
+    - file_details
+    - file_ast
+    - visitor
+    - file_path
+    function_decorators: []
+    function_annotations: []
+    function_properties: []
+classes:
+  CodeVisitor:
+    class_name: CodeVisitor
+    class_code: "class CodeVisitor(ast.NodeVisitor):\n    \"\"\"\n    Visitor class\
+      \ for traversing an AST (Abstract Syntax Tree) and extracting details about\
+      \ the code.\n    Attributes:\n        code (str): The source code.\n       \
+      \ functions(Dict): details about functions in the code.\n        classes (Dict):\
+      \ details about classes in the code.\n        file_info (Dict): details about\
+      \ the file.\n    Methods:\n        visit_FunctionDef(node: ast.FunctionDef)\
+      \ -> None:\n            Extract details about a function.\n        visit_ClassDef(node:\
+      \ ast.ClassDef) -> None:\n            Extract details about a class.\n     \
+      \   extract_details(node: ast.AST, node_type: str) -> Dict[str, Union[str, List[str]]]:\n\
+      \            Extract details about a node.\n        analyze(node: ast.AST) ->\
+      \ None:\n            Populate file_info with details about the file.\n    \"\
+      \"\"\n\n    def __init__(self, code: str, tree: ast.AST) -> None:\n        \"\
+      \"\"\n        Initialize a new instance of the class.\n        Args:\n     \
+      \       code: str: The source code.\n        \"\"\"\n        self.code: str\
+      \ = code\n        self.functions: Dict[str, Dict[str, Union[str, List[str]]]]\
+      \ = {}\n        self.classes: Dict[str, Dict[str, Union[str, List[str]]]] =\
+      \ {}\n        self.file_info: Dict[str, Union[str, List[str]]] = {}\n      \
+      \  self.current_class: str = None\n        self.constants: List[str] = []\n\
+      \        self.tree = tree\n\n    def visit_FunctionDef(self, node: ast.FunctionDef)\
+      \ -> None:\n        \"\"\"\n        Extract details about a function.\n    \
+      \    Args:\n            node: ast.FunctionDef: The node to visit.\n        \"\
+      \"\"\n        details = self.extract_details(node, 'method' if self.current_class\
+      \ else 'function')\n        if self.current_class:\n            self.classes[self.current_class][f'class_method_{node.name}']\
+      \ = details\n        else:\n            self.functions[node.name] = details\n\
+      \        self.generic_visit(node)\n\n    def visit_ClassDef(self, node: ast.ClassDef)\
+      \ -> None:\n        \"\"\"\n        Extract details about a class.\n       \
+      \ Args:\n            node: ast.ClassDef: The node to visit.\n        \"\"\"\n\
+      \        self.classes[node.name] = self.extract_details(node, 'class')\n   \
+      \     self.current_class = node.name\n        self.generic_visit(node)\n   \
+      \     self.current_class = None\n\n    def generic_visit(self, node):\n    \
+      \    \"\"\"\n        Called if no explicit visitor function exists for a node.\n\
+      \        Args:\n            node: ast.AST: The node to visit.\n        \"\"\"\
+      \n        for child in ast.iter_child_nodes(node):\n            child.parent\
+      \ = node\n            self.visit(child)\n\n    def visit_Assign(self, node:\
+      \ ast.Assign):\n        \"\"\"\n        Get self.constants\n        Args:\n\
+      \            node: ast.Assign: The node to visit.\n        \"\"\"\n        if\
+      \ isinstance(node.parent, ast.Module):\n            for target in node.targets:\n\
+      \                if isinstance(target, ast.Name):\n                    value\
+      \ = node.value\n                    if isinstance(value, ast.Constant) and isinstance(value.value,\
+      \ str):\n                        value_repr = f\"'{value.value}'\"\n       \
+      \             else:\n                        value_repr = ast.unparse(value)\n\
+      \                    constant_assignment = f'{target.id}={value_repr}'\n   \
+      \                 self.constants.append(constant_assignment)\n        self.generic_visit(node)\n\
+      \n    def extract_details(self, node: ast.AST, node_type: str) -> Dict[str,\
+      \ Union[str, List[str]]]:\n        \"\"\"\n        Extract details about a node.\n\
+      \        Args:\n            node: ast.AST: The node to extract details from.\n\
+      \            node_type: str: The type of node.\n        Returns:\n         \
+      \   Dict[str, Union[str, List[str]]]: The details extracted from the node.\n\
+      \        \"\"\"\n        node_walk = list(ast.walk(node))\n        call_data\
+      \ = get_all_calls(node)\n        node_inputs = [arg.arg for arg in node.args.args]\
+      \ if node_type in ['function', 'method'] else None\n        node_variables =\
+      \ list({ast.unparse(target) for subnode in node_walk if isinstance(subnode,\
+      \ ast.Assign) for target in subnode.targets if isinstance(target, ast.Name)})\n\
+      \        if node_inputs:\n            node_variables = list(set(node_inputs\
+      \ + node_variables))\n        details = {f'{node_type}_name': node.name, f'{node_type}_code':\
+      \ ast.unparse(node), f'{node_type}_docstring': next((n.value.s for n in node_walk\
+      \ if isinstance(n, ast.Expr) and isinstance(n.value, ast.Str)), None), f'{node_type}_inputs':\
+      \ node_inputs, f'{node_type}_defaults': [ast.unparse(d) for d in node.args.defaults]\
+      \ if node_type in ['function', 'method'] else None, f'{node_type}_returns':\
+      \ [ast.unparse(subnode.value) if subnode.value is not None else 'None' for subnode\
+      \ in node_walk if isinstance(subnode, ast.Return)], f'{node_type}_calls': list(call_data.keys()),\
+      \ f'{node_type}_call_inputs': call_data, f'{node_type}_variables': node_variables,\
+      \ f'{node_type}_decorators': list({ast.unparse(decorator) for decorator in node.decorator_list}\
+      \ if node.decorator_list else set()), f'{node_type}_annotations': list({ast.unparse(subnode.annotation)\
+      \ for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation\
+      \ is not None}), f'{node_type}_properties': list({ast.unparse(subnode) for subnode\
+      \ in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx,\
+      \ ast.Store)})}\n        if node_type in ['class', 'method']:\n            if\
+      \ node_type == 'method' and self.current_class:\n                attributes\
+      \ = [target.attr for subnode in node_walk if isinstance(subnode, ast.Assign)\
+      \ for target in subnode.targets if isinstance(target, ast.Attribute) and isinstance(target.value,\
+      \ ast.Name) and (target.value.id == 'self')]\n                class_attributes\
+      \ = self.classes[self.current_class].setdefault('class_attributes', [])\n  \
+      \              class_attributes += attributes\n            if node_type == 'class':\n\
+      \                details.update({'class_attributes': [target.attr for subnode\
+      \ in node.body if isinstance(subnode, ast.Assign) for target in subnode.targets\
+      \ if isinstance(target, ast.Attribute)], 'class_methods': [subnode.name for\
+      \ subnode in node.body if isinstance(subnode, ast.FunctionDef)], 'class_inheritance':\
+      \ [ast.unparse(base) for base in node.bases] if node.bases else [], 'class_static_methods':\
+      \ [subnode.name for subnode in node.body if isinstance(subnode, ast.FunctionDef)\
+      \ and any((isinstance(decorator, ast.Name) and decorator.id == 'staticmethod'\
+      \ for decorator in subnode.decorator_list))]})\n        return details\n\n \
+      \   def analyze(self, node: ast.AST) -> None:\n        \"\"\"\n        Traverse\
+      \ the AST, list all nodes, and populate 'file_info'\n        Args:\n       \
+      \     node: ast.AST: The node to analyze.\n        \"\"\"\n        self.visit(node)\n\
+      \        node_walk = list(ast.walk(node))\n        file_dependencies = {alias.name\
+      \ for subnode in node_walk if isinstance(subnode, ast.Import) for alias in subnode.names}\
+      \ | {subnode.module for subnode in node_walk if isinstance(subnode, ast.ImportFrom)}\n\
+      \        function_defs = [{func_name: {'inputs': details['function_inputs'],\
+      \ 'calls': details['function_calls'], 'call_inputs': details['function_call_inputs'],\
+      \ 'returns': details['function_returns']}} for func_name, details in self.functions.items()]\n\
+      \        class_defs = [{class_name: {'method_defs': {method_name[len('class_method_'):]:\
+      \ {'inputs': details['method_inputs'], 'calls': details['method_calls'], 'call_inputs':\
+      \ details['method_call_inputs'], 'returns': details['method_returns']} for method_name,\
+      \ details in class_details.items() if method_name.startswith('class_method_')}}}\
+      \ for class_name, class_details in self.classes.items()]\n        self.file_info\
+      \ = {'file_code': self.code, 'file_ast': node, 'file_dependencies': list(file_dependencies),\
+      \ 'file_functions': list(self.functions.keys()), 'file_classes': list(self.classes.keys()),\
+      \ 'file_constants': self.constants, 'file_summary': {'dependencies': list(file_dependencies),\
+      \ 'function_defs': function_defs, 'class_defs': class_defs}, 'file_code_simplified':\
+      \ remove_docstring(ast.unparse(node), self.tree)}"
+    class_docstring: "\n    Visitor class for traversing an AST (Abstract Syntax Tree)\
+      \ and extracting details about the code.\n    Attributes:\n        code (str):\
+      \ The source code.\n        functions(Dict): details about functions in the\
+      \ code.\n        classes (Dict): details about classes in the code.\n      \
+      \  file_info (Dict): details about the file.\n    Methods:\n        visit_FunctionDef(node:\
+      \ ast.FunctionDef) -> None:\n            Extract details about a function.\n\
+      \        visit_ClassDef(node: ast.ClassDef) -> None:\n            Extract details\
+      \ about a class.\n        extract_details(node: ast.AST, node_type: str) ->\
+      \ Dict[str, Union[str, List[str]]]:\n            Extract details about a node.\n\
+      \        analyze(node: ast.AST) -> None:\n            Populate file_info with\
+      \ details about the file.\n    "
+    class_inputs: null
+    class_defaults: null
+    class_returns:
+    - details
+    class_calls:
+    - self.extract_details
+    - self.generic_visit
+    - ast.iter_child_nodes
+    - self.visit
+    - isinstance
+    - ast.unparse
+    - self.constants.append
+    - list
+    - ast.walk
+    - get_all_calls
+    - set
+    - next
+    - call_data.keys
+    - self.classes[self.current_class].setdefault
+    - details.update
+    - any
+    - self.functions.items
+    - len
+    - class_details.items
+    - method_name.startswith
+    - self.classes.items
+    - self.functions.keys
+    - self.classes.keys
+    - remove_docstring
+    class_call_inputs:
+      self.extract_details:
+      - node
+      - '''method'' if self.current_class else ''function'''
+      - node
+      - '''class'''
+      self.generic_visit:
+      - node
+      - node
+      - node
+      ast.iter_child_nodes:
+      - node
+      self.visit:
+      - child
+      - node
+      isinstance:
+      - node.parent
+      - ast.Module
+      - target
+      - ast.Name
+      - value
+      - ast.Constant
+      - value.value
+      - str
+      - subnode
+      - ast.Assign
+      - target
+      - ast.Name
+      - n
+      - ast.Expr
+      - n.value
+      - ast.Str
+      - subnode
+      - ast.Return
+      - subnode
+      - ast.AnnAssign
+      - subnode
+      - ast.Attribute
+      - subnode.ctx
+      - ast.Store
+      - subnode
+      - ast.Assign
+      - target
+      - ast.Attribute
+      - target.value
+      - ast.Name
+      - subnode
+      - ast.Assign
+      - target
+      - ast.Attribute
+      - subnode
+      - ast.FunctionDef
+      - subnode
+      - ast.FunctionDef
+      - decorator
+      - ast.Name
+      - subnode
+      - ast.Import
+      - subnode
+      - ast.ImportFrom
+      ast.unparse:
+      - value
+      - target
+      - node
+      - d
+      - subnode.value
+      - decorator
+      - subnode.annotation
+      - subnode
+      - base
+      - node
+      self.constants.append:
+      - constant_assignment
+      list:
+      - ast.walk(node)
+      - '{ast.unparse(target) for subnode in node_walk if isinstance(subnode, ast.Assign)
+        for target in subnode.targets if isinstance(target, ast.Name)}'
+      - set(node_inputs + node_variables)
+      - call_data.keys()
+      - '{ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list
+        else set()'
+      - '{ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode,
+        ast.AnnAssign) and subnode.annotation is not None}'
+      - '{ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute)
+        and isinstance(subnode.ctx, ast.Store)}'
+      - ast.walk(node)
+      - file_dependencies
+      - self.functions.keys()
+      - self.classes.keys()
+      - file_dependencies
+      ast.walk:
+      - node
+      - node
+      get_all_calls:
+      - node
+      set:
+      - node_inputs + node_variables
+      next:
+      - (n.value.s for n in node_walk if isinstance(n, ast.Expr) and isinstance(n.value,
+        ast.Str))
+      - None
+      call_data.keys: []
+      self.classes[self.current_class].setdefault:
+      - '''class_attributes'''
+      - '[]'
+      details.update:
+      - '{''class_attributes'': [target.attr for subnode in node.body if isinstance(subnode,
+        ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],
+        ''class_methods'': [subnode.name for subnode in node.body if isinstance(subnode,
+        ast.FunctionDef)], ''class_inheritance'': [ast.unparse(base) for base in node.bases]
+        if node.bases else [], ''class_static_methods'': [subnode.name for subnode
+        in node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,
+        ast.Name) and decorator.id == ''staticmethod'' for decorator in subnode.decorator_list))]}'
+      any:
+      - (isinstance(decorator, ast.Name) and decorator.id == 'staticmethod' for decorator
+        in subnode.decorator_list)
+      self.functions.items: []
+      len:
+      - '''class_method_'''
+      class_details.items: []
+      method_name.startswith:
+      - '''class_method_'''
+      self.classes.items: []
+      self.functions.keys: []
+      self.classes.keys: []
+      remove_docstring:
+      - ast.unparse(node)
+      - self.tree
+    class_variables:
+    - file_dependencies
+    - function_defs
+    - node_walk
+    - class_defs
+    - node_inputs
+    - value_repr
+    - class_attributes
+    - constant_assignment
+    - value
+    - attributes
+    - node_variables
+    - call_data
+    - details
+    class_decorators: []
+    class_annotations:
+    - Dict[str, Dict[str, Union[str, List[str]]]]
+    - List[str]
+    - str
+    - Dict[str, Union[str, List[str]]]
+    class_properties:
+    - self.tree
+    - self.code
+    - self.constants
+    - self.file_info
+    - self.classes
+    - self.current_class
+    - self.functions
+    - child.parent
+    class_attributes:
+    - tree
+    - current_class
+    - current_class
+    - file_info
+    class_methods:
+    - __init__
+    - visit_FunctionDef
+    - visit_ClassDef
+    - generic_visit
+    - visit_Assign
+    - extract_details
+    - analyze
+    class_inheritance:
+    - ast.NodeVisitor
+    class_static_methods: []
+    class_method___init__:
+      method_name: __init__
+      method_code: "def __init__(self, code: str, tree: ast.AST) -> None:\n    \"\"\
+        \"\n        Initialize a new instance of the class.\n        Args:\n     \
+        \       code: str: The source code.\n        \"\"\"\n    self.code: str =\
+        \ code\n    self.functions: Dict[str, Dict[str, Union[str, List[str]]]] =\
+        \ {}\n    self.classes: Dict[str, Dict[str, Union[str, List[str]]]] = {}\n\
+        \    self.file_info: Dict[str, Union[str, List[str]]] = {}\n    self.current_class:\
+        \ str = None\n    self.constants: List[str] = []\n    self.tree = tree"
+      method_docstring: "\n        Initialize a new instance of the class.\n     \
+        \   Args:\n            code: str: The source code.\n        "
+      method_inputs:
+      - self
+      - code
+      - tree
+      method_defaults: []
+      method_returns: []
+      method_calls: []
+      method_call_inputs: {}
+      method_variables:
+      - self
+      - code
+      - tree
+      method_decorators: []
+      method_annotations:
+      - Dict[str, Dict[str, Union[str, List[str]]]]
+      - List[str]
+      - str
+      - Dict[str, Union[str, List[str]]]
+      method_properties:
+      - self.tree
+      - self.code
+      - self.constants
+      - self.file_info
+      - self.classes
+      - self.current_class
+      - self.functions
+    class_method_visit_FunctionDef:
+      method_name: visit_FunctionDef
+      method_code: "def visit_FunctionDef(self, node: ast.FunctionDef) -> None:\n\
+        \    \"\"\"\n        Extract details about a function.\n        Args:\n  \
+        \          node: ast.FunctionDef: The node to visit.\n        \"\"\"\n   \
+        \ details = self.extract_details(node, 'method' if self.current_class else\
+        \ 'function')\n    if self.current_class:\n        self.classes[self.current_class][f'class_method_{node.name}']\
+        \ = details\n    else:\n        self.functions[node.name] = details\n    self.generic_visit(node)"
+      method_docstring: "\n        Extract details about a function.\n        Args:\n\
+        \            node: ast.FunctionDef: The node to visit.\n        "
+      method_inputs:
+      - self
+      - node
+      method_defaults: []
+      method_returns: []
+      method_calls:
+      - self.extract_details
+      - self.generic_visit
+      method_call_inputs:
+        self.extract_details:
+        - node
+        - '''method'' if self.current_class else ''function'''
+        self.generic_visit:
+        - node
+      method_variables:
+      - self
+      - details
+      - node
+      method_decorators: []
+      method_annotations: []
+      method_properties: []
+    class_method_visit_ClassDef:
+      method_name: visit_ClassDef
+      method_code: "def visit_ClassDef(self, node: ast.ClassDef) -> None:\n    \"\"\
+        \"\n        Extract details about a class.\n        Args:\n            node:\
+        \ ast.ClassDef: The node to visit.\n        \"\"\"\n    self.classes[node.name]\
+        \ = self.extract_details(node, 'class')\n    self.current_class = node.name\n\
+        \    self.generic_visit(node)\n    self.current_class = None"
+      method_docstring: "\n        Extract details about a class.\n        Args:\n\
+        \            node: ast.ClassDef: The node to visit.\n        "
+      method_inputs:
+      - self
+      - node
+      method_defaults: []
+      method_returns: []
+      method_calls:
+      - self.extract_details
+      - self.generic_visit
+      method_call_inputs:
+        self.extract_details:
+        - node
+        - '''class'''
+        self.generic_visit:
+        - node
+      method_variables:
+      - self
+      - node
+      method_decorators: []
+      method_annotations: []
+      method_properties:
+      - self.current_class
+    class_method_generic_visit:
+      method_name: generic_visit
+      method_code: "def generic_visit(self, node):\n    \"\"\"\n        Called if\
+        \ no explicit visitor function exists for a node.\n        Args:\n       \
+        \     node: ast.AST: The node to visit.\n        \"\"\"\n    for child in\
+        \ ast.iter_child_nodes(node):\n        child.parent = node\n        self.visit(child)"
+      method_docstring: "\n        Called if no explicit visitor function exists for\
+        \ a node.\n        Args:\n            node: ast.AST: The node to visit.\n\
+        \        "
+      method_inputs:
+      - self
+      - node
+      method_defaults: []
+      method_returns: []
+      method_calls:
+      - ast.iter_child_nodes
+      - self.visit
+      method_call_inputs:
+        ast.iter_child_nodes:
+        - node
+        self.visit:
+        - child
+      method_variables:
+      - self
+      - node
+      method_decorators: []
+      method_annotations: []
+      method_properties:
+      - child.parent
+    class_method_visit_Assign:
+      method_name: visit_Assign
+      method_code: "def visit_Assign(self, node: ast.Assign):\n    \"\"\"\n      \
+        \  Get self.constants\n        Args:\n            node: ast.Assign: The node\
+        \ to visit.\n        \"\"\"\n    if isinstance(node.parent, ast.Module):\n\
+        \        for target in node.targets:\n            if isinstance(target, ast.Name):\n\
+        \                value = node.value\n                if isinstance(value,\
+        \ ast.Constant) and isinstance(value.value, str):\n                    value_repr\
+        \ = f\"'{value.value}'\"\n                else:\n                    value_repr\
+        \ = ast.unparse(value)\n                constant_assignment = f'{target.id}={value_repr}'\n\
+        \                self.constants.append(constant_assignment)\n    self.generic_visit(node)"
+      method_docstring: "\n        Get self.constants\n        Args:\n           \
+        \ node: ast.Assign: The node to visit.\n        "
+      method_inputs:
+      - self
+      - node
+      method_defaults: []
+      method_returns: []
+      method_calls:
+      - isinstance
+      - ast.unparse
+      - self.constants.append
+      - self.generic_visit
+      method_call_inputs:
+        isinstance:
+        - node.parent
+        - ast.Module
+        - target
+        - ast.Name
+        - value
+        - ast.Constant
+        - value.value
+        - str
+        ast.unparse:
+        - value
+        self.constants.append:
+        - constant_assignment
+        self.generic_visit:
+        - node
+      method_variables:
+      - node
+      - value_repr
+      - self
+      - constant_assignment
+      - value
+      method_decorators: []
+      method_annotations: []
+      method_properties: []
+    class_method_extract_details:
+      method_name: extract_details
+      method_code: "def extract_details(self, node: ast.AST, node_type: str) -> Dict[str,\
+        \ Union[str, List[str]]]:\n    \"\"\"\n        Extract details about a node.\n\
+        \        Args:\n            node: ast.AST: The node to extract details from.\n\
+        \            node_type: str: The type of node.\n        Returns:\n       \
+        \     Dict[str, Union[str, List[str]]]: The details extracted from the node.\n\
+        \        \"\"\"\n    node_walk = list(ast.walk(node))\n    call_data = get_all_calls(node)\n\
+        \    node_inputs = [arg.arg for arg in node.args.args] if node_type in ['function',\
+        \ 'method'] else None\n    node_variables = list({ast.unparse(target) for\
+        \ subnode in node_walk if isinstance(subnode, ast.Assign) for target in subnode.targets\
+        \ if isinstance(target, ast.Name)})\n    if node_inputs:\n        node_variables\
+        \ = list(set(node_inputs + node_variables))\n    details = {f'{node_type}_name':\
+        \ node.name, f'{node_type}_code': ast.unparse(node), f'{node_type}_docstring':\
+        \ next((n.value.s for n in node_walk if isinstance(n, ast.Expr) and isinstance(n.value,\
+        \ ast.Str)), None), f'{node_type}_inputs': node_inputs, f'{node_type}_defaults':\
+        \ [ast.unparse(d) for d in node.args.defaults] if node_type in ['function',\
+        \ 'method'] else None, f'{node_type}_returns': [ast.unparse(subnode.value)\
+        \ if subnode.value is not None else 'None' for subnode in node_walk if isinstance(subnode,\
+        \ ast.Return)], f'{node_type}_calls': list(call_data.keys()), f'{node_type}_call_inputs':\
+        \ call_data, f'{node_type}_variables': node_variables, f'{node_type}_decorators':\
+        \ list({ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list\
+        \ else set()), f'{node_type}_annotations': list({ast.unparse(subnode.annotation)\
+        \ for subnode in node_walk if isinstance(subnode, ast.AnnAssign) and subnode.annotation\
+        \ is not None}), f'{node_type}_properties': list({ast.unparse(subnode) for\
+        \ subnode in node_walk if isinstance(subnode, ast.Attribute) and isinstance(subnode.ctx,\
+        \ ast.Store)})}\n    if node_type in ['class', 'method']:\n        if node_type\
+        \ == 'method' and self.current_class:\n            attributes = [target.attr\
+        \ for subnode in node_walk if isinstance(subnode, ast.Assign) for target in\
+        \ subnode.targets if isinstance(target, ast.Attribute) and isinstance(target.value,\
+        \ ast.Name) and (target.value.id == 'self')]\n            class_attributes\
+        \ = self.classes[self.current_class].setdefault('class_attributes', [])\n\
+        \            class_attributes += attributes\n        if node_type == 'class':\n\
+        \            details.update({'class_attributes': [target.attr for subnode\
+        \ in node.body if isinstance(subnode, ast.Assign) for target in subnode.targets\
+        \ if isinstance(target, ast.Attribute)], 'class_methods': [subnode.name for\
+        \ subnode in node.body if isinstance(subnode, ast.FunctionDef)], 'class_inheritance':\
+        \ [ast.unparse(base) for base in node.bases] if node.bases else [], 'class_static_methods':\
+        \ [subnode.name for subnode in node.body if isinstance(subnode, ast.FunctionDef)\
+        \ and any((isinstance(decorator, ast.Name) and decorator.id == 'staticmethod'\
+        \ for decorator in subnode.decorator_list))]})\n    return details"
+      method_docstring: "\n        Extract details about a node.\n        Args:\n\
+        \            node: ast.AST: The node to extract details from.\n          \
+        \  node_type: str: The type of node.\n        Returns:\n            Dict[str,\
+        \ Union[str, List[str]]]: The details extracted from the node.\n        "
+      method_inputs:
+      - self
+      - node
+      - node_type
+      method_defaults: []
+      method_returns:
+      - details
+      method_calls:
+      - list
+      - ast.walk
+      - get_all_calls
+      - ast.unparse
+      - isinstance
+      - set
+      - next
+      - call_data.keys
+      - self.classes[self.current_class].setdefault
+      - details.update
+      - any
+      method_call_inputs:
+        list:
+        - ast.walk(node)
+        - '{ast.unparse(target) for subnode in node_walk if isinstance(subnode, ast.Assign)
+          for target in subnode.targets if isinstance(target, ast.Name)}'
+        - set(node_inputs + node_variables)
+        - call_data.keys()
+        - '{ast.unparse(decorator) for decorator in node.decorator_list} if node.decorator_list
+          else set()'
+        - '{ast.unparse(subnode.annotation) for subnode in node_walk if isinstance(subnode,
+          ast.AnnAssign) and subnode.annotation is not None}'
+        - '{ast.unparse(subnode) for subnode in node_walk if isinstance(subnode, ast.Attribute)
+          and isinstance(subnode.ctx, ast.Store)}'
+        ast.walk:
+        - node
+        get_all_calls:
+        - node
+        ast.unparse:
+        - target
+        - node
+        - d
+        - subnode.value
+        - decorator
+        - subnode.annotation
+        - subnode
+        - base
+        isinstance:
+        - subnode
+        - ast.Assign
+        - target
+        - ast.Name
+        - n
+        - ast.Expr
+        - n.value
+        - ast.Str
+        - subnode
+        - ast.Return
+        - subnode
+        - ast.AnnAssign
+        - subnode
+        - ast.Attribute
+        - subnode.ctx
+        - ast.Store
+        - subnode
+        - ast.Assign
+        - target
+        - ast.Attribute
+        - target.value
+        - ast.Name
+        - subnode
+        - ast.Assign
+        - target
+        - ast.Attribute
+        - subnode
+        - ast.FunctionDef
+        - subnode
+        - ast.FunctionDef
+        - decorator
+        - ast.Name
+        set:
+        - node_inputs + node_variables
+        next:
+        - (n.value.s for n in node_walk if isinstance(n, ast.Expr) and isinstance(n.value,
+          ast.Str))
+        - None
+        call_data.keys: []
+        self.classes[self.current_class].setdefault:
+        - '''class_attributes'''
+        - '[]'
+        details.update:
+        - '{''class_attributes'': [target.attr for subnode in node.body if isinstance(subnode,
+          ast.Assign) for target in subnode.targets if isinstance(target, ast.Attribute)],
+          ''class_methods'': [subnode.name for subnode in node.body if isinstance(subnode,
+          ast.FunctionDef)], ''class_inheritance'': [ast.unparse(base) for base in
+          node.bases] if node.bases else [], ''class_static_methods'': [subnode.name
+          for subnode in node.body if isinstance(subnode, ast.FunctionDef) and any((isinstance(decorator,
+          ast.Name) and decorator.id == ''staticmethod'' for decorator in subnode.decorator_list))]}'
+        any:
+        - (isinstance(decorator, ast.Name) and decorator.id == 'staticmethod' for
+          decorator in subnode.decorator_list)
+      method_variables:
+      - node_walk
+      - node
+      - node_inputs
+      - class_attributes
+      - self
+      - attributes
+      - node_variables
+      - node_type
+      - call_data
+      - details
+      method_decorators: []
+      method_annotations: []
+      method_properties: []
+    class_method_analyze:
+      method_name: analyze
+      method_code: "def analyze(self, node: ast.AST) -> None:\n    \"\"\"\n      \
+        \  Traverse the AST, list all nodes, and populate 'file_info'\n        Args:\n\
+        \            node: ast.AST: The node to analyze.\n        \"\"\"\n    self.visit(node)\n\
+        \    node_walk = list(ast.walk(node))\n    file_dependencies = {alias.name\
+        \ for subnode in node_walk if isinstance(subnode, ast.Import) for alias in\
+        \ subnode.names} | {subnode.module for subnode in node_walk if isinstance(subnode,\
+        \ ast.ImportFrom)}\n    function_defs = [{func_name: {'inputs': details['function_inputs'],\
+        \ 'calls': details['function_calls'], 'call_inputs': details['function_call_inputs'],\
+        \ 'returns': details['function_returns']}} for func_name, details in self.functions.items()]\n\
+        \    class_defs = [{class_name: {'method_defs': {method_name[len('class_method_'):]:\
+        \ {'inputs': details['method_inputs'], 'calls': details['method_calls'], 'call_inputs':\
+        \ details['method_call_inputs'], 'returns': details['method_returns']} for\
+        \ method_name, details in class_details.items() if method_name.startswith('class_method_')}}}\
+        \ for class_name, class_details in self.classes.items()]\n    self.file_info\
+        \ = {'file_code': self.code, 'file_ast': node, 'file_dependencies': list(file_dependencies),\
+        \ 'file_functions': list(self.functions.keys()), 'file_classes': list(self.classes.keys()),\
+        \ 'file_constants': self.constants, 'file_summary': {'dependencies': list(file_dependencies),\
+        \ 'function_defs': function_defs, 'class_defs': class_defs}, 'file_code_simplified':\
+        \ remove_docstring(ast.unparse(node), self.tree)}"
+      method_docstring: "\n        Traverse the AST, list all nodes, and populate\
+        \ 'file_info'\n        Args:\n            node: ast.AST: The node to analyze.\n\
+        \        "
+      method_inputs:
+      - self
+      - node
+      method_defaults: []
+      method_returns: []
+      method_calls:
+      - self.visit
+      - list
+      - ast.walk
+      - isinstance
+      - self.functions.items
+      - len
+      - class_details.items
+      - method_name.startswith
+      - self.classes.items
+      - self.functions.keys
+      - self.classes.keys
+      - remove_docstring
+      - ast.unparse
+      method_call_inputs:
+        self.visit:
+        - node
+        list:
+        - ast.walk(node)
+        - file_dependencies
+        - self.functions.keys()
+        - self.classes.keys()
+        - file_dependencies
+        ast.walk:
+        - node
+        isinstance:
+        - subnode
+        - ast.Import
+        - subnode
+        - ast.ImportFrom
+        self.functions.items: []
+        len:
+        - '''class_method_'''
+        class_details.items: []
+        method_name.startswith:
+        - '''class_method_'''
+        self.classes.items: []
+        self.functions.keys: []
+        self.classes.keys: []
+        remove_docstring:
+        - ast.unparse(node)
+        - self.tree
+        ast.unparse:
+        - node
+      method_variables:
+      - function_defs
+      - file_dependencies
+      - node_walk
+      - node
+      - class_defs
+      - self
+      method_decorators: []
+      method_annotations: []
+      method_properties:
+      - self.file_info

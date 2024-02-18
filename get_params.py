@@ -168,7 +168,7 @@ def get_default_model_config() -> Dict:
     model_config = {
         "system_prompt": "Provide complete structured response for a formal software audit, given this Context:\n'{context}'\n",
         "instruction_prompt": "\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step.\n{query}\n",
-        "prompt_template": "### System: {system_prompt}### Instruction:{instruction_prompt}### Response:",
+        "prompt_template": "{system_prompt} ### Instruction: {instruction_prompt} ### Response: ",
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_inference_function": "from_pretrained",

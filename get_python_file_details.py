@@ -32,6 +32,7 @@ Requirements:
 """
 import ast
 import logging
+import json
 from typing import Dict, List, Union
 from get_code_graph import get_code_graph
 
@@ -41,10 +42,8 @@ def remove_docstring(code: str, tree: ast.AST) -> str:
     Remove docstrings from the provided Python code.
     This includes top-level module docstrings and docstrings in
     functions, classes, and async functions.
-
     Args:
         code (str): The source code from which to remove docstrings.
-
     Returns:
         str: The source code with docstrings removed.
     """
@@ -73,14 +72,11 @@ def get_all_calls(node: ast.AST, calls=None) -> Dict[str, List[str]]:
     """
     Recursively find all function calls in the subtree rooted at `node`,
     including those in class attributes, list comprehensions, and lambda functions.
-
     Args:
         node (ast.AST): The root node to start the search from.
         calls (List[Tuple[str, List[str]]], optional): Accumulator for function calls found.
-
     Returns:
-        Dict[str, List[str]]: A dictionary mapping function calls (as strings)
-                              to lists of their arguments.
+        Dict[str, List[str]]: dictionary mapping function calls (as strings) to lists of their arguments.
     """
     if calls is None:
         calls = []
@@ -114,7 +110,7 @@ class CodeVisitor(ast.NodeVisitor):
         functions(Dict): details about functions in the code.
         classes (Dict): details about classes in the code.
         file_info (Dict): details about the file.
-    Methods: 
+    Methods:
         visit_FunctionDef(node: ast.FunctionDef) -> None:
             Extract details about a function.
         visit_ClassDef(node: ast.ClassDef) -> None:
@@ -174,7 +170,7 @@ class CodeVisitor(ast.NodeVisitor):
             node: ast.AST: The node to visit.
         """
         for child in ast.iter_child_nodes(node):
-            child.parent = node  
+            child.parent = node
             self.visit(child)
 
     def visit_Assign(self, node: ast.Assign):
@@ -271,7 +267,9 @@ class CodeVisitor(ast.NodeVisitor):
             ),
         }
         if node_type in ["class", "method"]:
-            if node_type == "method" and self.current_class:  # find attributes defined as self.attribute
+            if (
+                node_type == "method" and self.current_class
+            ):  # find attributes defined as self.attribute
                 attributes = [
                     target.attr
                     for subnode in node_walk
@@ -281,7 +279,9 @@ class CodeVisitor(ast.NodeVisitor):
                     and isinstance(target.value, ast.Name)
                     and target.value.id == "self"
                 ]
-                class_attributes = self.classes[self.current_class].setdefault("class_attributes", [])
+                class_attributes = self.classes[self.current_class].setdefault(
+                    "class_attributes", []
+                )
                 class_attributes += attributes
             if node_type == "class":
                 details.update(
@@ -405,5 +405,19 @@ def get_python_file_details(file_path: str) -> Dict[str, Union[Dict, str]]:
         "functions": visitor.functions,
         "classes": visitor.classes,
     }
-    file_details = get_code_graph(file_details)
+
+    # get code graph items and add to file_details
+    file_summary = file_details["file_info"]["file_summary"]
+    file_ast = file_details["file_info"]["file_ast"]
+    entire_code_graph, control_flow_structure, plant_uml = get_code_graph(
+        file_summary, file_ast
+    )
+    file_details["file_info"]["entire_code_graph"] = entire_code_graph
+    file_details["file_info"]["control_flow_structure"] = control_flow_structure
+    file_details["file_info"]["plant_uml"] = plant_uml
+    file_details["file_info"]["file_summary"] = json.dumps(file_summary).replace(
+        '"', ""
+    )
+    del file_details["file_info"]["file_ast"]
+
     return file_details

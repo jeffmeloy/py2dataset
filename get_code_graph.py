@@ -21,8 +21,10 @@ Requirements
         a. Gets plantUML code for entire file.
         b. Returns plantUML code for entire file.
 [req06] The get_code_graph function performs the following:
-        a. Adds code graph and control flow to file details.
-        b. Returns file details.
+        a. Gets the entire code graph
+        b. Gets the control flow structure
+        c. Gets the plantUML code
+        d. Returns entire code graph, control flow structure and plantUML code
 """
 import ast
 import json
@@ -31,7 +33,7 @@ import networkx as nx
 
 
 def code_graph(
-    file_summary: Dict[str, Union[Dict, str]]
+    file_summary: Dict[str, Union[Dict, str]],
 ) -> Dict[str, Union[List[str], Dict[str, List[str]]]]:
     """
     Create a dictionary representation of file details.
@@ -174,68 +176,79 @@ def extract_control_flow_tree(nodes: List[ast.AST]) -> List[Union[str, dict]]:
     """
     control_flow_tree = []
     node_keywords_map = {
-        "if": "If",
-        "while": "While",
-        "for": "For",
-        "asyncfor": "AsyncFor",
-        "with": "With",
-        "asyncwith": "AsyncWith",
-        "try": "Try",
-        "except": "ExceptHandler",
-        "def": "FunctionDef",
-        "asyncdef": "AsyncFunctionDef",
-        "class": "ClassDef",
-        "return": "Return",
+        ast.FunctionDef: "def",
+        ast.AsyncFunctionDef: "def",
+        ast.ClassDef: "class",
+        ast.While: "while",
+        ast.For: "for",
+        ast.AsyncFor: "for",
+        ast.With: "with",
+        ast.AsyncWith: "with",
+        ast.Return: "return",
+        ast.If: "if",
+        ast.Try: "try",
     }
+
     for node in nodes:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        node_type = type(node)
+        if node_type not in node_keywords_map:
+            control_flow_tree.append(ast.unparse(node))
+            continue
+        keyword = node_keywords_map[node_type]
+
+        if keyword == "def":
             args_str = ", ".join([ast.unparse(arg) for arg in node.args.args])
-            control_flow_tree.append(
-                {f"def {node.name}({args_str})": extract_control_flow_tree(node.body)}
-            )
-        elif isinstance(node, ast.If):
-            if_block = {
-                f"if {ast.unparse(node.test)}": extract_control_flow_tree(node.body)
-            }
+            key = f"def {node.name}({args_str})"
+            value = extract_control_flow_tree(node.body)
+            control_flow_tree.append({key: value})
+        elif keyword == "class":
+            key = f"class {node.name}"
+            value = extract_control_flow_tree(node.body)
+            control_flow_tree.append({key: value})
+        elif keyword == "while":
+            key = f"while {ast.unparse(node.test)}"
+            value = extract_control_flow_tree(node.body)
+            control_flow_tree.append({key: value})
+        elif keyword == "for":
+            key = f"for {ast.unparse(node.target)} in {ast.unparse(node.iter)}"
+            value = extract_control_flow_tree(node.body)
+            control_flow_tree.append({key: value})
+        elif keyword == "with":
+            key = f"with {', '.join([ast.unparse(item) for item in node.items])}"
+            value = extract_control_flow_tree(node.body)
+            control_flow_tree.append({key: value})
+        elif keyword == "return":
+            key = "return"
+            value = [ast.unparse(node.value)] if node.value is not None else []
+            control_flow_tree.append({key: value})
+        elif keyword == "if":
+            key = f"if {ast.unparse(node.test)}"
+            value = extract_control_flow_tree(node.body)
+            if_block = {key: value}
             orelse = node.orelse
             while orelse and isinstance(orelse[0], ast.If):
-                if_block.update(
-                    {
-                        f"elif {ast.unparse(orelse[0].test)}": extract_control_flow_tree(
-                            orelse[0].body
-                        )
-                    }
-                )
+                key = f"elif {ast.unparse(orelse[0].test)}"
+                value = extract_control_flow_tree(orelse[0].body)
+                if_block[key] = value
                 orelse = orelse[0].orelse
             if orelse:
-                if_block.update({"else": extract_control_flow_tree(orelse)})
+                key = "else"
+                value = extract_control_flow_tree(orelse)
+                if_block[key] = value
             control_flow_tree.append(if_block)
-        elif isinstance(node, ast.Return):
-            if node.value is not None:
-                control_flow_tree.append({"return": [ast.unparse(node.value)]})
-            else:
-                control_flow_tree.append(
-                    {"return": []}
-                )  # Handle cases with no return value
-        elif isinstance(node, ast.Try):
+        elif keyword == "try":
             try_block = extract_control_flow_tree(node.body)
             except_block = []
             for handler in node.handlers:
-                handler_type = (
-                    ast.unparse(handler.type) if handler.type is not None else ""
-                )
-                handler_name = (
+                h_type = ast.unparse(handler.type) if handler.type is not None else ""
+                h_name = (
                     ast.unparse(handler.name)
                     if isinstance(handler.name, ast.Name)
                     else ""
                 )
-                except_block.append(
-                    {
-                        f"except {handler_type} as {handler_name}:": extract_control_flow_tree(
-                            handler.body
-                        )
-                    }
-                )
+                key = f"except {h_type} as {h_name}:"
+                value = extract_control_flow_tree(handler.body)
+                except_block.append({key: value})
             control_flow_dict = {"try": try_block, "except": except_block}
             if node.orelse:
                 else_block = extract_control_flow_tree(node.orelse)
@@ -244,47 +257,15 @@ def extract_control_flow_tree(nodes: List[ast.AST]) -> List[Union[str, dict]]:
                 finally_block = extract_control_flow_tree(node.finalbody)
                 control_flow_dict["finally"] = finally_block
             control_flow_tree.append(control_flow_dict)
-        elif isinstance(node, ast.While):
-            control_flow_tree.append(
-                {
-                    f"while {ast.unparse(node.test)}": extract_control_flow_tree(
-                        node.body
-                    )
-                }
-            )
-        elif isinstance(node, ast.For):
-            control_flow_tree.append(
-                {
-                    f"for {ast.unparse(node.target)} in {ast.unparse(node.iter)}": extract_control_flow_tree(
-                        node.body
-                    )
-                }
-            )
-        elif isinstance(node, ast.With):
-            control_flow_tree.append(
-                {
-                    f"with {', '.join([ast.unparse(item) for item in node.items])}": extract_control_flow_tree(
-                        node.body
-                    )
-                }
-            )
-        elif isinstance(node, ast.ClassDef):
-            control_flow_tree.append(
-                {f"class {node.name}": extract_control_flow_tree(node.body)}
-            )
-        elif any(
-            isinstance(node, getattr(ast, node_keywords_map[keyword]))
-            for keyword in node_keywords_map.keys()
-        ):
-            control_flow_tree.append({ast.unparse(node): []})
         else:
             control_flow_tree.append(ast.unparse(node))
+
     return control_flow_tree
 
 
 def reorganize_control_flow(code_graph, control_flow_structure):
     """
-    Reorganize control flow sturcture to match the code graph.
+    Reorganize control flow structure to match the code graph.
     Args:
         file_details: file details
         control_flow_structure: control flow structure
@@ -338,7 +319,10 @@ def get_plantUML_element(element, indentation=""):
     if isinstance(element, dict):
         key = next(iter(element))
         value = element[key]
-        if key.startswith("def ") or key.startswith("class "):
+        if key.startswith("def ") or key.startswith("async def "):
+            plantuml_str += f"{indentation}def {value} {{\n"
+            inner_indentation = indentation + "  "
+        elif key.startswith("class "):
             plantuml_str += f"{indentation}class {value} {{\n"
             inner_indentation = indentation + "  "
         elif key.startswith("if "):
@@ -383,7 +367,7 @@ def get_plantUML_element(element, indentation=""):
     return plantuml_str
 
 
-def get_plantUML(file_details):
+def get_plantUML(control_flow_structure):
     """
     Get plantUML activity diagram code for entire file.
     Args:
@@ -392,13 +376,13 @@ def get_plantUML(file_details):
         plantuml_str: plantUML code for entire file
     """
     plantuml_str = "@startuml\n"
-    for element in file_details["file_info"]["control_flow_structure"]:
+    for element in control_flow_structure:
         plantuml_str += get_plantUML_element(element, "  ")
     plantuml_str += "end\n@enduml"
     return plantuml_str
 
 
-def get_code_graph(file_details):
+def get_code_graph(file_summary, file_ast):
     """
     Add code graph and control flow to file details.
     Args:
@@ -406,26 +390,20 @@ def get_code_graph(file_details):
     Returns:
         file_details: file details
     """
-    file_details["file_info"]["entire_code_graph"] = code_graph(
-        file_details["file_info"]["file_summary"]
-    )
-    file_details["file_info"]["file_summary"] = json.dumps(
-        file_details["file_info"]["file_summary"]
-    ).replace('"', "")
-
-    # file_code_simplified is the code without comments and docstrings
     try:
-        file_ast = file_details["file_info"]["file_ast"]  # Accessing the AST
-        file_details["file_info"]["control_flow_structure"] = reorganize_control_flow(
-            file_details["file_info"]["entire_code_graph"],
-            extract_control_flow_tree(file_ast.body)  # Using the AST for control flow extraction
+        entire_code_graph = code_graph(file_summary)
+        control_flow_tree = extract_control_flow_tree(file_ast.body)
+        control_flow_structure = reorganize_control_flow(
+            entire_code_graph, control_flow_tree
         )
-        file_details["file_info"]["plantUML"] = get_plantUML(file_details)
+        plantUML = get_plantUML(control_flow_structure)
     except Exception as e:
-        file_details["file_info"]["control_flow_structure"] = [str(e)]
-        file_details["file_info"]["plantUML"] = str(e)  
+        control_flow_structure = [str(e)]
+        plantUML = str(e)
 
-    # remove the AST from the file_details
-    del file_details["file_info"]["file_ast"]
+    #print('file_summary:', file_summary)
+    #print('entire_code_graph:', entire_code_graph)
+    #print('control_flow_structure:', control_flow_structure)
+    #print('plantUML:', plantUML)
 
-    return file_details
+    return entire_code_graph, control_flow_structure, plantUML

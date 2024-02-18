@@ -26,7 +26,6 @@ Requirements:
 import logging
 import re
 import math
-import json
 from typing import Dict, List, Tuple
 
 
@@ -55,6 +54,8 @@ def clean_and_get_unique_elements(input_str: str) -> str:
         for element in element_generator(input_str)
         if element.strip()
     ]
+    # add a ' ' around each element
+    cleaned_elements = [f"'{element}'" for element in cleaned_elements]
     returned_elements = ", ".join(cleaned_elements)
     return returned_elements
 
@@ -125,6 +126,8 @@ class DatasetGenerator:
             "class": "classes",
             "method": "classes",
         }
+        self.code_qa_list = []
+        self.code_qa_response = ""
 
     def get_response_from_llm(self, query: str, context: str) -> str:
         """
@@ -135,23 +138,6 @@ class DatasetGenerator:
         Returns:
             str: The generated response.
         """
-        excluded_instructions = ["Call code graph", "Docstring"]
-        code_qa_list = [
-            {item["instruction"].split(" in Python file:")[0]: item["output"]}
-            for item in self.instruct_list
-            if not any(
-                item["instruction"].startswith(prefix)
-                for prefix in excluded_instructions
-            )
-        ]
-        code_qa_dict = {
-            "Code Elements": {
-                f"{key.split()[-1]} {key.split()[0]}" if "`" in key else key: value
-                for item in code_qa_list
-                for key, value in item.items()
-            }
-        }
-
         context_strategies = [
             lambda: "{}".format(str(context)),
             lambda: "```python\n{}\n```".format(
@@ -173,8 +159,9 @@ class DatasetGenerator:
 
         for strategy in context_strategies:
             context = strategy()
-            full_context = f"{context}\n{code_qa_dict}"
-            prompt = prompt_template.format(context=full_context, query=query)
+            prompt = prompt_template.format(
+                context=context, query=query, code_objects=self.code_qa_response
+            )
             context_size = len(self.llm.tokenize(prompt))
             logging.info("***Context Size: " + str(context_size))
             if context_size <= 0.70 * max_context_length:
@@ -183,33 +170,37 @@ class DatasetGenerator:
             err_msg = f"Model response failed, increase py2dataset_model_config.yaml context_length > {math.ceil(context_size/0.70)}"
             logging.error(err_msg)
             return ""
+        if context == "":
+            context = self.code_qa_list
 
         response = ""
         try:
             response = re.sub(r"\n\s*\n", "\n\n", self.llm(prompt))
-            response += "\n" + json.dumps(code_qa_dict, indent=4)
+            response = response.replace("<|im_end|>", "")
+            response = "\n".join([line.lstrip() for line in response.split("\n")])
             logging.info(f"***Overall Response: {response}")
         except Exception as error:
             logging.error(f"Failed to generate model response: {error}")
 
-        if (
-            self.detailed
-        ):  # add llm_response for each code object to self.instruct_list "output"
-            for item in code_qa_list:
+        if self.detailed:
+            for item in self.code_qa_list:
                 try:
                     instruct_key = list(item.keys())[0]
                     instruct_value = list(item.values())[0]
-                    query = f"Describe the purpose and significance of these {instruct_key}: [{instruct_value}] within the code."
+                    query = f"Describe the Purpose and Significance of these {instruct_key}: [{instruct_value}] and Explain what each of these {instruct_key} does in the code."
                     prompt = (
                         self.model_config["prompt_template"]
                         .format(
                             system_prompt=self.model_config["system_prompt"],
                             instruction_prompt=self.model_config["instruction_prompt"],
                         )
-                        .format(context=full_context, query=query)
+                        .format(
+                            context=f"{context}/nCode Summary:/n{response}",
+                            query=f"{query}", code_objects=f"{instruct_value}"
+                        )
                     )
-
                     item_response = re.sub(r"\n\s*\n", "\n\n", self.llm(prompt))
+                    item_response = item_response.replace("<|im_end|>", "")
                     logging.info(f"\n***Itemized Response: {query}\n{item_response}")
                     for item in self.instruct_list:
                         if item["instruction"].startswith(instruct_key):
@@ -221,6 +212,37 @@ class DatasetGenerator:
                     logging.error(f"Failed to generate model response: {error}")
 
         return response
+
+    def get_code_qa(self):
+        """
+        Get code responses from the instruct_list and update:
+            code_qa_list (List[Dict]): List of code question-answer pairs.
+            code_qa_response (str): structured text for code question-answer pairs.
+        """
+        excluded_instructions = {"Call code graph", "Docstring"}
+        self.code_qa_list = []
+        code_objects_responses = {}
+
+        for item in self.instruct_list:
+            instruction = item["instruction"].split(" in Python file:")[0]
+            output = item["output"]
+            if any(instruction.startswith(prefix) for prefix in excluded_instructions):
+                continue
+            self.code_qa_list.append({instruction: output})
+            if "`" in instruction:
+                code_object = instruction.split("`")[1]
+                code_type = instruction.split()[0]
+                code_objects_responses.setdefault(code_object, []).append(
+                    (code_type, output)
+                )
+
+        self.code_qa_response = ""
+        for idx, (code_object, type_responses) in enumerate(
+            code_objects_responses.items(), start=1
+        ):
+            self.code_qa_response += f"{idx}) {code_object}:\n"
+            for subidx, (code_type, response) in enumerate(type_responses, start=1):
+                self.code_qa_response += f"{idx}.{subidx}. {code_type}: {response}\n"
 
     def process_question(
         self, question_type: str, question_id: str, query: str, context: str, info: Dict
@@ -236,10 +258,13 @@ class DatasetGenerator:
         Returns:
             None
         """
+        response = ""
         if question_id.endswith(("code_graph", "docstring")):
             response = info.get(question_id, {})
-        elif self.use_llm and question_id.endswith("purpose"):
-            response = self.get_response_from_llm(query, context)
+        elif question_id.endswith("file_purpose"):  # file_purpose is last question
+            self.get_code_qa()
+            if self.use_llm:
+                response = self.get_response_from_llm(query, context)
         else:
             response = clean_and_get_unique_elements(str(info.get(question_id, "")))
         response = str(response).strip()
@@ -321,12 +346,13 @@ class DatasetGenerator:
         Args:
             None
         Returns:
-            Tuple[List[Dict], List[Dict]]: The generated question-answer pairs and instructions.
+            Tuple[List[Dict], List[Dict]]:  .
         """
         for question in self.questions:
             self.process_question_type(
                 question["type"], question["id"], question["text"]
             )
+        self.instruct_list.sort(key=lambda x: len(x["input"]), reverse=True)
         return self.instruct_list
 
 
