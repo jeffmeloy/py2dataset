@@ -23,10 +23,13 @@ prompt_template: "system:\n{system_prompt}\n\ninstruction:n{instruction_prompt}\
 inference_model:
   model_import_path: "ctransformers.AutoModelForCausalLM"
   model_inference_function: "from_pretrained"
-  model_params: 
-    model_path: "./models/WestLake-7B-v2.Q8_0.gguf"
+  model_params:
+    # MODEL PATH - adjust for model location and type (remote or local) 
+    model_path: "jeffmeloy/WestLake-7B-v2.Q8_0.gguf"
+    local_files_only: false
+    #model_path: "models/WestLake-7B-v2.Q8_0.gguf"
+    #local_files_only: true
     model_type: "mistral"
-    local_files_only: true
     ## MODEL CONFIGURATION PARAMETERS - adjust for compute resources
     #lib: "avx2"
     threads: 16

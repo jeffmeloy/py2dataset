@@ -151,7 +151,7 @@ def get_default_questions() -> List[Dict]:
         },
         {
             "id": "file_purpose",
-            "text": "1) Describe the Purpose and Processing summary of Python file: `{filename}`; 2) Summarize the Significance of applicable Function, Class, and Method; 3) Explain what each Input, Output, and Variable does in the code.",
+            "text": "1) Describe the overall Purpose and Processing Approach of Python file: `{filename}`; 2) Define API Signatures for each applicable Function and Class Method; 3) Derive Functional Requirements to specify the code's behavior and purpose; 4) Explain what each variable does in the code.",
             "type": "file",
         },
     ]
@@ -166,24 +166,23 @@ def get_default_model_config() -> Dict:
         Dict: The default model config dictionary
     """
     model_config = {
-        "system_prompt": "Provide complete structured response for a formal software audit, given this Context:\n'{context}'\n",
-        "instruction_prompt": "\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step.\n{query}\n",
-        "prompt_template": "{system_prompt} ### Instruction: {instruction_prompt} ### Response: ",
+        "system_prompt": "Lang: English. Format: unformatted, outline. Task: Create structured software documentation using this code Context:\n'{context}'\n",
+        "instruction_prompt": "Create outline structured code documentation for these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n",
+        "prompt_template": "system:\n{system_prompt}\n\ninstruction:n{instruction_prompt}\n\ndocumentation:\n", 
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_inference_function": "from_pretrained",
             "model_params": {
-                "model_path": "TheBloke/WizardCoder-Python-13B-V1.0-GGUF",
-                "model_file": "wizardcoder-python-13b-v1.0.Q5_K_S.gguf",
-                "model_type": "llama",
+                "model_path": "jeffmeloy/WestLake-7B-v2.Q8_0.gguf",
+                "model_type": "mistral",
                 "local_files_only": False,
                 ## MODEL CONFIGURATION PARAMETERS (set for current model with: GPU 4090-24GB VRAM, CPU 5950x-32 threads, 64GB RAM)
                 # avx2 and gpu_layers are not compatible
                 # "lib": "avx2",
                 "threads": 16,
                 "batch_size": 128,
-                "context_length": 12000,
-                "max_new_tokens": 12000,
+                "context_length": 20000,
+                "max_new_tokens": 20000,
                 "gpu_layers": 100,
                 "reset": True,
             },
