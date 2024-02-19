@@ -31,6 +31,7 @@ Clone the repository and install dependencies:
     ```
 
 If using CUDA then:
+
     ```bash
     pip install ctransformers[cuda]
     ```
