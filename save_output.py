@@ -17,7 +17,9 @@ Requirements:
         c. Remove duplicates from the combined JSON files.
         d. Write the combined data to 'instruct.json' files.
         e. Convert the merged JSON files to HTML format.
-        f. Return the 'instruct_list' datasets.
+        f. Generate 'document_code.json' and 'shargpt.json' files.
+        g. Combine 'code_details.yaml' files and save as 'code_details.yaml'.
+        h. Return the 'instruct_list' datasets.
 [req05] The `create_code_graph` function shall:
         a. Accept details of a Python file, a base name, and an output directory as arguments.
         b. Generate code graphs based on the provided file details.
@@ -28,6 +30,7 @@ Requirements:
         c. Save the instruction data as JSON files.
         d. Generate and save code graphs.
 """
+
 import json
 import logging
 from html import escape
@@ -69,8 +72,18 @@ def write_file(data: Dict, file_path: Path) -> None:
         if file_type == "json":
             json.dump(data, f, indent=4)
         elif file_type == "yaml":
+            # add this behavior: code_qa_text = re.sub(r"\n\s*\n", "\n", code_qa_text)
             yaml.SafeDumper.ignore_aliases = lambda *args: True
-            yaml.dump(data, f, Dumper=yaml.SafeDumper, sort_keys=False)
+            yaml.dump(
+                data,
+                f,
+                Dumper=yaml.SafeDumper,
+                width=float("inf"),
+                sort_keys=False,
+                default_flow_style=False,
+                indent=4,
+                allow_unicode=True,
+            )
 
 
 def convert_json_to_html(directory: str) -> None:
@@ -204,7 +217,7 @@ def combine_json_files(
         item["code filename"] = code_filename[i]
     write_file(document_code, Path(directory) / "document_code.json")
 
-    # Generate sharegpt.json file
+    # save sharegpt.json file
     sharegpt = [
         {
             "conversation": [
@@ -220,15 +233,25 @@ def combine_json_files(
         }
         for item in document_code
     ]
-
-    # Compute the number of bytes for each conversation and update the nbytes field
     for item in sharegpt:
         nbytes = 0
         for conv in item["conversation"]:
             nbytes += len(conv["value"].encode("utf-8"))
         item["nbytes"] = nbytes
-
     write_file(sharegpt, Path(directory) / "shargpt.json")
+
+    # save code_details.yaml file
+    code_details = []
+    logging.info(f"Combining *.code_details.yaml files in {directory}")
+    for yaml_file in Path(directory).rglob("*.code_details.yaml"):
+        try:
+            with open(yaml_file, "r") as f:
+                file_data = f.read()
+                code_details.append(file_data)
+        except Exception as e:
+            logging.info(f"Failed reading: {yaml_file}. Error: {e}")
+    with open(Path(directory) / "code_details.yaml", "w") as f:
+        f.write("\n".join(code_details))
 
     if html:
         logging.info("Converting JSON files to HTML")
@@ -288,10 +311,12 @@ def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -
         edge_labels[(edge[0], edge[1])] = "\n".join(label)
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
 
-    # save graph
-    output_file = output_subdir / f"{base_name}.{graph_type}.png"
-    plt.savefig(output_file)
-    plt.close()
+    try: # save graph
+        output_file = output_subdir / f"{base_name}.{graph_type}.png"
+        plt.savefig(output_file)
+        plt.close()
+    except Exception as e:
+        logging.error(f"Error saving graph for {base_name}: {e}", exc_info=True)
 
 
 def save_python_data(
@@ -313,8 +338,10 @@ def save_python_data(
     base_name = relative_path.name
     write_file(instruct_list, output_subdir / f"{base_name}.instruct.json")
     write_file(file_details, output_subdir / f"{base_name}.details.yaml")
+    output_text = file_details["file_info"]["code_qa_response"]
+    with open(output_subdir / f"{base_name}.code_details.yaml", "w") as f:
+        f.write(output_text)
 
-    # Generating and saving the code graph
     try:
         create_code_graph(file_details, base_name, output_subdir)
     except Exception as e:

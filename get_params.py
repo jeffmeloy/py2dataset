@@ -151,7 +151,7 @@ def get_default_questions() -> List[Dict]:
         },
         {
             "id": "file_purpose",
-            "text": "1) Describe the overall Purpose and Processing Approach of Python file: `{filename}`; 2) Define API Signatures for each applicable Function and Class Method; 3) Derive Functional Requirements to specify the code's behavior and purpose; 4) Explain what each variable does in the code.",
+            "text": "I) Describe the Purpose and Processing Approach for Python file: `{filename}`; II) Define detailed Requirements and API Signatures for all Functions and Class Methods and explain their logic and purpose of the inputs, outputs, variables, returns, and calls.",
             "type": "file",
         },
     ]
@@ -166,8 +166,8 @@ def get_default_model_config() -> Dict:
         Dict: The default model config dictionary
     """
     model_config = {
-        "system_prompt": "Lang: English. Format: unformatted, outline. Task: Create structured software documentation using this code Context:\n'{context}'\n",
-        "instruction_prompt": "Create outline structured code documentation for these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n",
+        "system_prompt": "Lang: English. Output Format: unformatted, outline. Task: Create software documentation for an advanced computer science course using this code Context:\n'{context}'\n",
+        "instruction_prompt": "Analyze Context to comprehensively describe the purpose and functions of these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n", 
         "prompt_template": "system:\n{system_prompt}\n\ninstruction:n{instruction_prompt}\n\ndocumentation:\n", 
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
@@ -176,13 +176,13 @@ def get_default_model_config() -> Dict:
                 "model_path": "jeffmeloy/WestLake-7B-v2.Q8_0.gguf",
                 "model_type": "mistral",
                 "local_files_only": False,
-                ## MODEL CONFIGURATION PARAMETERS (set for current model with: GPU 4090-24GB VRAM, CPU 5950x-32 threads, 64GB RAM)
+                ## MODEL CONFIGURATION PARAMETERS (params set for model with this HW: GPU: 4090-24GB VRAM, CPU: 5950x-64GB RAM)
                 # avx2 and gpu_layers are not compatible
                 # "lib": "avx2",
                 "threads": 16,
-                "batch_size": 128,
-                "context_length": 20000,
-                "max_new_tokens": 20000,
+                "batch_size": 512,
+                "context_length": 28000,
+                "max_new_tokens": 16000,
                 "gpu_layers": 100,
                 "reset": True,
             },

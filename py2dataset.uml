@@ -1,8 +1,9 @@
 @startuml
 'Used to create py2dataset.png from https://www.plantuml.com/plantuml/uml'
-: python py2dataset.py 
 
-def main():
+:> python py2dataset.py <optional arguments>; 
+
+:def main():
     Command-line entry point for processing Python files and generating datasets.
     Optional command-line arguments:
     --start (str, optional): Starting directory for Python files or GitHub repository Python files. Default: cwd.
@@ -23,52 +24,48 @@ def main():
 - Read questions
 - Obtain Python File listing within <starting directory>;
 
-Repeat :For each Python file;
+while (More Python Files?) is (yes)
+  :get_python_file_details.py:
+  - Extract code details from AST
+  - Generate code relationship graphs;
 
-:get_python_file_details.py:
-- Extract code details from AST
-- Generate code relationship graphs;
-:get_python_dataset.py: 
-- Answer questions and format answers;
+  :get_python_dataset.py:
+  - Generate instruction-input-output triplets;
 
-Repeat :For each question;
-:Use the AST obtained data to answer question;
-if (use_llm and purpose question) then (yes)
-  :Use the llm to describe the code's purpose;
-  if (detailed) then (yes)
-    :Use llm to describe purpose and signifiance of each code object;
-  else (no)
-  endif
-else (no)
-endif
-     
-:Construct instruct.json data
-- instruction = current question
-- input = code element
-- output = answer to current question;
+  while (More questions?) is (yes)
+    :Use the AST obtained data to answer question;
 
-Repeat while (More questions?) is (yes)
-->no;
+    if (use_llm and purpose question) then (yes)
+      :Use the llm to describe the code's purpose;
+    else (no)
+    endif
+
+    if (use_llm and detailed) then (yes)
+      :Use llm to describe purpose and significance of each code object;
+    else (no)
+    endif
+
+    :Construct instruct.json data
+    - instruction = current question
+    - input = code element
+    - output = answer to current question;
+  endwhile
+
+  :save_output.py:
+  - Save datasets and code file details
+    - <filename>.instruct.json
+    - <filename>.details.yaml
+  - Save code graph
+    - <filename>.entire_code_graph.png;
+endwhile
 
 :save_output.py:
-save datasets and code file details
-- <filename>.instruct.json
-- <filename>.details.yaml';
-
-:Save code graph
-- <filename>.external.png;
-
-Repeat while (More Python Files?) is (yes)
-->no;
-
-:Combine all qa and instruct JSON files and create other datasets
-- `instruct.json` - instruction/input/output dataset
-- `instruct.html` - html formated file, if --html
-- `document_code.json` - document/code dataset, if --use_llm
-- `document_code.html` - html formated file, if --html;
-- `sharegpt.json` - system/human/gpt dataset, if --use_llm
-- `sharegpt.html` - html formated file, if --html;
+- Combine all qa and instruct JSON files and create other datasets
+  - instruct.json - instruction/input/output dataset
+  - document_code.json - document/code dataset, if --use_llm
+  - sharegpt.json - system/human/gpt dataset, if --use_llm
+  - code_datails.yaml - yaml formatted file, if --use_llm
+  - corresponding .html files for each of the .json files, if --use_html;
 
 :End;
-
 @enduml

@@ -35,10 +35,8 @@ import logging
 from pathlib import Path
 from typing import Dict, List
 from multiprocessing import Process
-import subprocess
 import os
-import git
-import shlex
+from git import Repo, GitCommandError
 
 from get_python_file_details import get_python_file_details
 from get_python_datasets import get_python_datasets
@@ -149,9 +147,9 @@ def py2dataset(
         "detailed": detailed,
     }
 
-    for python_pathname in Path(start).rglob("*.py"):
-        
-        if "__pycache__" in python_pathname.parts:
+    for python_pathname in Path(start).rglob("*.py"):     
+        exclude_dirs = ["env", "venv", "__pycache__", "build", "dist"]
+        if any([dir in python_pathname.parts for dir in exclude_dirs]):
             continue
         if python_pathname.name == "__init__.py":
             continue
@@ -161,7 +159,6 @@ def py2dataset(
             os.path.relpath(python_pathname, os.path.dirname(get_start_dir(start)))
         )
 
-        # determine if corresponding instruct.json exists and skip if skip_regen
         base_pathname = Path(params["output_dir"]) / params["relative_path"]
         instruct_pathname = base_pathname.with_suffix(".py.instruct.json")
         if instruct_pathname.exists() and skip_regen:
@@ -182,38 +179,23 @@ def clone_github_repo(url: str) -> str:
     """
     Clone repository or fetch the latest changes and return local repository path.
     Args:
-        url (str): The url of the github repository.
+        url (str): The url of the GitHub repository.
     Returns:
         str: The path to the cloned repository.
     """
     try:
-        command = f"git ls-remote {shlex.quote(url)}"
-        subprocess.run(
-            command,
-            shell=True,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        repo_name = url.split("/")[-1]
-        githubrepos_dir = os.path.join(os.getcwd(), "githubrepos")
-        os.makedirs(githubrepos_dir, exist_ok=True)
-        path = os.path.join(githubrepos_dir, repo_name)
-        if not os.path.exists(path):
-            git.Repo.clone_from(url, path)
+        repo_name = Path(url).stem
+        repo_path = Path.cwd() / "githubrepos" / repo_name
+        if repo_path.exists():
+            repo = Repo(repo_path)
+            repo.remote().fetch()
+            repo.git.reset('--hard', repo.heads[0].commit)
         else:
-            repo = git.Repo(path)
-            with repo.git.custom_environment(
-                GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
-            ):
-                repo.git.fetch()
-                default_branch = repo.head.reference.tracking_branch().remote_head
-                repo.git.reset("--hard", default_branch)
-    except subprocess.CalledProcessError:
-        logging.info(f"Invalid or inaccessible repository: {url}")
-        path = ""
-
-    return path
+            Repo.clone_from(url, repo_path)
+        return str(repo_path)
+    except GitCommandError as e:
+        logging.info(f"Error processing repository {url}: {e}")
+        return ""
 
 
 def main():
@@ -233,9 +215,9 @@ def main():
     --skip_regen (str, optional): Skip regeneration of existing instruct.json files. Default: False.
     --help: Display help message.
     """
-    if "--help" in sys.argv:
+    if len(sys.argv) == 1 or "-h" in sys.argv or "--help" in sys.argv:
         print(__doc__)
-        sys.exit()
+        sys.exit() 
 
     # return boolean value based on the user input
     def get_bool_from_input(input_str: str, current_value: bool) -> bool:

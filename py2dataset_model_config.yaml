@@ -1,12 +1,12 @@
 # context is the Python source code
-system_prompt: "Lang: English. Format: unformatted, outline. Task: Create structured software documentation using this code Context:\n'{context}'\n"
+system_prompt: "Lang: English. Output Format: unformatted, outline. Task: Create detailed software documentation for developers using this code Context:\n'{context}'\n"
 
 # query is the "text" value from py2dataset_question.json for the "id":"file_purpose" question
-instruction_prompt: "Create outline structured code documentation for these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n" 
+instruction_prompt: "Analyze Context considering these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n" 
 
 # Uncomment out the desired prompt template 
 # chatML
-# prompt_template: "<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{instruction_prompt}<|im_end|>\n<|im_start|>assistant\n"
+prompt_template: "<|im_start|>system\n{system_prompt}<|im_end|>\n<|im_start|>user\n{instruction_prompt}<|im_end|>\n<|im_start|>assistant\n"
 
 # System / Instruction / Response
 # prompt_template: "{system_prompt} ### Instruction:{instruction_prompt} ### Response:"
@@ -14,8 +14,8 @@ instruction_prompt: "Create outline structured code documentation for these obje
 # System / User / Assistant
 # prompt_template: "{system_prompt} USER: {instruction_prompt} ASSISTANT:"
 
-# system / human / documentation
-prompt_template: "system:\n{system_prompt}\n\ninstruction:n{instruction_prompt}\n\ndocumentation:\n"
+# system / instruction / documentation
+# prompt_template: "SYSTEM:\n{system_prompt}\n\nINSTRUCTION:\n{instruction_prompt}\n\nDOCUMENTATION:\n"
 
 # llama2
 # prompt_template: "<s>[INST] <<SYS>> {system_prompt} <</SYS>> {instruction_prompt} [/INST]"
@@ -25,16 +25,16 @@ inference_model:
   model_inference_function: "from_pretrained"
   model_params:
     # MODEL PATH - adjust for model location and type (remote or local) 
-    model_path: "jeffmeloy/WestLake-7B-v2.Q8_0.gguf"
-    local_files_only: false
-    #model_path: "models/WestLake-7B-v2.Q8_0.gguf"
-    #local_files_only: true
+    #model_path: "jeffmeloy/WestLake-7B-v2.Q8_0.gguf"
+    #local_files_only: false
+    model_path: "models/WestLake-7B-v2.Q8_0.gguf"
+    local_files_only: true
     model_type: "mistral"
     ## MODEL CONFIGURATION PARAMETERS - adjust for compute resources
     #lib: "avx2"
     threads: 16
     batch_size: 512
-    context_length: 20000
+    context_length: 33000
     max_new_tokens: 20000
     gpu_layers: 100
     reset: true

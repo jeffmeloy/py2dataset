@@ -82,7 +82,9 @@ The following questions are answered by parsing the AST:
 - Calls made in method: '{method_name}' in Python file: '{filename}'?
 - Returns from method: '{method_name}' in Python file: '{filename}'?
 
-If --use_llm, the dataset includes the llm response to the file_purpose question in the `--questions_pathname` file
+If --use_llm, the dataset includes the llm response to the file_purpose question in the `--questions_pathname` file:
+    
+    I) Describe the Purpose and Processing Approach for Python file: `{filename}`; II) Define detailed Requirements, API Signatures, and Logic for all Functions and Class Methods; III) Explain the purpose of the inputs, variables, call, and returns in the code.
 
 If --use_llm and --detailed, the dataset includes the purpose and signicance of each code object
 
@@ -122,17 +124,18 @@ Currently configured to use [ctransformers](https://github.com/marella/ctransfor
 
 For each Python file assessed, the script saves the following to the output directory:
 
-- `<filename>.details.yaml` - Python file details YAML file
+- `<filename>.details.yaml` - Entire breakdown of all Python file details 
+- `<filename>.details.yaml` - Organized summary of all Python fiel code objects
 - `<filename>.instruct.json` - Instructions JSON file
 - `<filename>.entire_code_graph.png` - Code relationship graph
-- `<filename>.instruct.json.html` - Instructions JSON file in .html format (optional)
 
 The script then creates composite datasets by combining the files above and saves the following to the output directory:
 
-- `instruct.json` - complete instruct dataset
-- `instruct.html` - html formated file (optional if --html)
-- `sharegpt.json` - sharegpt dataset (optional if --use_llm)
-- `sharegpt.html` - html formated file (optional if --use_llm and html)
+- `instruct.json` - instruction/input/output dataset
+- `document_code.json` - document/code dataset, if --use_llm
+- `sharegpt.json` - system/human/gpt dataset, if --use_llm
+- `code_datails.yaml` - yaml formatted file, if --use_llm
+- corresponding .html files for each of the .json files, if --use_html;
 
 The sharegpt.json includes a list of conversations. Each turn in a conversation has two dictionaries, a "from" field, which denotes the role of that turn, and a "value" field which contains the actual text. Here is an example of a sharegpt.json entry for each python code file:
 

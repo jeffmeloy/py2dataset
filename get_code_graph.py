@@ -155,14 +155,6 @@ def code_graph(
         {"source": edge[0], "target": edge[1], **edge[2]} for edge in G.edges.data()
     ]
 
-    # remove any nodes that are not either a source of an edge or a target of an edge
-    nodes_to_remove = []
-    for node in nodes:
-        if node not in [edge["source"] for edge in edges] and node not in [
-            edge["target"] for edge in edges
-        ]:
-            nodes_to_remove.append(node)
-
     return {"nodes": nodes, "edges": edges}
 
 
@@ -306,68 +298,55 @@ def reorganize_control_flow(code_graph, control_flow_structure):
     return reorganize_structure(control_flow_structure, starting_points)
 
 
-def get_plantUML_element(element, indentation=""):
+def get_plantUML_element(element: dict, indentation="") -> str:
     """
-    Get plantUML code for each element.
-    Args:
-        element: element
-        indentation: current indentation level
+    Get plantUML code for each element, including clear hints for try/except blocks.
+    Args: 
+        element: control flow element
+        indentation: current indentation
     Returns:
         plantuml_str: plantUML code for each element
+    
     """
     plantuml_str = ""
+
     if isinstance(element, dict):
         key = next(iter(element))
         value = element[key]
-        if key.startswith("def ") or key.startswith("async def "):
-            plantuml_str += f"{indentation}def {value} {{\n"
-            inner_indentation = indentation + "  "
-        elif key.startswith("class "):
-            plantuml_str += f"{indentation}class {value} {{\n"
-            inner_indentation = indentation + "  "
-        elif key.startswith("if "):
-            plantuml_str += f"{indentation}if ({value}) {{\n"
-            inner_indentation = indentation + "  "
-        elif (
-            key.startswith("for ")
-            or key.startswith("while ")
-            or key.startswith("asyncfor ")
-        ):
-            plantuml_str += f"{indentation}while ({value}) {{\n"
-            inner_indentation = indentation + "  "
-        elif key.startswith("try "):
-            plantuml_str += f"{indentation}try {{\n"
-            inner_indentation = indentation + "  "
-        elif key.startswith("except "):
-            plantuml_str += f"{indentation}catch ({value}) {{\n"
-            inner_indentation = indentation + "  "
+        if "def" in key or "class" in key:
+            plantuml_str += f'{indentation}: {key};\n'
+            inner_indentation = indentation + "    "
+            for item in value:
+                plantuml_str += get_plantUML_element(item, inner_indentation)
+        elif "if" in key or "while" in key or "for" in key:
+            condition = key.replace("if ", "").replace("while ", "").replace("for ", "")
+            plantuml_str += f'{indentation}if ({condition}) then (yes)\n'
+            inner_indentation = indentation + "    "
+            for item in value:
+                plantuml_str += get_plantUML_element(item, inner_indentation)
+            plantuml_str += f'{indentation}endif\n'
+        elif "try" in key: # Mark the start of a try block
+            plantuml_str += f'{indentation}partition "try" {{\n'
+            inner_indentation = indentation + "    "
+            for item in value:
+                plantuml_str += get_plantUML_element(item, inner_indentation)
+            plantuml_str += f'{indentation}}}\n'
+        elif "except" in key: # Mark the start of an except block
+            exception_condition = key.replace("except ", "")
+            plantuml_str += f'{indentation}partition "except {exception_condition}" {{\n'
+            inner_indentation = indentation + "    "
+            for item in value:
+                plantuml_str += get_plantUML_element(item, inner_indentation)
+            plantuml_str += f'{indentation}}}\n'
         else:
-            plantuml_str += f"{indentation}:{key};\n"
-            inner_indentation = indentation
-
-        if isinstance(value, list):
-            for child in value:
-                plantuml_str += get_plantUML_element(child, inner_indentation)
-
-        if key.startswith("def ") or key.startswith("class "):
-            plantuml_str += f"{indentation}}}\n"
-        elif (
-            key.startswith("if ")
-            or key.startswith("for ")
-            or key.startswith("while ")
-            or key.startswith("asyncfor ")
-            or key.startswith("try ")
-            or key.startswith("except ")
-        ):
-            plantuml_str += f"{indentation}}}\n"
-
+            plantuml_str += f"{indentation}: {key};\n"
     elif isinstance(element, str):
-        plantuml_str += f"{indentation}:{element};\n"
+        plantuml_str += f"{indentation}: {element};\n"
 
     return plantuml_str
 
 
-def get_plantUML(control_flow_structure):
+def get_plantUML(control_flow_structure: List[Union[str, dict]]) -> str:
     """
     Get plantUML activity diagram code for entire file.
     Args:
@@ -382,7 +361,7 @@ def get_plantUML(control_flow_structure):
     return plantuml_str
 
 
-def get_code_graph(file_summary, file_ast):
+def get_code_graph(file_summary: dict, file_ast: ast.AST) -> (dict, list, str):
     """
     Add code graph and control flow to file details.
     Args:
@@ -400,10 +379,5 @@ def get_code_graph(file_summary, file_ast):
     except Exception as e:
         control_flow_structure = [str(e)]
         plantUML = str(e)
-
-    #print('file_summary:', file_summary)
-    #print('entire_code_graph:', entire_code_graph)
-    #print('control_flow_structure:', control_flow_structure)
-    #print('plantUML:', plantUML)
 
     return entire_code_graph, control_flow_structure, plantUML
