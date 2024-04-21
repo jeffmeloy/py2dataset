@@ -1,39 +1,3 @@
-"""
-Obtain data parameter and model from the py2dataset functions.
-Requirements:
-[req01] The `get_default_questions` function shall:
-        a. Return a list of default questions.
-        b. Ensure each question in the list is a dictionary.
-        c. Ensure each dictionary has the keys: id, text, and type.
-[req02] The `get_default_model_config` function shall:
-        a. Return a dictionary representing the default model configuration.
-[req03] The `get_output_dir` function shall:
-        a. Accept an optional output_dir argument.
-        b. Return the absolute path of the provided output_dir if it exists or can be created.
-        c. Return the default OUTPUT_DIR if the provided output_dir argument is not provided or invalid.
-[req04] The `get_questions` function shall:
-        a. Accept an optional questions_pathname argument.
-        b. Validate the question file provided by the questions_pathname.
-        c. Return the questions from the provided questions_pathname if valid.
-        d. Return default questions if the questions_pathname is not provided or invalid.
-[req05] The `instantiate_model` function shall:
-        a. Accept a model_config dictionary as an argument.
-        b. Import the specified module and class from the model_config.
-        c. Instantiate and return the model using the provided configuration.
-[req06] The `get_model` function shall:
-        a. Accept an optional model_config_pathname argument.
-        b. Validate the model config file provided by the model_config_pathname.
-        c. Return an instantiated model and a prompt template based on the provided configuration.
-        d. Return an instantiated model and a prompt template based on the default model configuration if the model_config_pathname is not provided or invalid.
-[req07] The `write_questions_file` function shall:
-        a. Accept an optional output_dir argument.
-        b. Write the default questions to the QUESTIONS_FILE in the specified directory.
-        c. Write the default questions to the QUESTIONS_FILE in the current working directory if the output_dir argument is not provided or invalid.
-[req08] The `write_model_config_file` function shall:
-        a. Accept an optional output_dir argument.
-        b. Write the default model configuration to the MODEL_CONFIG_FILE in the specified directory.
-        c. Write the default model configuration to the MODEL_CONFIG_FILE in the current working directory if the output_dir argument is not provided or invalid.
-"""
 import os
 import json
 import logging
@@ -52,12 +16,7 @@ OUTPUT_DIR = "datasets"
 
 
 def get_default_questions() -> List[Dict]:
-    """Return default question list
-    Args:
-        None
-    Returns:
-        List[Dict]: The default question list
-    """
+    """Return default question list"""
     questions = [
         {
             "id": "file_dependencies",
@@ -151,7 +110,7 @@ def get_default_questions() -> List[Dict]:
         },
         {
             "id": "file_purpose",
-            "text": "I) Describe the Purpose and Processing Approach for Python file: `{filename}`; II) Define detailed Requirements and API Signatures for all Functions and Class Methods and explain their logic and purpose of the inputs, outputs, variables, returns, and calls.",
+            "text": "I) Describe the Purpose and Processing Approach for Python file: `{filename}`; II) Define detailed Requirements, API Signatures, and Logic for all Functions and Class Methods; III) Explain the purpose of the inputs, variables, calls, and returns in the code.",
             "type": "file",
         },
     ]
@@ -159,16 +118,11 @@ def get_default_questions() -> List[Dict]:
 
 
 def get_default_model_config() -> Dict:
-    """Return default model config dict
-    Args:
-        None
-    Returns:
-        Dict: The default model config dictionary
-    """
+    """Return default model config dict"""
     model_config = {
-        "system_prompt": "Lang: English. Output Format: unformatted, outline. Task: Create software documentation for an advanced computer science course using this code Context:\n'{context}'\n",
-        "instruction_prompt": "Analyze Context to comprehensively describe the purpose and functions of these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n", 
-        "prompt_template": "system:\n{system_prompt}\n\ninstruction:n{instruction_prompt}\n\ndocumentation:\n", 
+        "system_prompt": "Lang: English. Output Format: unformatted, outline. Task: Create detailed software documentation for publication using this entire code module Context:\n'{context}'\n",
+        "instruction_prompt": "Analyze Context considering these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n",
+        "prompt_template": "SYSTEM: {system_prompt} USER: {instruction_prompt} ASSISTANT:",
         "inference_model": {
             "model_import_path": "ctransformers.AutoModelForCausalLM",
             "model_inference_function": "from_pretrained",
@@ -181,8 +135,8 @@ def get_default_model_config() -> Dict:
                 # "lib": "avx2",
                 "threads": 16,
                 "batch_size": 512,
-                "context_length": 28000,
-                "max_new_tokens": 16000,
+                "context_length": 40000,
+                "max_new_tokens": 20000,
                 "gpu_layers": 100,
                 "reset": True,
             },
@@ -192,13 +146,7 @@ def get_default_model_config() -> Dict:
 
 
 def get_start_dir(start_dir: str = "") -> str:
-    """
-    Returns the appropriate start directory.
-    Args:
-        start_dir (str): The directory to start the search from.
-    Returns:
-        str: The absolute path of the provided start_dir if it exists or can be created.
-    """
+    """Returns the appropriate start directory."""
     if start_dir and not Path(start_dir).is_dir():
         logging.info(f"Setting Start Dir : {start_dir}")
         start_dir = os.getcwd()
@@ -208,12 +156,7 @@ def get_start_dir(start_dir: str = "") -> str:
 
 
 def get_output_dir(output_dir: str = "") -> str:
-    """Returns the appropriate output directory.
-    Args:
-        output_dir (str): The directory to write the output to.
-    Returns:
-        str: The absolute path of the provided output_dir if it exists or can be created.
-    """
+    """Returns the appropriate output directory."""
     output_dir = os.path.abspath(output_dir or OUTPUT_DIR)
     os.makedirs(output_dir, exist_ok=True)
     logging.info(f"Using output directory: {output_dir}")
@@ -221,13 +164,7 @@ def get_output_dir(output_dir: str = "") -> str:
 
 
 def get_questions(questions_pathname: str) -> List[Dict]:
-    """
-    Get questions from file or default
-    Args:
-        questions_pathname (str): The pathname of the questions file
-    Returns:
-        List[Dict]: The list of questions
-    """
+    """Get questions from file or default"""
     try:  # get questions from provided or default configuration file
         if not questions_pathname:
             questions_pathname = os.path.join(os.getcwd(), QUESTIONS_FILE)
@@ -243,13 +180,7 @@ def get_questions(questions_pathname: str) -> List[Dict]:
 
 
 def instantiate_model(model_config: Dict) -> object:
-    """
-    Imports and instantiates a model based on the provided configuration.
-    Args:
-        model_config (dict): model configuration dictionary.
-    Returns:
-        object: An instance of the specified model class, or None if error.
-    """
+    """Imports and instantiates a model based on the provided configuration."""
     try:
         module_name, class_name = model_config["model_import_path"].rsplit(".", 1)
         ModelClass = getattr(importlib.import_module(module_name), class_name)
@@ -267,13 +198,7 @@ def instantiate_model(model_config: Dict) -> object:
 
 
 def get_model(model_config_pathname: str) -> object:
-    """
-    Returns an instantiated model and prompt template based on the model configuration.
-    Agrs:
-        model_config_pathname (str): The pathname of the model config file
-    Returns:
-        Tuple[object, str]: The instantiated model
-    """
+    """Returns an instantiated model and prompt template based on the model configuration."""
     try:
         if not model_config_pathname:
             model_config_pathname = os.path.join(os.getcwd(), MODEL_CONFIG_FILE)
@@ -291,13 +216,7 @@ def get_model(model_config_pathname: str) -> object:
 
 
 def write_questions_file(output_dir: str = "") -> None:
-    """
-    Writes the default questions to a file in JSON format.
-    Args:
-        output_dir (str): The directory to write the questions file to.
-    Returns:
-        None
-    """
+    """Writes the default questions to a file in JSON format."""
     questions = get_default_questions()
     output_dir = output_dir if output_dir and Path(output_dir).is_dir() else os.getcwd()
     with open(os.path.join(output_dir, QUESTIONS_FILE), "w") as file:
@@ -305,13 +224,7 @@ def write_questions_file(output_dir: str = "") -> None:
 
 
 def write_model_config_file(output_dir: str = "") -> None:
-    """
-    Writes the default model config to a file in YAML format.
-    Args:
-        output_dir (str): The directory to write the model config file to.
-    Returns:
-        None
-    """
+    """Writes the default model config to a file in YAML format."""
     model_config = get_default_model_config()
     output_dir = output_dir if output_dir and Path(output_dir).is_dir() else os.getcwd()
     with open(os.path.join(output_dir, MODEL_CONFIG_FILE), "w") as file:

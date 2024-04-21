@@ -1,31 +1,3 @@
-"""
-Generates JSON format question-answer pairs and instructions for a Python file
-Requirements:
-[req01] The `DatasetGenerator` class shall:
-        a. Accept Python file path, file details, base name, list of questions,
-        and model configuration as input during instantiation.
-        b. Initialize and store Python file path, file details, base name,
-        question list, llm, and use_llm flag as class attributes.
-        d. Provide `get_response_from_llm` method to retrieve llm response.
-        e. Provide `get_detailed_response` method to generate detailed responses.
-        f. Provide `get_code_qa` method to get code responses from instruct_list.
-        g. Provide `process_question` method to process each question, generate
-        corresponding responses, and add to the instruct_list.
-        h. Provide `process_question_type` method to process questions
-        related to the file, functions, classes, and methods.
-        i. Provide `generate` method to generate responses for all questions
-        and return the instruct_list.
-        j. Internally manage question mapping to file details.
-[req02] The `get_python_datasets` function shall:
-        a. Accept a Python file path, file details, base name, questions list,
-        and model config as input.
-        b. Instantiate `DatasetGenerator` class using the provided input.
-        c. Generate instruct_list using `DatasetGenerator` `generate` method.
-        d. Return the generated `instruct_list`.
-[req03] The `get_unique_elements` function shall:
-        a. Clean an input string (str) and return a string of unique elements.
-"""
-
 import logging
 import re
 import math
@@ -33,13 +5,8 @@ import yaml
 
 
 def get_unique_elements(input_str: str) -> str:
-    """
-    Clean an input string (str) and return a string of unique elements.
-    Args:
-        input_str (str): Input string.
-    Returns:
-        str: String of unique elements.
-    """
+    """Clean an input string and return a string of unique elements."""
+
     def element_generator(input_str):
         start, brace_level = 0, 0
         for i, char in enumerate(input_str):
@@ -49,36 +16,14 @@ def get_unique_elements(input_str: str) -> str:
                 yield input_str[start:i].strip("'\" ")
                 start = i + 1
         yield input_str[start:].strip("'\" ")
+
     input_str = input_str.strip("[]'\"")
     cleaned_elements = [element for element in element_generator(input_str) if element]
     return ", ".join(cleaned_elements)
 
 
 class DatasetGenerator:
-    """
-    Generate JSON formatted dictionary outputs for a Python file.
-    Args:
-        file_path (str): Path to the Python file.
-        file_details (dict): Dictionary containing details of the Python file.
-        base_name (str): Base name of the Python file.
-        questions (list): List of questions to be answered for the Python file.
-        model_config (dict): Dictionary containing the model configuration.
-        detailed (bool): Flag to generate detailed responses.
-    Attributes:
-        file_path (str): Path to the Python file.
-        file_details (dict): Dictionary containing details of the Python file.
-        base_name (str): Base name of the Python file.
-        questions (list): List of questions to be answered for the Python file.
-        model_config (dict): Dictionary containing the model configuration.
-        llm (obj): Language model object.
-        use_llm (bool): Flag to use language model.
-        detailed (bool): Flag to generate detailed responses.
-        instruct_list (list): List of instructions and responses.
-        question_mapping (dict): Mapping of question types to file details.
-        code_qa_list (list): List of code questions and responses.
-        code_qa_response (str): Response for the code_qa_dict.
-        code_qa_dict (dict): Dictionary containing code questions and responses.
-    """
+    """Generate JSON formatted dictionary outputs for a Python file."""
 
     def __init__(
         self,
@@ -108,8 +53,8 @@ class DatasetGenerator:
         self.code_qa_list = []
         self.code_qa_response = ""
 
-    def format_response(self):
-        """Format the response for the code_qa_dict."""
+    def format_response(self) -> None:
+        """Format the response for the code_qa_dict attribute."""
         self.code_qa_response = (
             re.sub(
                 r"\n\s*\n",
@@ -131,14 +76,8 @@ class DatasetGenerator:
         self.file_details["file_info"]["code_qa_response"] = self.code_qa_response
 
     def get_response_from_llm(self, query: str, context: str) -> str:
-        """
-        Get language model response to query for given context.
-        Args:
-            query (str): Query to be answered.
-            context (str): Context for the query.
-        Returns:
-            str: Language model response.
-        """
+        """Get language model response to query for given context."""
+
         context_strategies = [
             lambda: str(context),
             lambda: f"```python\n{self.file_details['file_info']['file_code_simplified']}\n```",
@@ -196,12 +135,7 @@ class DatasetGenerator:
         return response
 
     def get_detailed_response(self, context: str, response: str) -> None:
-        """
-        Generate detailed responses for code objects.
-        Args:
-            context (str): Context for the response.
-            response (str): Response from the model.
-        """
+        """Generate detailed responses for code objects."""
         for item in self.code_qa_list:
             try:
                 instruct_key = list(item.keys())[0]
@@ -227,15 +161,16 @@ class DatasetGenerator:
                 logging.info(f"\n***Itemized Response: {query}\n{item_response}")
                 for item in self.instruct_list:
                     if item["instruction"].startswith(instruct_key):
-                        output = f"\n\nPurpose and Significance:\n{item_response}"
+                        output = f"\n\nPurpose:\n{item_response}"
                         item["output"] += output
 
                 if "`" in instruct_key:
-                    dict_key1 = instruct_key.split("`")[1]
-                    dict_key2 = instruct_key.split()[0]
+                    dict_key1, dict_key2 = (
+                        instruct_key.split("`")[1],
+                        instruct_key.split()[0],
+                    )
                 else:
-                    dict_key1 = instruct_key
-                    dict_key2 = ""
+                    dict_key1, dict_key2 = instruct_key, ""
 
                 purpose_dict = {"Purpose": item_response.strip()}
                 if dict_key1 not in self.code_qa_dict:
@@ -243,6 +178,7 @@ class DatasetGenerator:
                 elif not isinstance(self.code_qa_dict[dict_key1], dict):
                     value = self.code_qa_dict[dict_key1]
                     self.code_qa_dict[dict_key1] = {"Value": value}
+
                 if dict_key2:
                     if not isinstance(self.code_qa_dict[dict_key1], dict):
                         self.code_qa_dict[dict_key1] = {}
@@ -257,16 +193,14 @@ class DatasetGenerator:
             except Exception as error:
                 logging.error(f"Failed to generate detailed response: {error}")
 
-    def get_code_qa(self):
+    def get_code_qa(self) -> None:
         """Get code responses from the instruct_list and update."""
         excluded = {"Call code graph", "Docstring"}
         self.code_qa_list = []
         responses = {}
         for item in self.instruct_list:
-            instruction, output = (
-                item["instruction"].split(" in Python file:")[0],
-                item["output"],
-            )
+            instruction = item["instruction"].split(" in Python file:")[0]
+            output = (item["output"],)
             if not any(instruction.startswith(prefix) for prefix in excluded):
                 self.code_qa_list.append({instruction: output})
                 if "`" in instruction:
@@ -299,7 +233,7 @@ class DatasetGenerator:
         """Process question and add the generated response to the instruct_list."""
         if question_id.endswith(("code_graph", "docstring")):
             response = info.get(question_id, {})
-        elif question_id.endswith("file_purpose"):  # file_purpose is last question
+        elif question_id.endswith("file_purpose"):
             self.get_code_qa()
             response = (
                 self.get_response_from_llm(query, context) if self.use_llm else ""
@@ -323,13 +257,7 @@ class DatasetGenerator:
     def process_question_type(
         self, question_type: str, question_id: str, question_text: str
     ) -> None:
-        """
-        Process questions related to a file, function, class, or method.
-        Args:
-            question_type (str): Type of question.
-            question_id (str): Question ID.
-            question_text (str): Question text.
-        """
+        """Process questions related to a file, function, class, or method."""
         if question_type == "file":
             query = question_text.format(filename=self.base_name)
             info = self.file_details["file_info"]
@@ -344,7 +272,7 @@ class DatasetGenerator:
                         mapping = {"class_name": class_name, "method_name": method_name}
                         query = question_text.format(filename=self.base_name, **mapping)
                         self.process_question(question_id, query, context, method_info)
-        else:  # question_type is 'function' or 'class'
+        else:  # function or class
             for name, info in self.file_details[
                 self.question_mapping[question_type]
             ].items():
@@ -358,9 +286,8 @@ class DatasetGenerator:
                         combined
                     )
                     if question_type == "class":
-                        mapping[f"{question_type}_methods"] = self.get_info_string(
-                            info, f"{question_type}_methods"
-                        )
+                        methods = self.get_info_string(info, "class_methods")
+                        mapping["class_methods"] = methods
                 query = question_text.format(filename=self.base_name, **mapping)
                 self.process_question(question_id, query, context, info)
 
@@ -370,6 +297,7 @@ class DatasetGenerator:
             self.process_question_type(
                 question["type"], question["id"], question["text"]
             )
+
         self.instruct_list.sort(key=lambda x: len(x["input"]), reverse=True)
         return self.instruct_list
 
@@ -382,18 +310,7 @@ def get_python_datasets(
     model_config: dict,
     detailed: bool,
 ) -> tuple[list[dict], list[dict]]:
-    """
-    Extract information from a Python file and return it in JSON format.
-    Args:
-        file_path (str): Path to the Python file.
-        file_details (dict): Dictionary containing details of the Python file.
-        base_name (str): Base name of the Python file.
-        questions (list): List of questions to be answered for the Python file.
-        model_config (dict): Dictionary containing the model configuration.
-        detailed (bool): Flag to generate detailed responses.
-    Returns:
-        tuple: Tuple containing the instruct_list and code_qa_dict.
-    """
+    """Extract information from a Python file and return it in JSON format."""
     return DatasetGenerator(
         file_path, file_details, base_name, questions, model_config, detailed
     ).generate()

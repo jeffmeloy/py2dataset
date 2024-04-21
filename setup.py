@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="py2dataset",
-    version="0.4",
+    version="0.5",
     author="Jeff Meloy",
     author_email="jeffmeloy@gmail.com",
     description="A tool to generate structured datasets from Python source code",

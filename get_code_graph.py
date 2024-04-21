@@ -1,33 +1,4 @@
-"""
-Requirements
-[req01] The code_graph function performs the following:
-        a. Extracts the function and class method details from the file summary.
-        b. Creates a lookup dictionary for function and class method details.
-        c. Creates a directed graph with nodes and edges representing the relationships in the code.
-        d. Adds edges for function and class method calls.
-        e. Adds edge data to edges.
-        f. Returns a dictionary with nodes and edges representing the relationships in the code.
-[req02] The extract_control_flow_tree function performs the following:
-        a. Extracts control flow tree from AST.
-        b. Returns control flow tree.
-[req03] The reorganize_control_flow function performs the following:
-        a. Gets starting points from the code graph.
-        b. Reorganizes the control flow structure recursively.
-        c. Returns reorganized control flow structure.
-[req04] The get_plantUML_element function performs the following:
-        a. Gets plantUML code for each element.
-        b. Returns plantUML code for each element.
-[req05] The get_plantUML function performs the following: 
-        a. Gets plantUML code for entire file.
-        b. Returns plantUML code for entire file.
-[req06] The get_code_graph function performs the following:
-        a. Gets the entire code graph
-        b. Gets the control flow structure
-        c. Gets the plantUML code
-        d. Returns entire code graph, control flow structure and plantUML code
-"""
 import ast
-import json
 from typing import Dict, List, Optional, Union
 import networkx as nx
 
@@ -35,13 +6,7 @@ import networkx as nx
 def code_graph(
     file_summary: Dict[str, Union[Dict, str]],
 ) -> Dict[str, Union[List[str], Dict[str, List[str]]]]:
-    """
-    Create a dictionary representation of file details.
-    Args:
-        file_summary: Dict[str, Union[Dict, str]]: The details extracted from the file.
-    Returns:
-        dict: A dictionary with nodes and edges representing the relationships in the code.
-    """
+    """Create a dictionary representation of file details."""
     G = nx.DiGraph()
 
     # Create lookup dictionaries for function and class method details
@@ -60,17 +25,17 @@ def code_graph(
                     f"{class_name}.{method_name}"  # Create method fully qualified name
                 )
                 G.add_node(qualified_method_name)  # Add method as a graph node
-                class_method_details_lookup[
-                    qualified_method_name
-                ] = method_details  # Store method details
+                class_method_details_lookup[qualified_method_name] = (
+                    method_details  # Store method details
+                )
                 G.add_edge(
                     class_name, qualified_method_name
                 )  # Add edge from class to method
 
-    # Helper function to extract edge data from target details
     def get_edge_data_from_details(
         target_details: dict, source_details: dict, target: str
     ) -> dict:
+        """Extract edge data from target details."""
         edge_data = {}
         if target_details:
             edge_data["target_inputs"] = target_details.get("inputs")
@@ -83,10 +48,11 @@ def code_graph(
             edge_data["target_inputs"] = source_details["call_inputs"][target]
         return edge_data
 
-    # Helper function to add edge with data
+
     def add_edge_with_data(
         source: str, target: str, init_method: Optional[str] = None
     ) -> None:
+        """Helper function to add edge with data"""
         target_details = class_method_details_lookup.get(
             init_method or target
         ) or function_details_lookup.get(target)
@@ -99,8 +65,8 @@ def code_graph(
             **get_edge_data_from_details(target_details, source_details, target),
         )
 
-    # Helper function to add edges for function or class method calls
     def add_edges_for_calls(source_name, calls):
+        """Helper function to add edges for function or class method calls"""
         class_names = [
             list(class_def.keys())[0] for class_def in file_summary["class_defs"]
         ]
@@ -159,13 +125,15 @@ def code_graph(
 
 
 def extract_control_flow_tree(nodes: List[ast.AST]) -> List[Union[str, dict]]:
-    """
-    Extract control flow tree from AST.
-    Args:
-        nodes: AST nodes
-    Returns:
-        control_flow_tree: control flow tree
-    """
+    """Extract control flow tree from AST."""
+    # todo1: make each function, class, and method a partition
+    # todo2: add visual indicators or styles to distinguish between functions, classes, and methods
+    # todo3: when calling an internal function, class, or method, add the line and arrow to the partition
+    # todo4: use different arrow styles or colors to indicate the type of call (e.g., function call, method call, class instantiation)
+    # todo5: make try/except like other conditional logic loops (maybe treat more like if loop somehow)
+    # todo6: add visual indicators to distinguish between the try, except, else, and finally sections
+    # todo7: make grouping better to keep all elements within the same box for imports and non-node_keywords_map elements within each function or method
+    # todo8: add visual separators or spacing between different types of elements (e.g., imports, non-keyword elements, control flow statements)
     control_flow_tree = []
     node_keywords_map = {
         ast.FunctionDef: "def",
@@ -193,6 +161,7 @@ def extract_control_flow_tree(nodes: List[ast.AST]) -> List[Union[str, dict]]:
             key = f"def {node.name}({args_str})"
             value = extract_control_flow_tree(node.body)
             control_flow_tree.append({key: value})
+            # todo11: add support for visualizing function or method arguments and return values
         elif keyword == "class":
             key = f"class {node.name}"
             value = extract_control_flow_tree(node.body)
@@ -256,119 +225,167 @@ def extract_control_flow_tree(nodes: List[ast.AST]) -> List[Union[str, dict]]:
 
 
 def reorganize_control_flow(code_graph, control_flow_structure):
-    """
-    Reorganize control flow structure to match the code graph.
-    Args:
-        file_details: file details
-        control_flow_structure: control flow structure
-    Returns:
-        reorganized_control_flow_structure: reorganized control flow structure
-    """
-    # Get starting points from the code graph as those
+    """Reorganize control flow structure to match the code graph."""
+    # todo9: break up long strings to prevent plantuml errors
+    # todo10: add line breaks or truncation indicators to visually represent the continuation of long strings
     targets = [edge["target"] for edge in code_graph["edges"]]
     starting_points = [node for node in code_graph["nodes"] if node not in targets]
+    visited = set()
 
-    # Define a function to reorganize the structure recursively
-    def reorganize_structure(structure, start_points):
-        organized, seen = [], set()
+    def segregate_control_flow(control_flow_structure):
+        imports_globals = [element for element in control_flow_structure if isinstance(element, str)]
+        rest_structure = [element for element in control_flow_structure if isinstance(element, dict)]
+        return imports_globals, rest_structure
 
-        # Iterate through each start point and find matching elements in structure
-        for start in start_points:
-            for element in structure:
-                if isinstance(element, dict):
-                    key = next(iter(element))  # Get the first key of the dictionary
-                    if (
-                        start in key
-                    ):  # Add element if it matches the start point and hasn't been seen
-                        element_id = json.dumps(element)
-                        if element_id not in seen:
-                            organized.append(element)
-                            seen.add(element_id)
-                elif (
-                    isinstance(element, str) and start in element
-                ):  # Handle string elements
-                    organized.append(element)
+    def dfs_order(graph, start, visited=None, order=None):
+        if visited is None:
+            visited = set()
+        if order is None:
+            order = []
+        visited.add(start)
+        for edge in graph["edges"]:
+            if edge["source"] == start and edge["target"] not in visited:
+                dfs_order(graph, edge["target"], visited, order)
+        order.append(start)  # This appends the node after all its descendants have been handled
+        return order
 
-        # Append elements not included in the organized list
-        remaining = [elem for elem in structure if json.dumps(elem) not in seen]
-        organized.extend(remaining)
-        return organized
+    def map_to_control_flow(execution_order, rest_structure):
+        mapped_structure = []
+        for node in execution_order:
+            for element in rest_structure:
+                if (isinstance(element, dict) and node in next(iter(element))) or (isinstance(element, str) and node in element):
+                    if element not in mapped_structure:  # Ensure unique elements
+                        mapped_structure.append(element)
+        return mapped_structure
 
-    # Reorganize the control flow structure recursively
-    return reorganize_structure(control_flow_structure, starting_points)
+    # Segregate imports and globals from the rest of the control flow structure
+    imports_globals, rest_structure = segregate_control_flow(control_flow_structure)
+    # Determine execution order from the code graph
+    execution_order = []
+    for start in starting_points:
+        if start not in visited:
+            temp_order = dfs_order(code_graph, start, visited, order=[])
+            execution_order.extend(temp_order)
 
+    # Reverse execution order to match logical flow
+    execution_order.reverse()
+    # Map execution order back to the control flow elements
+    organized_rest_structure = map_to_control_flow(execution_order, rest_structure)
+    # Combine imports_globals and organized_rest_structure for the final organized structure
+    organized_structure = imports_globals + organized_rest_structure
+
+    return organized_structure
 
 def get_plantUML_element(element: dict, indentation="") -> str:
-    """
-    Get plantUML code for each element, including clear hints for try/except blocks.
-    Args: 
-        element: control flow element
-        indentation: current indentation
-    Returns:
-        plantuml_str: plantUML code for each element
-    
-    """
+    """Get PlantUML element from control flow structure."""
     plantuml_str = ""
 
     if isinstance(element, dict):
         key = next(iter(element))
         value = element[key]
-        if "def" in key or "class" in key:
-            plantuml_str += f'{indentation}: {key};\n'
+
+        if "def" in key:
+            plantuml_str += (
+                f'{indentation}:{key};\n'
+            )
             inner_indentation = indentation + "    "
             for item in value:
                 plantuml_str += get_plantUML_element(item, inner_indentation)
+
+        elif "class" in key or "partition" in key:
+            partition_name = key.split(" ")[1]
+            plantuml_str += (
+                f'{indentation}partition "{partition_name}" {{\n'
+            )
+            inner_indentation = indentation + "    "
+            for item in value:
+                plantuml_str += get_plantUML_element(item, inner_indentation)
+            plantuml_str += (
+                f'{indentation}}}\n'
+            )
+
         elif "if" in key or "while" in key or "for" in key:
-            condition = key.replace("if ", "").replace("while ", "").replace("for ", "")
-            plantuml_str += f'{indentation}if ({condition}) then (yes)\n'
+            condition = key.split(" ", 1)[1]
+            plantuml_str += (
+                f'{indentation}if ({condition}) then;\n'
+            )
             inner_indentation = indentation + "    "
             for item in value:
                 plantuml_str += get_plantUML_element(item, inner_indentation)
-            plantuml_str += f'{indentation}endif\n'
-        elif "try" in key: # Mark the start of a try block
-            plantuml_str += f'{indentation}partition "try" {{\n'
+            plantuml_str += (
+                f'{indentation}endif;\n'
+            )
+
+        elif "try" in element:
+            plantuml_str += (
+                f'{indentation}partition "try" {{\n'
+            )
             inner_indentation = indentation + "    "
-            for item in value:
+            for item in element["try"]:
                 plantuml_str += get_plantUML_element(item, inner_indentation)
-            plantuml_str += f'{indentation}}}\n'
-        elif "except" in key: # Mark the start of an except block
-            exception_condition = key.replace("except ", "")
-            plantuml_str += f'{indentation}partition "except {exception_condition}" {{\n'
-            inner_indentation = indentation + "    "
-            for item in value:
-                plantuml_str += get_plantUML_element(item, inner_indentation)
-            plantuml_str += f'{indentation}}}\n'
+            plantuml_str += (
+                f'{indentation}}}\n'
+            )
+
+            if "except" in element:
+                except_blocks = element["except"]
+                if not isinstance(except_blocks, list):
+                    except_blocks = [except_blocks]
+                for except_block in except_blocks:
+                    except_key = next(iter(except_block))
+                    except_value = except_block[except_key]
+                    except_key = except_key.split(" ", 1)[1]
+                    plantuml_str += (
+                        f'{indentation}partition "{except_key}" {{\n'
+                    )
+                    inner_indentation = indentation + "    "
+                    for item in except_value:
+                        plantuml_str += get_plantUML_element(item, inner_indentation)
+                    plantuml_str += (
+                        f'{indentation}}}\n'
+                    )
+
+            if "else" in element:
+                plantuml_str += (
+                    f'{indentation}else;\n'
+                )
+                inner_indentation = indentation + "    "
+                for item in element["else"]:
+                    plantuml_str += get_plantUML_element(item, inner_indentation)
+
+            if "finally" in element:
+                plantuml_str += (
+                    f'{indentation}finally;\n'
+                )
+                inner_indentation = indentation + "    "
+                for item in element["finally"]:
+                    plantuml_str += get_plantUML_element(item, inner_indentation)
+
         else:
-            plantuml_str += f"{indentation}: {key};\n"
+            plantuml_str += (
+                f"{indentation}:{key};\n"
+            )
+
     elif isinstance(element, str):
-        plantuml_str += f"{indentation}: {element};\n"
+        plantuml_str += (
+            f"{indentation}:{element};\n"
+        )
 
     return plantuml_str
 
-
 def get_plantUML(control_flow_structure: List[Union[str, dict]]) -> str:
-    """
-    Get plantUML activity diagram code for entire file.
-    Args:
-        file_details: file details
-    Returns:
-        plantuml_str: plantUML code for entire file
-    """
+    """Get PlantUML from control flow structure."""
     plantuml_str = "@startuml\n"
+    plantuml_str += "start\n"
     for element in control_flow_structure:
-        plantuml_str += get_plantUML_element(element, "  ")
-    plantuml_str += "end\n@enduml"
+        plantuml_str += get_plantUML_element(element, "")
+    plantuml_str += "stop\n"
+    plantuml_str += "@enduml"
     return plantuml_str
 
 
 def get_code_graph(file_summary: dict, file_ast: ast.AST) -> (dict, list, str):
-    """
-    Add code graph and control flow to file details.
-    Args:
-        file_details: file details
-    Returns:
-        file_details: file details
-    """
+    """Add code graph and control flow to file details."""
     try:
         entire_code_graph = code_graph(file_summary)
         control_flow_tree = extract_control_flow_tree(file_ast.body)
@@ -379,5 +396,9 @@ def get_code_graph(file_summary: dict, file_ast: ast.AST) -> (dict, list, str):
     except Exception as e:
         control_flow_structure = [str(e)]
         plantUML = str(e)
+
+    #print('**********************')
+    #print(plantUML)
+    #print('**********************')
 
     return entire_code_graph, control_flow_structure, plantUML

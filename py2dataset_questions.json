@@ -91,7 +91,7 @@
     },
     {   
         "id": "file_purpose",
-        "text": "I) Describe the Purpose and Processing Approach for Python file: `{filename}`; II) Define detailed Requirements, API Signatures, and Logic for all Functions and Class Methods; III) Explain the purpose of the inputs, variables, call, and returns in the code.",
+        "text": "I) Describe the Purpose and Processing Approach for Python file: `{filename}`; II) Define detailed Requirements, API Signatures, and Logic for all Functions and Class Methods; III) Explain the purpose of the inputs, variables, calls, and returns in the code.",
         "type": "file"
     } 
 ]

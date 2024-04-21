@@ -104,18 +104,31 @@ If --use_llm and --detailed, the dataset includes the purpose and signicance of 
 Currently configured to use [ctransformers](https://github.com/marella/ctransformers) with the default configuration defined in py2dataset_model_config.yaml
 
     ```yaml
-    prompt_template: "Provide complete structured response for a formal software audit. Given this Context:\n'{context}'\n\nPlease provide a very detailed, accurate, and insightful Response to this Instruction and include your reasoning step by step. \n### Instruction:\n{query}\n### Response:"
+    # context is the Python source code
+    system_prompt: "Lang: English. Output Format: unformatted, outline. Task: Create detailed software documentation for publication using this entire code module Context:\n'{context}'\n"
+
+    # query is the "text" value from py2dataset_question.json for the "id":"file_purpose" question, code_objects are the code objects obtained from the AST
+    instruction_prompt: "Analyze Context considering these objects:\n'{code_objects}'\n to comply with this instruction:\n'{query}'\n" 
+
+    # System / User / Assistant
+    prompt_template: "SYSTEM: {system_prompt} USER: {instruction_prompt} ASSISTANT:"
+
     inference_model:
         model_import_path: "ctransformers.AutoModelForCausalLM"
         model_inference_function: "from_pretrained"
         model_params:
-            model_path: "TheBloke/WizardCoder-Python-13B-V1.0-GGUF"
-            model_type: "llama"
+            # MODEL PATH - adjust for model location and type (remote or local) 
+            model_path: "jeffmeloy/WestLake-7B-v2.Q8_0.gguf"
             local_files_only: false
+            #model_path: "models/WestLake-7B-v2.Q8_0.gguf"
+            #local_files_only: true
+            model_type: "mistral"
+            ## MODEL CONFIGURATION PARAMETERS - adjust for compute resources
+            #lib: "avx2"
             threads: 16
-            batch_size: 256
-            context_length: 8092
-            max_new_tokens: 8092
+            batch_size: 512
+            context_length: 40000
+            max_new_tokens: 20000
             gpu_layers: 100
             reset: true
     ```
@@ -144,11 +157,11 @@ The sharegpt.json includes a list of conversations. Each turn in a conversation 
         "conversations": [
             {
                 "from": "system",
-                "value": "code documentation:" + <code doumentation created by py2dataset model>
+                "value": "Use the provided documentation to output the corresponding Python code."
             },
             {
                 "from": "human",
-                "value": Output the Python code described by the code documentation.
+                "value": "Create Python code based on this documentation: <py2dataset documentation>
             },
             {
                 "from": "gpt",
