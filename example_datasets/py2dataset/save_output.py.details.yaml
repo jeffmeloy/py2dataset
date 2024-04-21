@@ -1,0 +1,1056 @@
+file_info:
+    file_code: "import json\nimport logging\nfrom html import escape\nfrom pathlib import Path\nfrom typing import Dict, List\nimport matplotlib.pyplot as plt\nimport networkx as nx\nimport yaml\n\n\ndef read_file(file_path: Path) -> Dict:\n    \"\"\"Read a JSON or YAML file and return its contents as a dictionary.\"\"\"\n    file_type = file_path.suffix[1:]\n    with file_path.open() as f:\n        if file_type == \"json\":\n            return json.load(f)\n        if file_type == \"yaml\":\n            return yaml.load(f, Loader=yaml.SafeLoader)\n        return {}\n\n\ndef write_file(data: Dict, file_path: Path) -> None:\n    \"\"\"Write a dictionary to a JSON or YAML file.\"\"\"\n    file_type = file_path.suffix[1:]\n    with file_path.open(\"w\", encoding=\"utf-8\") as f:\n        if file_type == \"json\":\n            json.dump(data, f, indent=4)\n        elif file_type == \"yaml\":\n            yaml.SafeDumper.ignore_aliases = lambda *args: True\n            yaml.dump(\n                data,\n                f,\n                Dumper=yaml.SafeDumper,\n                width=float(\"inf\"),\n                sort_keys=False,\n                default_flow_style=False,\n                indent=4,\n                allow_unicode=True,\n                encoding=\"utf-8\",\n            )\n\n\ndef convert_json_to_html(directory: str) -> None:\n    \"\"\"Convert JSON files within given directory to HTML format and save it.\"\"\"\n\n    def preserve_spacing(text: str, tab_width: int = 4) -> str:\n        \"\"\"Preserve spaces and tabs in the provided text.\"\"\"\n        return text.replace(\" \", \"&nbsp;\").replace(\"\\t\", \"&nbsp;\" * tab_width)\n\n    for json_file in Path(directory).rglob(\"*.json\"):\n        try:\n            dataset = read_file(json_file)\n            if not dataset:\n                continue\n        except Exception:\n            continue\n\n        html_content = \"\"\"\n        <html>\n        <head>\n            <style>\n                table {border-collapse: collapse; width: 100%; table-layout: fixed;}\n                th, td {\n                    border: 1px solid black;\n                    padding: 8px;\n                    text-align: left;\n                    white-space: pre-line;\n                    vertical-align: top;\n                    word-wrap: break-word;\n                }\n            </style>\n        </head>\n        <body>\n            <table>\n                <thead>\n                    <tr>\n        \"\"\"\n        column_count = len(dataset[0].keys())\n        column_width = round(100 / column_count, 2)\n        for key in dataset[0].keys():\n            html_content += f\"<th style='width: {column_width}%;'>{key}</th>\"\n        html_content += \"\"\"\n                    </tr>\n                </thead>\n                <tbody>\n        \"\"\"\n        html_rows = []\n        for entry in dataset:\n            row_parts = [\"<tr>\"]\n            for key in entry:\n                value = escape(str(entry[key]))\n                value = preserve_spacing(value)\n                value = value.replace(\"\\n\", \"<br/>\")\n                row_parts.append(f\"<td>{value}</td>\")\n            row_parts.append(\"</tr>\")\n            html_rows.append(\"\".join(row_parts))\n        html_content += \"\".join(html_rows)\n\n        html_content += \"\"\"\n                </tbody>\n            </table>\n        </body>\n        </html>\n        \"\"\"\n        html_file_path = json_file.with_suffix(\".html\")\n        try:\n            with open(html_file_path, \"w\", encoding=\"utf-8\") as file:\n                file.write(html_content)\n        except Exception:\n            logging.info(f\"Failed saving: {html_file_path}\")\n\n\ndef combine_json_files(\n    directory: str, html: bool, questions: Dict\n) -> Dict[str, List[Dict]]:\n    \"\"\"Create instruct, training, sharegpt, instruct, document_code json and code_details yaml files.\"\"\"\n    logging.info(f\"Combining JSON files in {directory}\")\n\n    # Save instruct.json file\n    combined_data, code_filename = [], []\n    skip_files = {\"instruct.json\", \"sharegpt.json\", \"document_code.json\"}\n    for json_file in Path(directory).rglob(\"*.json\"):\n        if json_file.name in skip_files:\n            continue\n        try:\n            file_data = read_file(json_file)\n            if file_data:\n                combined_data.extend(file_data)\n                cleaned_name = (\n                    json_file.relative_to(directory)\n                    .with_suffix(\"\")\n                    .as_posix()\n                    .replace(\".instruct\", \"\")\n                )\n                code_filename.append(cleaned_name)\n        except Exception as e:\n            logging.info(f\"Failed reading: {json_file}. Error: {e}\")\n    write_file(combined_data, Path(directory) / \"instruct.json\")\n\n    # Generate document_code.json file\n    logging.info(f\"Generating document_code.json file in {directory}\")\n    purpose_question = [\n        item[\"text\"] for item in questions if item[\"id\"] == \"file_purpose\"\n    ][0]\n    purpose_question = purpose_question.split(\"{filename}\")[0]\n    purpose_data = [\n        item\n        for item in combined_data\n        if item[\"instruction\"].startswith(purpose_question)\n    ]\n    document_code = [\n        {\n            \"document\": item[\"output\"],\n            \"code\": item[\"input\"],\n        }\n        for item in purpose_data\n    ]\n    for i, item in enumerate(document_code):\n        item[\"code filename\"] = code_filename[i]\n    write_file(document_code, Path(directory) / \"document_code.json\")\n\n    # save sharegpt.json file\n    logging.info(f\"Generating sharegpt.json file in {directory}\")\n    system_value = \"Use the provided documentation to output the corresponding Python code.\"\n\n    sharegpt = [\n        {\n            \"conversation\": [\n                {\n                    \"from\": \"system\",\n                    \"value\": system_value,\n                },\n                {\n                    \"from\": \"human\",\n                    \"value\": f\"Create Python code based on this documentation: {item['document']}\",\n                },\n                {\"from\": \"gpt\", \"value\": item[\"code\"]},\n            ],\n            \"nbytes\": \"0\",\n            \"source\": item[\"code filename\"],\n        }\n        for item in document_code\n    ]\n    for item in sharegpt:\n        nbytes = 0\n        for conv in item[\"conversation\"]:\n            nbytes += len(conv[\"value\"].encode(\"utf-8\"))\n        item[\"nbytes\"] = nbytes\n    write_file(sharegpt, Path(directory) / \"sharegpt.json\")\n\n    # save code_details.yaml file\n    code_details = []\n    logging.info(f\"Combining *.code_details.yaml files in {directory}\")\n    for yaml_file in Path(directory).rglob(\"*.code_details.yaml\"):\n        try:\n            with open(yaml_file, \"r\") as f:\n                file_data = f.read()\n                code_details.append(file_data)\n        except Exception as e:\n            logging.info(f\"Failed reading: {yaml_file}. Error: {e}\")\n    with open(Path(directory) / \"code_details.yaml\", \"w\") as f:\n        f.write(\"\\n\".join(code_details))\n\n    if html:\n        logging.info(\"Converting JSON files to HTML\")\n        convert_json_to_html(directory)\n\n    return {\"instruct_list\": combined_data}\n\n\ndef create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -> None:\n    \"\"\"Generate graphs from the file_details and save them as PNG images.\"\"\"\n    graph_type = \"entire_code_graph\"\n    G = nx.DiGraph()\n    G.add_nodes_from(file_details[\"file_info\"][graph_type][\"nodes\"])\n    for edge in file_details[\"file_info\"][graph_type][\"edges\"]:\n        source, target = edge[\"source\"], edge[\"target\"]\n        if source in G.nodes and target in G.nodes:\n            G.add_edge(\n                source,\n                target,\n                **{\n                    k: v\n                    for k, v in edge.items()\n                    if k in [\"target_inputs\", \"target_returns\"]\n                },\n            )\n\n    # draw graph\n    plt.figure(figsize=(20, 20))\n    pos = nx.spring_layout(G)\n    nx.draw(\n        G,\n        pos,\n        with_labels=True,\n        font_weight=\"bold\",\n        font_size=8,\n        node_shape=\"s\",\n        node_size=500,\n        width=1,\n        arrowsize=12,\n    )\n    edge_labels = {}\n    for edge in G.edges(data=True):\n        label = []\n        if \"target_inputs\" in edge[2] and edge[2][\"target_inputs\"]:\n            label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\")\n        if \"target_returns\" in edge[2] and edge[2][\"target_returns\"]:\n            label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\")\n        edge_labels[(edge[0], edge[1])] = \"\\n\".join(label)\n    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)\n\n    try:  # save graph\n        output_file = output_subdir / f\"{base_name}.{graph_type}.png\"\n        plt.savefig(output_file)\n        plt.close()\n    except Exception as e:\n        logging.error(f\"Error saving graph for {base_name}: {e}\", exc_info=True)\n\n\ndef save_python_data(\n    file_details: dict, instruct_list: list, relative_path: Path, output_dir: str\n) -> None:\n    \"\"\"Save Python file details as a YAML file, the instruction data as JSON files,\n    and generate and save code graphs.\n    \"\"\"\n    output_subdir = Path(output_dir) / relative_path.parent\n    output_subdir.mkdir(parents=True, exist_ok=True)\n    base_name = relative_path.name\n    write_file(instruct_list, output_subdir / f\"{base_name}.instruct.json\")\n    write_file(file_details, output_subdir / f\"{base_name}.details.yaml\")\n    output_text = file_details[\"file_info\"][\"code_qa_response\"]\n    with open(output_subdir / f\"{base_name}.code_details.yaml\", \"w\") as f:\n        f.write(output_text)\n\n    try:\n        create_code_graph(file_details, base_name, output_subdir)\n    except Exception as e:\n        logging.error(f\"Error creating graph for {base_name}: {e}\", exc_info=True)\n"
+    file_dependencies:
+    - networkx
+    - matplotlib.pyplot
+    - typing
+    - logging
+    - html
+    - json
+    - yaml
+    - pathlib
+    file_functions:
+    - read_file
+    - write_file
+    - convert_json_to_html
+    - preserve_spacing
+    - combine_json_files
+    - create_code_graph
+    - save_python_data
+    file_classes: []
+    file_constants:
+    - file_type=file_path.suffix[1:]
+    - file_type=file_path.suffix[1:]
+    - dataset=read_file(json_file)
+    - "html_content='\n        <html>\n        <head>\n            <style>\n                table {border-collapse: collapse; width: 100%; table-layout: fixed;}\n                th, td {\n                    border: 1px solid black;\n                    padding: 8px;\n                    text-align: left;\n                    white-space: pre-line;\n                    vertical-align: top;\n                    word-wrap: break-word;\n                }\n            </style>\n        </head>\n        <body>\n            <table>\n                <thead>\n                    <tr>\n        '"
+    - column_count=len(dataset[0].keys())
+    - column_width=round(100 / column_count, 2)
+    - html_rows=[]
+    - row_parts=['<tr>']
+    - value=escape(str(entry[key]))
+    - value=preserve_spacing(value)
+    - value=value.replace('\n', '<br/>')
+    - html_file_path=json_file.with_suffix('.html')
+    - skip_files={'instruct.json', 'sharegpt.json', 'document_code.json'}
+    - file_data=read_file(json_file)
+    - cleaned_name=json_file.relative_to(directory).with_suffix('').as_posix().replace('.instruct', '')
+    - purpose_question=[item['text'] for item in questions if item['id'] == 'file_purpose'][0]
+    - purpose_question=purpose_question.split('{filename}')[0]
+    - purpose_data=[item for item in combined_data if item['instruction'].startswith(purpose_question)]
+    - 'document_code=[{''document'': item[''output''], ''code'': item[''input'']} for item in purpose_data]'
+    - system_value='Use the provided documentation to output the corresponding Python code.'
+    - 'sharegpt=[{''conversation'': [{''from'': ''system'', ''value'': system_value}, {''from'': ''human'', ''value'': f"Create Python code based on this documentation: {item[''document'']}"}, {''from'': ''gpt'', ''value'': item[''code'']}], ''nbytes'': ''0'', ''source'': item[''code filename'']} for item in document_code]'
+    - nbytes=0
+    - code_details=[]
+    - file_data=f.read()
+    - graph_type='entire_code_graph'
+    - G=nx.DiGraph()
+    - pos=nx.spring_layout(G)
+    - edge_labels={}
+    - label=[]
+    - output_file=output_subdir / f'{base_name}.{graph_type}.png'
+    - output_subdir=Path(output_dir) / relative_path.parent
+    - base_name=relative_path.name
+    - output_text=file_details['file_info']['code_qa_response']
+    file_summary: '{dependencies: [networkx, matplotlib.pyplot, typing, logging, html, json, yaml, pathlib], function_defs: [{read_file: {inputs: [file_path], calls: [file_path.open, json.load, yaml.load], call_inputs: {file_path.open: [], json.load: [f], yaml.load: [f]}, returns: [{}, json.load(f), yaml.load(f, Loader=yaml.SafeLoader)]}}, {write_file: {inputs: [data, file_path], calls: [file_path.open, json.dump, yaml.dump, float], call_inputs: {file_path.open: [''w''], json.dump: [data, f], yaml.dump: [data, f], float: [''inf'']}, returns: []}}, {convert_json_to_html: {inputs: [directory], calls: [text.replace('' '', ''&nbsp;'').replace, text.replace, Path(directory).rglob, Path, read_file, len, dataset[0].keys, round, escape, str, preserve_spacing, value.replace, row_parts.append, html_rows.append, ''''.join, json_file.with_suffix, open, file.write, logging.info], call_inputs: {text.replace('' '', ''&nbsp;'').replace: [''\\t'', ''&nbsp;'' * tab_width], text.replace: ['' '', ''&nbsp;''], Path(directory).rglob: [''*.json''], Path: [directory], read_file: [json_file], len: [dataset[0].keys()], dataset[0].keys: [], round: [100 / column_count, 2], escape: [str(entry[key])], str: [entry[key]], preserve_spacing: [value], value.replace: [''\\n'', ''<br/>''], row_parts.append: [''</tr>''], html_rows.append: [''''.join(row_parts)], ''''.join: [html_rows], json_file.with_suffix: [''.html''], open: [html_file_path, ''w''], file.write: [html_content], logging.info: [f''Failed saving: {html_file_path}'']}, returns: [text.replace('' '', ''&nbsp;'').replace(''\\t'', ''&nbsp;'' * tab_width)]}}, {preserve_spacing: {inputs: [text, tab_width], calls: [text.replace('' '', ''&nbsp;'').replace, text.replace], call_inputs: {text.replace('' '', ''&nbsp;'').replace: [''\\t'', ''&nbsp;'' * tab_width], text.replace: ['' '', ''&nbsp;'']}, returns: [text.replace('' '', ''&nbsp;'').replace(''\\t'', ''&nbsp;'' * tab_width)]}}, {combine_json_files: {inputs: [directory, html, questions], calls: [logging.info, Path(directory).rglob, Path, read_file, combined_data.extend, json_file.relative_to(directory).with_suffix('''').as_posix().replace, json_file.relative_to(directory).with_suffix('''').as_posix, json_file.relative_to(directory).with_suffix, json_file.relative_to, code_filename.append, write_file, purpose_question.split, item[''instruction''].startswith, enumerate, len, conv[''value''].encode, open, f.read, code_details.append, f.write, ''\\n''.join, convert_json_to_html], call_inputs: {logging.info: [''Converting JSON files to HTML''], Path(directory).rglob: [''*.code_details.yaml''], Path: [directory], read_file: [json_file], combined_data.extend: [file_data], json_file.relative_to(directory).with_suffix('''').as_posix().replace: [''.instruct'', ''''], json_file.relative_to(directory).with_suffix('''').as_posix: [], json_file.relative_to(directory).with_suffix: [''''], json_file.relative_to: [directory], code_filename.append: [cleaned_name], write_file: [sharegpt, Path(directory) / ''sharegpt.json''], purpose_question.split: [''{filename}''], item[''instruction''].startswith: [purpose_question], enumerate: [document_code], len: [conv[''value''].encode(''utf-8'')], conv[''value''].encode: [''utf-8''], open: [Path(directory) / ''code_details.yaml'', ''w''], f.read: [], code_details.append: [file_data], f.write: [''\\n''.join(code_details)], ''\\n''.join: [code_details], convert_json_to_html: [directory]}, returns: [{''instruct_list'': combined_data}]}}, {create_code_graph: {inputs: [file_details, base_name, output_subdir], calls: [nx.DiGraph, G.add_nodes_from, G.add_edge, edge.items, plt.figure, nx.spring_layout, nx.draw, G.edges, label.append, '', ''.join, ''\\n''.join, nx.draw_networkx_edge_labels, plt.savefig, plt.close, logging.error], call_inputs: {nx.DiGraph: [], G.add_nodes_from: [file_details[''file_info''][graph_type][''nodes'']], G.add_edge: [source, target], edge.items: [], plt.figure: [], nx.spring_layout: [G], nx.draw: [G, pos], G.edges: [], label.append: [f\\\nReturns: {'', ''.join(edge[2][''target_returns''])}\], '', ''.join: [edge[2][''target_returns'']], ''\\n''.join: [label], nx.draw_networkx_edge_labels: [G, pos], plt.savefig: [output_file], plt.close: [], logging.error: [f''Error saving graph for {base_name}: {e}'']}, returns: []}}, {save_python_data: {inputs: [file_details, instruct_list, relative_path, output_dir], calls: [Path, output_subdir.mkdir, write_file, open, f.write, create_code_graph, logging.error], call_inputs: {Path: [output_dir], output_subdir.mkdir: [], write_file: [file_details, output_subdir / f''{base_name}.details.yaml''], open: [output_subdir / f''{base_name}.code_details.yaml'', ''w''], f.write: [output_text], create_code_graph: [file_details, base_name, output_subdir], logging.error: [f''Error creating graph for {base_name}: {e}'']}, returns: []}}], class_defs: []}'
+    file_code_simplified: "import json\nimport logging\nfrom html import escape\nfrom pathlib import Path\nfrom typing import Dict, List\nimport matplotlib.pyplot as plt\nimport networkx as nx\nimport yaml\n\ndef read_file(file_path: Path) -> Dict:\n    file_type = file_path.suffix[1:]\n    with file_path.open() as f:\n        if file_type == 'json':\n            return json.load(f)\n        if file_type == 'yaml':\n            return yaml.load(f, Loader=yaml.SafeLoader)\n        return {}\n\ndef write_file(data: Dict, file_path: Path) -> None:\n    file_type = file_path.suffix[1:]\n    with file_path.open('w', encoding='utf-8') as f:\n        if file_type == 'json':\n            json.dump(data, f, indent=4)\n        elif file_type == 'yaml':\n            yaml.SafeDumper.ignore_aliases = lambda *args: True\n            yaml.dump(data, f, Dumper=yaml.SafeDumper, width=float('inf'), sort_keys=False, default_flow_style=False, indent=4, allow_unicode=True, encoding='utf-8')\n\ndef convert_json_to_html(directory: str) -> None:\n\n    def preserve_spacing(text: str, tab_width: int=4) -> str:\n        return text.replace(' ', '&nbsp;').replace('\\t', '&nbsp;' * tab_width)\n    for json_file in Path(directory).rglob('*.json'):\n        try:\n            dataset = read_file(json_file)\n            if not dataset:\n                continue\n        except Exception:\n            continue\n        html_content = '\\n        <html>\\n        <head>\\n            <style>\\n                table {border-collapse: collapse; width: 100%; table-layout: fixed;}\\n                th, td {\\n                    border: 1px solid black;\\n                    padding: 8px;\\n                    text-align: left;\\n                    white-space: pre-line;\\n                    vertical-align: top;\\n                    word-wrap: break-word;\\n                }\\n            </style>\\n        </head>\\n        <body>\\n            <table>\\n                <thead>\\n                    <tr>\\n        '\n        column_count = len(dataset[0].keys())\n        column_width = round(100 / column_count, 2)\n        for key in dataset[0].keys():\n            html_content += f\"<th style='width: {column_width}%;'>{key}</th>\"\n        html_content += '\\n                    </tr>\\n                </thead>\\n                <tbody>\\n        '\n        html_rows = []\n        for entry in dataset:\n            row_parts = ['<tr>']\n            for key in entry:\n                value = escape(str(entry[key]))\n                value = preserve_spacing(value)\n                value = value.replace('\\n', '<br/>')\n                row_parts.append(f'<td>{value}</td>')\n            row_parts.append('</tr>')\n            html_rows.append(''.join(row_parts))\n        html_content += ''.join(html_rows)\n        html_content += '\\n                </tbody>\\n            </table>\\n        </body>\\n        </html>\\n        '\n        html_file_path = json_file.with_suffix('.html')\n        try:\n            with open(html_file_path, 'w', encoding='utf-8') as file:\n                file.write(html_content)\n        except Exception:\n            logging.info(f'Failed saving: {html_file_path}')\n\ndef combine_json_files(directory: str, html: bool, questions: Dict) -> Dict[str, List[Dict]]:\n    logging.info(f'Combining JSON files in {directory}')\n    combined_data, code_filename = ([], [])\n    skip_files = {'instruct.json', 'sharegpt.json', 'document_code.json'}\n    for json_file in Path(directory).rglob('*.json'):\n        if json_file.name in skip_files:\n            continue\n        try:\n            file_data = read_file(json_file)\n            if file_data:\n                combined_data.extend(file_data)\n                cleaned_name = json_file.relative_to(directory).with_suffix('').as_posix().replace('.instruct', '')\n                code_filename.append(cleaned_name)\n        except Exception as e:\n            logging.info(f'Failed reading: {json_file}. Error: {e}')\n    write_file(combined_data, Path(directory) / 'instruct.json')\n    logging.info(f'Generating document_code.json file in {directory}')\n    purpose_question = [item['text'] for item in questions if item['id'] == 'file_purpose'][0]\n    purpose_question = purpose_question.split('{filename}')[0]\n    purpose_data = [item for item in combined_data if item['instruction'].startswith(purpose_question)]\n    document_code = [{'document': item['output'], 'code': item['input']} for item in purpose_data]\n    for i, item in enumerate(document_code):\n        item['code filename'] = code_filename[i]\n    write_file(document_code, Path(directory) / 'document_code.json')\n    logging.info(f'Generating sharegpt.json file in {directory}')\n    system_value = 'Use the provided documentation to output the corresponding Python code.'\n    sharegpt = [{'conversation': [{'from': 'system', 'value': system_value}, {'from': 'human', 'value': f\"Create Python code based on this documentation: {item['document']}\"}, {'from': 'gpt', 'value': item['code']}], 'nbytes': '0', 'source': item['code filename']} for item in document_code]\n    for item in sharegpt:\n        nbytes = 0\n        for conv in item['conversation']:\n            nbytes += len(conv['value'].encode('utf-8'))\n        item['nbytes'] = nbytes\n    write_file(sharegpt, Path(directory) / 'sharegpt.json')\n    code_details = []\n    logging.info(f'Combining *.code_details.yaml files in {directory}')\n    for yaml_file in Path(directory).rglob('*.code_details.yaml'):\n        try:\n            with open(yaml_file, 'r') as f:\n                file_data = f.read()\n                code_details.append(file_data)\n        except Exception as e:\n            logging.info(f'Failed reading: {yaml_file}. Error: {e}')\n    with open(Path(directory) / 'code_details.yaml', 'w') as f:\n        f.write('\\n'.join(code_details))\n    if html:\n        logging.info('Converting JSON files to HTML')\n        convert_json_to_html(directory)\n    return {'instruct_list': combined_data}\n\ndef create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -> None:\n    graph_type = 'entire_code_graph'\n    G = nx.DiGraph()\n    G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])\n    for edge in file_details['file_info'][graph_type]['edges']:\n        source, target = (edge['source'], edge['target'])\n        if source in G.nodes and target in G.nodes:\n            G.add_edge(source, target, **{k: v for k, v in edge.items() if k in ['target_inputs', 'target_returns']})\n    plt.figure(figsize=(20, 20))\n    pos = nx.spring_layout(G)\n    nx.draw(G, pos, with_labels=True, font_weight='bold', font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12)\n    edge_labels = {}\n    for edge in G.edges(data=True):\n        label = []\n        if 'target_inputs' in edge[2] and edge[2]['target_inputs']:\n            label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\")\n        if 'target_returns' in edge[2] and edge[2]['target_returns']:\n            label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\")\n        edge_labels[edge[0], edge[1]] = '\\n'.join(label)\n    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)\n    try:\n        output_file = output_subdir / f'{base_name}.{graph_type}.png'\n        plt.savefig(output_file)\n        plt.close()\n    except Exception as e:\n        logging.error(f'Error saving graph for {base_name}: {e}', exc_info=True)\n\ndef save_python_data(file_details: dict, instruct_list: list, relative_path: Path, output_dir: str) -> None:\n    output_subdir = Path(output_dir) / relative_path.parent\n    output_subdir.mkdir(parents=True, exist_ok=True)\n    base_name = relative_path.name\n    write_file(instruct_list, output_subdir / f'{base_name}.instruct.json')\n    write_file(file_details, output_subdir / f'{base_name}.details.yaml')\n    output_text = file_details['file_info']['code_qa_response']\n    with open(output_subdir / f'{base_name}.code_details.yaml', 'w') as f:\n        f.write(output_text)\n    try:\n        create_code_graph(file_details, base_name, output_subdir)\n    except Exception as e:\n        logging.error(f'Error creating graph for {base_name}: {e}', exc_info=True)"
+    entire_code_graph:
+        nodes:
+        - read_file
+        - write_file
+        - convert_json_to_html
+        - preserve_spacing
+        - combine_json_files
+        - create_code_graph
+        - save_python_data
+        - file_path.open
+        - json.load
+        - yaml.load
+        - json.dump
+        - yaml.dump
+        - float
+        - text.replace(' ', '&nbsp;').replace
+        - text.replace
+        - Path(directory).rglob
+        - Path
+        - len
+        - dataset[0].keys
+        - round
+        - escape
+        - str
+        - value.replace
+        - row_parts.append
+        - html_rows.append
+        - '''''.join'
+        - json_file.with_suffix
+        - open
+        - file.write
+        - logging.info
+        - combined_data.extend
+        - json_file.relative_to(directory).with_suffix('').as_posix().replace
+        - json_file.relative_to(directory).with_suffix('').as_posix
+        - json_file.relative_to(directory).with_suffix
+        - json_file.relative_to
+        - code_filename.append
+        - purpose_question.split
+        - item['instruction'].startswith
+        - enumerate
+        - conv['value'].encode
+        - f.read
+        - code_details.append
+        - f.write
+        - '''\n''.join'
+        - nx.DiGraph
+        - G.add_nodes_from
+        - G.add_edge
+        - edge.items
+        - plt.figure
+        - nx.spring_layout
+        - nx.draw
+        - G.edges
+        - label.append
+        - ''', ''.join'
+        - nx.draw_networkx_edge_labels
+        - plt.savefig
+        - plt.close
+        - logging.error
+        - output_subdir.mkdir
+        edges:
+        -   source: read_file
+            target: file_path.open
+            target_inputs: []
+        -   source: read_file
+            target: json.load
+            target_inputs:
+            - f
+        -   source: read_file
+            target: yaml.load
+            target_inputs:
+            - f
+        -   source: write_file
+            target: file_path.open
+            target_inputs:
+            - '''w'''
+        -   source: write_file
+            target: json.dump
+            target_inputs:
+            - data
+            - f
+        -   source: write_file
+            target: yaml.dump
+            target_inputs:
+            - data
+            - f
+        -   source: write_file
+            target: float
+            target_inputs:
+            - '''inf'''
+        -   source: convert_json_to_html
+            target: text.replace(' ', '&nbsp;').replace
+            target_inputs:
+            - '''\t'''
+            - '''&nbsp;'' * tab_width'
+        -   source: convert_json_to_html
+            target: text.replace
+            target_inputs:
+            - ''' '''
+            - '''&nbsp;'''
+        -   source: convert_json_to_html
+            target: Path(directory).rglob
+            target_inputs:
+            - '''*.json'''
+        -   source: convert_json_to_html
+            target: Path
+            target_inputs:
+            - directory
+        -   source: convert_json_to_html
+            target: read_file
+            target_inputs:
+            - json_file
+            target_returns:
+            - json.load(f)
+            - yaml.load(f, Loader=yaml.SafeLoader)
+            - '{}'
+        -   source: convert_json_to_html
+            target: len
+            target_inputs:
+            - dataset[0].keys()
+        -   source: convert_json_to_html
+            target: dataset[0].keys
+            target_inputs: []
+        -   source: convert_json_to_html
+            target: round
+            target_inputs:
+            - 100 / column_count
+            - '2'
+        -   source: convert_json_to_html
+            target: escape
+            target_inputs:
+            - str(entry[key])
+        -   source: convert_json_to_html
+            target: str
+            target_inputs:
+            - entry[key]
+        -   source: convert_json_to_html
+            target: preserve_spacing
+            target_inputs:
+            - value
+            target_returns:
+            - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+        -   source: convert_json_to_html
+            target: value.replace
+            target_inputs:
+            - '''\n'''
+            - '''<br/>'''
+        -   source: convert_json_to_html
+            target: row_parts.append
+            target_inputs:
+            - '''</tr>'''
+        -   source: convert_json_to_html
+            target: html_rows.append
+            target_inputs:
+            - '''''.join(row_parts)'
+        -   source: convert_json_to_html
+            target: '''''.join'
+            target_inputs:
+            - html_rows
+        -   source: convert_json_to_html
+            target: json_file.with_suffix
+            target_inputs:
+            - '''.html'''
+        -   source: convert_json_to_html
+            target: open
+            target_inputs:
+            - html_file_path
+            - '''w'''
+        -   source: convert_json_to_html
+            target: file.write
+            target_inputs:
+            - html_content
+        -   source: convert_json_to_html
+            target: logging.info
+            target_inputs:
+            - 'f''Failed saving: {html_file_path}'''
+        -   source: preserve_spacing
+            target: text.replace(' ', '&nbsp;').replace
+            target_inputs:
+            - '''\t'''
+            - '''&nbsp;'' * tab_width'
+        -   source: preserve_spacing
+            target: text.replace
+            target_inputs:
+            - ''' '''
+            - '''&nbsp;'''
+        -   source: combine_json_files
+            target: logging.info
+            target_inputs:
+            - '''Converting JSON files to HTML'''
+        -   source: combine_json_files
+            target: Path(directory).rglob
+            target_inputs:
+            - '''*.code_details.yaml'''
+        -   source: combine_json_files
+            target: Path
+            target_inputs:
+            - directory
+        -   source: combine_json_files
+            target: read_file
+            target_inputs:
+            - json_file
+            target_returns:
+            - json.load(f)
+            - yaml.load(f, Loader=yaml.SafeLoader)
+            - '{}'
+        -   source: combine_json_files
+            target: combined_data.extend
+            target_inputs:
+            - file_data
+        -   source: combine_json_files
+            target: json_file.relative_to(directory).with_suffix('').as_posix().replace
+            target_inputs:
+            - '''.instruct'''
+            - ''''''
+        -   source: combine_json_files
+            target: json_file.relative_to(directory).with_suffix('').as_posix
+            target_inputs: []
+        -   source: combine_json_files
+            target: json_file.relative_to(directory).with_suffix
+            target_inputs:
+            - ''''''
+        -   source: combine_json_files
+            target: json_file.relative_to
+            target_inputs:
+            - directory
+        -   source: combine_json_files
+            target: code_filename.append
+            target_inputs:
+            - cleaned_name
+        -   source: combine_json_files
+            target: write_file
+            target_inputs:
+            - sharegpt
+            - Path(directory) / 'sharegpt.json'
+            target_returns: []
+        -   source: combine_json_files
+            target: purpose_question.split
+            target_inputs:
+            - '''{filename}'''
+        -   source: combine_json_files
+            target: item['instruction'].startswith
+            target_inputs:
+            - purpose_question
+        -   source: combine_json_files
+            target: enumerate
+            target_inputs:
+            - document_code
+        -   source: combine_json_files
+            target: len
+            target_inputs:
+            - conv['value'].encode('utf-8')
+        -   source: combine_json_files
+            target: conv['value'].encode
+            target_inputs:
+            - '''utf-8'''
+        -   source: combine_json_files
+            target: open
+            target_inputs:
+            - Path(directory) / 'code_details.yaml'
+            - '''w'''
+        -   source: combine_json_files
+            target: f.read
+            target_inputs: []
+        -   source: combine_json_files
+            target: code_details.append
+            target_inputs:
+            - file_data
+        -   source: combine_json_files
+            target: f.write
+            target_inputs:
+            - '''\n''.join(code_details)'
+        -   source: combine_json_files
+            target: '''\n''.join'
+            target_inputs:
+            - code_details
+        -   source: combine_json_files
+            target: convert_json_to_html
+            target_inputs:
+            - directory
+            target_returns:
+            - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+        -   source: create_code_graph
+            target: nx.DiGraph
+            target_inputs: []
+        -   source: create_code_graph
+            target: G.add_nodes_from
+            target_inputs:
+            - file_details['file_info'][graph_type]['nodes']
+        -   source: create_code_graph
+            target: G.add_edge
+            target_inputs:
+            - source
+            - target
+        -   source: create_code_graph
+            target: edge.items
+            target_inputs: []
+        -   source: create_code_graph
+            target: plt.figure
+            target_inputs: []
+        -   source: create_code_graph
+            target: nx.spring_layout
+            target_inputs:
+            - G
+        -   source: create_code_graph
+            target: nx.draw
+            target_inputs:
+            - G
+            - pos
+        -   source: create_code_graph
+            target: G.edges
+            target_inputs: []
+        -   source: create_code_graph
+            target: label.append
+            target_inputs:
+            - 'f"\nReturns: {'', ''.join(edge[2][''target_returns''])}"'
+        -   source: create_code_graph
+            target: ''', ''.join'
+            target_inputs:
+            - edge[2]['target_returns']
+        -   source: create_code_graph
+            target: '''\n''.join'
+            target_inputs:
+            - label
+        -   source: create_code_graph
+            target: nx.draw_networkx_edge_labels
+            target_inputs:
+            - G
+            - pos
+        -   source: create_code_graph
+            target: plt.savefig
+            target_inputs:
+            - output_file
+        -   source: create_code_graph
+            target: plt.close
+            target_inputs: []
+        -   source: create_code_graph
+            target: logging.error
+            target_inputs:
+            - 'f''Error saving graph for {base_name}: {e}'''
+        -   source: save_python_data
+            target: Path
+            target_inputs:
+            - output_dir
+        -   source: save_python_data
+            target: output_subdir.mkdir
+            target_inputs: []
+        -   source: save_python_data
+            target: write_file
+            target_inputs:
+            - file_details
+            - output_subdir / f'{base_name}.details.yaml'
+            target_returns: []
+        -   source: save_python_data
+            target: open
+            target_inputs:
+            - output_subdir / f'{base_name}.code_details.yaml'
+            - '''w'''
+        -   source: save_python_data
+            target: f.write
+            target_inputs:
+            - output_text
+        -   source: save_python_data
+            target: create_code_graph
+            target_inputs:
+            - file_details
+            - base_name
+            - output_subdir
+            target_returns: []
+        -   source: save_python_data
+            target: logging.error
+            target_inputs:
+            - 'f''Error creating graph for {base_name}: {e}'''
+    control_flow_structure:
+    - import json
+    - import logging
+    - from html import escape
+    - from pathlib import Path
+    - from typing import Dict, List
+    - import matplotlib.pyplot as plt
+    - import networkx as nx
+    - import yaml
+    -   'def save_python_data(file_details: dict, instruct_list: list, relative_path: Path, output_dir: str)':
+        - output_subdir = Path(output_dir) / relative_path.parent
+        - output_subdir.mkdir(parents=True, exist_ok=True)
+        - base_name = relative_path.name
+        - write_file(instruct_list, output_subdir / f'{base_name}.instruct.json')
+        - write_file(file_details, output_subdir / f'{base_name}.details.yaml')
+        - output_text = file_details['file_info']['code_qa_response']
+        -   with open(output_subdir / f'{base_name}.code_details.yaml', 'w') as f:
+            - f.write(output_text)
+        -   try:
+            - create_code_graph(file_details, base_name, output_subdir)
+            except:
+            -   'except Exception as :':
+                - 'logging.error(f''Error creating graph for {base_name}: {e}'', exc_info=True)'
+    -   'def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path)':
+        - graph_type = 'entire_code_graph'
+        - G = nx.DiGraph()
+        - G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])
+        -   for edge in file_details['file_info'][graph_type]['edges']:
+            - source, target = (edge['source'], edge['target'])
+            -   if source in G.nodes and target in G.nodes:
+                - 'G.add_edge(source, target, **{k: v for k, v in edge.items() if k in [''target_inputs'', ''target_returns'']})'
+        - plt.figure(figsize=(20, 20))
+        - pos = nx.spring_layout(G)
+        - nx.draw(G, pos, with_labels=True, font_weight='bold', font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12)
+        - edge_labels = {}
+        -   for edge in G.edges(data=True):
+            - label = []
+            -   if 'target_inputs' in edge[2] and edge[2]['target_inputs']:
+                - 'label.append(f"Inputs: {'', ''.join(edge[2][''target_inputs''])}")'
+            -   if 'target_returns' in edge[2] and edge[2]['target_returns']:
+                - 'label.append(f"\nReturns: {'', ''.join(edge[2][''target_returns''])}")'
+            - edge_labels[edge[0], edge[1]] = '\n'.join(label)
+        - nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
+        -   try:
+            - output_file = output_subdir / f'{base_name}.{graph_type}.png'
+            - plt.savefig(output_file)
+            - plt.close()
+            except:
+            -   'except Exception as :':
+                - 'logging.error(f''Error saving graph for {base_name}: {e}'', exc_info=True)'
+    -   'def combine_json_files(directory: str, html: bool, questions: Dict)':
+        - logging.info(f'Combining JSON files in {directory}')
+        - combined_data, code_filename = ([], [])
+        - skip_files = {'instruct.json', 'sharegpt.json', 'document_code.json'}
+        -   for json_file in Path(directory).rglob('*.json'):
+            -   if json_file.name in skip_files:
+                - continue
+            -   try:
+                - file_data = read_file(json_file)
+                -   if file_data:
+                    - combined_data.extend(file_data)
+                    - cleaned_name = json_file.relative_to(directory).with_suffix('').as_posix().replace('.instruct', '')
+                    - code_filename.append(cleaned_name)
+                except:
+                -   'except Exception as :':
+                    - 'logging.info(f''Failed reading: {json_file}. Error: {e}'')'
+        - write_file(combined_data, Path(directory) / 'instruct.json')
+        - logging.info(f'Generating document_code.json file in {directory}')
+        - purpose_question = [item['text'] for item in questions if item['id'] == 'file_purpose'][0]
+        - purpose_question = purpose_question.split('{filename}')[0]
+        - purpose_data = [item for item in combined_data if item['instruction'].startswith(purpose_question)]
+        - 'document_code = [{''document'': item[''output''], ''code'': item[''input'']} for item in purpose_data]'
+        -   for (i, item) in enumerate(document_code):
+            - item['code filename'] = code_filename[i]
+        - write_file(document_code, Path(directory) / 'document_code.json')
+        - logging.info(f'Generating sharegpt.json file in {directory}')
+        - system_value = 'Use the provided documentation to output the corresponding Python code.'
+        - 'sharegpt = [{''conversation'': [{''from'': ''system'', ''value'': system_value}, {''from'': ''human'', ''value'': f"Create Python code based on this documentation: {item[''document'']}"}, {''from'': ''gpt'', ''value'': item[''code'']}], ''nbytes'': ''0'', ''source'': item[''code filename'']} for item in document_code]'
+        -   for item in sharegpt:
+            - nbytes = 0
+            -   for conv in item['conversation']:
+                - nbytes += len(conv['value'].encode('utf-8'))
+            - item['nbytes'] = nbytes
+        - write_file(sharegpt, Path(directory) / 'sharegpt.json')
+        - code_details = []
+        - logging.info(f'Combining *.code_details.yaml files in {directory}')
+        -   for yaml_file in Path(directory).rglob('*.code_details.yaml'):
+            -   try:
+                -   with open(yaml_file, 'r') as f:
+                    - file_data = f.read()
+                    - code_details.append(file_data)
+                except:
+                -   'except Exception as :':
+                    - 'logging.info(f''Failed reading: {yaml_file}. Error: {e}'')'
+        -   with open(Path(directory) / 'code_details.yaml', 'w') as f:
+            - f.write('\n'.join(code_details))
+        -   if html:
+            - logging.info('Converting JSON files to HTML')
+            - convert_json_to_html(directory)
+        -   return:
+            - '{''instruct_list'': combined_data}'
+    -   'def convert_json_to_html(directory: str)':
+        -   'def preserve_spacing(text: str, tab_width: int)':
+            -   return:
+                - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+        -   for json_file in Path(directory).rglob('*.json'):
+            -   try:
+                - dataset = read_file(json_file)
+                -   if not dataset:
+                    - continue
+                except:
+                -   'except Exception as :':
+                    - continue
+            - 'html_content = ''\n        <html>\n        <head>\n            <style>\n                table {border-collapse: collapse; width: 100%; table-layout: fixed;}\n                th, td {\n                    border: 1px solid black;\n                    padding: 8px;\n                    text-align: left;\n                    white-space: pre-line;\n                    vertical-align: top;\n                    word-wrap: break-word;\n                }\n            </style>\n        </head>\n        <body>\n            <table>\n                <thead>\n                    <tr>\n        '''
+            - column_count = len(dataset[0].keys())
+            - column_width = round(100 / column_count, 2)
+            -   for key in dataset[0].keys():
+                - 'html_content += f"<th style=''width: {column_width}%;''>{key}</th>"'
+            - html_content += '\n                    </tr>\n                </thead>\n                <tbody>\n        '
+            - html_rows = []
+            -   for entry in dataset:
+                - row_parts = ['<tr>']
+                -   for key in entry:
+                    - value = escape(str(entry[key]))
+                    - value = preserve_spacing(value)
+                    - value = value.replace('\n', '<br/>')
+                    - row_parts.append(f'<td>{value}</td>')
+                - row_parts.append('</tr>')
+                - html_rows.append(''.join(row_parts))
+            - html_content += ''.join(html_rows)
+            - html_content += '\n                </tbody>\n            </table>\n        </body>\n        </html>\n        '
+            - html_file_path = json_file.with_suffix('.html')
+            -   try:
+                -   with open(html_file_path, 'w', encoding='utf-8') as file:
+                    - file.write(html_content)
+                except:
+                -   'except Exception as :':
+                    - 'logging.info(f''Failed saving: {html_file_path}'')'
+    -   'def write_file(data: Dict, file_path: Path)':
+        - file_type = file_path.suffix[1:]
+        -   with file_path.open('w', encoding='utf-8') as f:
+            -   if file_type == 'json':
+                - json.dump(data, f, indent=4)
+                elif file_type == 'yaml':
+                - 'yaml.SafeDumper.ignore_aliases = lambda *args: True'
+                - yaml.dump(data, f, Dumper=yaml.SafeDumper, width=float('inf'), sort_keys=False, default_flow_style=False, indent=4, allow_unicode=True, encoding='utf-8')
+    -   'def read_file(file_path: Path)':
+        - file_type = file_path.suffix[1:]
+        -   with file_path.open() as f:
+            -   if file_type == 'json':
+                -   return:
+                    - json.load(f)
+            -   if file_type == 'yaml':
+                -   return:
+                    - yaml.load(f, Loader=yaml.SafeLoader)
+            -   return:
+                - '{}'
+    plant_uml: "@startuml\nstart\n:import json;\n:import logging;\n:from html import escape;\n:from pathlib import Path;\n:from typing import Dict, List;\n:import matplotlib.pyplot as plt;\n:import networkx as nx;\n:import yaml;\n:def save_python_data(file_details: dict, instruct_list: list, relative_path: Path, output_dir: str);\n    :output_subdir = Path(output_dir) / relative_path.parent;\n    :output_subdir.mkdir(parents=True, exist_ok=True);\n    :base_name = relative_path.name;\n    :write_file(instruct_list, output_subdir / f'{base_name}.instruct.json');\n    :write_file(file_details, output_subdir / f'{base_name}.details.yaml');\n    :output_text = file_details['file_info']['code_qa_response'];\n    :with open(output_subdir / f'{base_name}.code_details.yaml', 'w') as f;\n    partition \"try\" {\n        :create_code_graph(file_details, base_name, output_subdir);\n    }\n    partition \"Exception as :\" {\n        :logging.error(f'Error creating graph for {base_name}: {e}', exc_info=True);\n    }\n:def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path);\n    :graph_type = 'entire_code_graph';\n    :G = nx.DiGraph();\n    :G.add_nodes_from(file_details['file_info'][graph_type]['nodes']);\n    if (edge in file_details['file_info'][graph_type]['edges']) then;\n        :source, target = (edge['source'], edge['target']);\n        if (source in G.nodes and target in G.nodes) then;\n            :G.add_edge(source, target, **{k: v for k, v in edge.items() if k in ['target_inputs', 'target_returns']});\n        endif;\n    endif;\n    :plt.figure(figsize=(20, 20));\n    :pos = nx.spring_layout(G);\n    :nx.draw(G, pos, with_labels=True, font_weight='bold', font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12);\n    :edge_labels = {};\n    if (edge in G.edges(data=True)) then;\n        :label = [];\n        if ('target_inputs' in edge[2] and edge[2]['target_inputs']) then;\n            :label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\");\n        endif;\n        if ('target_returns' in edge[2] and edge[2]['target_returns']) then;\n            :label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\");\n        endif;\n        :edge_labels[edge[0], edge[1]] = '\\n'.join(label);\n    endif;\n    :nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6);\n    partition \"try\" {\n        :output_file = output_subdir / f'{base_name}.{graph_type}.png';\n        :plt.savefig(output_file);\n        :plt.close();\n    }\n    partition \"Exception as :\" {\n        :logging.error(f'Error saving graph for {base_name}: {e}', exc_info=True);\n    }\n:def combine_json_files(directory: str, html: bool, questions: Dict);\n    :logging.info(f'Combining JSON files in {directory}');\n    :combined_data, code_filename = ([], []);\n    :skip_files = {'instruct.json', 'sharegpt.json', 'document_code.json'};\n    if (json_file in Path(directory).rglob('*.json')) then;\n        if (json_file.name in skip_files) then;\n            :continue;\n        endif;\n        partition \"try\" {\n            :file_data = read_file(json_file);\n            if (file_data) then;\n                :combined_data.extend(file_data);\n                :cleaned_name = json_file.relative_to(directory).with_suffix('').as_posix().replace('.instruct', '');\n                :code_filename.append(cleaned_name);\n            endif;\n        }\n        partition \"Exception as :\" {\n            :logging.info(f'Failed reading: {json_file}. Error: {e}');\n        }\n    endif;\n    :write_file(combined_data, Path(directory) / 'instruct.json');\n    :logging.info(f'Generating document_code.json file in {directory}');\n    :purpose_question = [item['text'] for item in questions if item['id'] == 'file_purpose'][0];\n    :purpose_question = purpose_question.split('{filename}')[0];\n    :purpose_data = [item for item in combined_data if item['instruction'].startswith(purpose_question)];\n    :document_code = [{'document': item['output'], 'code': item['input']} for item in purpose_data];\n    if ((i, item) in enumerate(document_code)) then;\n        :item['code filename'] = code_filename[i];\n    endif;\n    :write_file(document_code, Path(directory) / 'document_code.json');\n    :logging.info(f'Generating sharegpt.json file in {directory}');\n    :system_value = 'Use the provided documentation to output the corresponding Python code.';\n    :sharegpt = [{'conversation': [{'from': 'system', 'value': system_value}, {'from': 'human', 'value': f\"Create Python code based on this documentation: {item['document']}\"}, {'from': 'gpt', 'value': item['code']}], 'nbytes': '0', 'source': item['code filename']} for item in document_code];\n    if (item in sharegpt) then;\n        :nbytes = 0;\n        if (conv in item['conversation']) then;\n            :nbytes += len(conv['value'].encode('utf-8'));\n        endif;\n        :item['nbytes'] = nbytes;\n    endif;\n    :write_file(sharegpt, Path(directory) / 'sharegpt.json');\n    :code_details = [];\n    :logging.info(f'Combining *.code_details.yaml files in {directory}');\n    if (yaml_file in Path(directory).rglob('*.code_details.yaml')) then;\n        partition \"try\" {\n            :with open(yaml_file, 'r') as f;\n        }\n        partition \"Exception as :\" {\n            :logging.info(f'Failed reading: {yaml_file}. Error: {e}');\n        }\n    endif;\n    :with open(Path(directory) / 'code_details.yaml', 'w') as f;\n    if (html) then;\n        :logging.info('Converting JSON files to HTML');\n        :convert_json_to_html(directory);\n    endif;\n    :return;\n:def convert_json_to_html(directory: str);\n    :def preserve_spacing(text: str, tab_width: int);\n        :return;\n    if (json_file in Path(directory).rglob('*.json')) then;\n        partition \"try\" {\n            :dataset = read_file(json_file);\n            if (not dataset) then;\n                :continue;\n            endif;\n        }\n        partition \"Exception as :\" {\n            :continue;\n        }\n        :html_content = '\\n        <html>\\n        <head>\\n            <style>\\n                table {border-collapse: collapse; width: 100%; table-layout: fixed;}\\n                th, td {\\n                    border: 1px solid black;\\n                    padding: 8px;\\n                    text-align: left;\\n                    white-space: pre-line;\\n                    vertical-align: top;\\n                    word-wrap: break-word;\\n                }\\n            </style>\\n        </head>\\n        <body>\\n            <table>\\n                <thead>\\n                    <tr>\\n        ';\n        :column_count = len(dataset[0].keys());\n        :column_width = round(100 / column_count, 2);\n        if (key in dataset[0].keys()) then;\n            :html_content += f\"<th style='width: {column_width}%;'>{key}</th>\";\n        endif;\n        :html_content += '\\n                    </tr>\\n                </thead>\\n                <tbody>\\n        ';\n        :html_rows = [];\n        if (entry in dataset) then;\n            :row_parts = ['<tr>'];\n            if (key in entry) then;\n                :value = escape(str(entry[key]));\n                :value = preserve_spacing(value);\n                :value = value.replace('\\n', '<br/>');\n                :row_parts.append(f'<td>{value}</td>');\n            endif;\n            :row_parts.append('</tr>');\n            :html_rows.append(''.join(row_parts));\n        endif;\n        :html_content += ''.join(html_rows);\n        :html_content += '\\n                </tbody>\\n            </table>\\n        </body>\\n        </html>\\n        ';\n        :html_file_path = json_file.with_suffix('.html');\n        partition \"try\" {\n            :with open(html_file_path, 'w', encoding='utf-8') as file;\n        }\n        partition \"Exception as :\" {\n            :logging.info(f'Failed saving: {html_file_path}');\n        }\n    endif;\n:def write_file(data: Dict, file_path: Path);\n    :file_type = file_path.suffix[1:];\n    :with file_path.open('w', encoding='utf-8') as f;\n:def read_file(file_path: Path);\n    :file_type = file_path.suffix[1:];\n    :with file_path.open() as f;\nstop\n@enduml"
+    code_qa_response: "py2dataset/save_output.py:\n  Code Documentation:\n  - 'I) The given Python file `save_output.py` primarily serves as a comprehensive documentation generator and organizer for managing various data formats related to a dataset processing workflow. It reads JSON or YAML files from a specified directory, converts them into HTML format if desired, combines the content into specific target files while generating Python code graphs as images, writes instructional data in JSON format, and saves Python file details in YAML format. Its purpose can be broken down into several key functionalities provided by different methods:\n    1. `read_file` - Loads either JSON or YAML content from a given path into a dictionary format. It identifies the file type based on its extension and calls `json.load()` or `yaml.load()`.\n    2. `write_file` - Writes a provided dictionary data into JSON or YAML files by determining the file type and using appropriate methods like `json.dump()` or `yaml.Dumper`.\n    3. `convert_json_to_html` - Transforms JSON files within a directory to HTML format while preserving whitespaces in values, creates HTML tables representing the dataset structure with headers corresponding to keys and values from each JSON entry.\n    4. `combine_json_files` - Combines multiple JSON files into \"instruct.json,\" generates \"sharegpt.json,\" \"document_code.json,\" and \"code_details.yaml\" files after reading them, optionally converts JSON files to HTML format if instructed. It also creates a purpose question filter for identifying relevant data related to Python code generation instructions.\n    5. `create_code_graph` - Generates graphs representing the code dependencies using NetworkX library and saves them as PNG images in an output directory.\n    6. `save_python_data` - Saves Python file details into YAML format, instruction data as JSON files, creates \"code_details.yaml,\" generates code graphs for each file while handling exceptions if any occur during graph creation.\n    II) API Signatures:\n    a. read_file(file_path: Path) -> Dict: Reads JSON or YAML content from specified path and returns dictionary data.\n    - Dependencies: json, logging, yaml, pathlib\n    b. write_file(data: Dict, file_path: Path) -> None: Writes dictionary data into JSON or YAML files based on extension.\n    - Dependencies: json, yaml\n    c. convert_json_to_html(directory: None) -> None: Converts JSON files in directory to HTML format maintaining whitespaces while creating HTML tables from their contents.\n    - Dependencies: html, pathlib\n    d. combine_json_files(directory: str, html: bool, questions: Dict) -> Dict[str, List[Dict]: Combines JSON files into specific target formats and generates \"document_code.json,\" \"sharegpt.json,\" \"code_details.yaml.\" Optionally converts JSON files to HTML if `html` is True.\n    - Dependencies: json, logging, pathlib, yaml\n    e. create_code_graph(file_details: dict, base_name: str, output_subdir: Path) -> None: Generates code dependency graphs as PNG images in an output directory using NetworkX and Matplotlib libraries.\n    - Dependencies: networkx, matplotlib.pyplot, logging\n    f. save_python_data(file_details: dict, instruct_list: List, relative_path: Path, output_dir: str) -> None: Stores Python file data into \"file_info.yaml,\" saves instruction data as JSON files and creates code graphs while handling exceptions.\n    - Dependencies: logging, pathlib, yaml\n    III) Inputs, Variables, Calls & Returns Analysis:\n    a. read_file():\n    - file_path input is a Path object representing the file location. It returns JSON or YAML content as a dictionary based on extension.\n    - Uses `file_type`, `f` (file handle), `json.load()`, `yaml.load()`.\n    b. write_file():\n    - `data` is a dictionary to be written into file and `file_path` represents its location. It returns None after writing the data.\n    - Uses `file_type`, `f` (file handle), `json.dump()`, `yaml.SafeDumper`.\n    c. convert_json_to_html():\n    - Directory input as string path to process JSON files conversion into HTML format. It returns None after writing HTML content in files.\n    - Uses `json_file` (Path object), `preserve_spacing()`, `html_content`, `row_parts`, `html_rows`.\n    d. combine_json_files():\n    - Directory input as string path, boolean flag for HTML conversion named 'html', a Dict named `questions` to contain human instruction IDs and values. Returns {'instruct_list': combined data of JSON files} dictionary containing merged information.\n    - Uses `logging`, `Path()`, `read_file()`, `json_file` (Path object), `purpose_question`, `code_filename`, `write_file()`.\n    e. create_code_graph():\n    - Takes file details dictionary and output directory path as strings, saves code graph images within the directory as PNGs. Returns None after processing graphs.\n    - Uses `output_file` (Path object), `nx`, `plt`, `logging`, `G`, `edge_labels`.\n    f. save_python_data():\n    - file details dictionary, instruction list data for JSON saving, relative path as Path object representing the input file location, output directory string path. Returns None after processing Python file details and graphs handling exceptions if any occur.\n    - Uses `Path()`, `write_file()`, `create_code_graph()`, `logging`.'\n  Dependencies:\n    Value:\n    - networkx, matplotlib.pyplot, typing, logging, html, json, yaml, pathlib\n    Purpose: \"In the given Python code context ('save_output.py'), various dependencies play crucial roles to achieve its functionalities related to data processing, handling different file formats, generating graphs, logging exceptions, formatting HTML output, and managing paths within the directory structure. Here's a breakdown of each dependency's purpose and significance:\\n\\n1. networkx: This library is used in the 'create_code_graph' function to create code dependency graphs visually representing Python file relationships. NetworkX provides graph algorithms and data structures for complex networks analysis, which helps visualize how different files interact with each other through edges and nodes in this case.\\n\\n2. matplotlib.pyplot: Matplotlib is utilized within 'create_code_graph' as well to draw the generated graphs from code dependencies into PNG images stored in an output directory. It offers a Python 2D plotting library that supports creating publication-quality figures in a variety of formats, including SVG, PDF, PS, etc., making it suitable for saving graph visualizations.\\n\\n3. typing: Although not explicitly used in the given code snippet, 'typing' is a built-in Python module starting from version 3.5 to assist in specifying variable types hinting which complements readability and enhances code docstring functionality (added after v3.9). However, within the defined context, it doesn't seem to be employed for any specific task.\\n\\n4. logging: This standard Python library is utilized across multiple functions like 'convert_json_to_html', 'combine_json_files', 'create_code_graph', and 'save_python_data' methods for capturing runtime issues. Logging records crucial messages indicating error sources while running operations like reading files or creating graphs, enabling developers to trace errors efficiently during debugging.\\n\\n5. html: This dependency is primarily employed in the 'convert_json_to_html' function where it transforms JSON files into HTML format. It creates table structures preserving whitespaces and formatting JSON data as readable HTML content for better human understanding of dataset structure.\\n\\n6. json: Widely used throughout the code, 'json' is a Python standard library handling JSON encoding/decoding operations in functions like 'read_file', 'write_file', and 'combine_json_files'. It loads JSON files as dictionaries ('read_file'), converts them back to string format while writing into files ('write_file') or performs miscellaneous operations such as generating HTML content from JSON data.\\n\\n7. yaml: Another standard Python library, 'yaml' handles YAML loading and dumping in functions like 'read_file', 'write_file', and 'combine_json_files'. It parses YAML files into Python objects ('read_file') or writes them back after modifications ('write_file'). Additionally, it's involved in generating HTML content from JSON data ('convert_json_to_html').\\n\\n8. pathlib: This module is essential across various functions for handling file paths as Path objects (e.g., 'Path()'). It simplifies dealing with filesystem paths by providing Pythonic ways to work with OS-independent path manipulations like joining, splitting, and relative/absolute references in the codebase.\\n\\n9. html module's 'escape' function appears only within 'convert_json_to_html'. It encodes special characters (like '<', '>', etc.) into HTML entities ('&lt;', '&gt;') to ensure safe rendering of string data without disrupting HTML structure while generating HTML tables from JSON files.\\n\\n10. Lastly, the built-in function 'open()' implicitly depends on encoding support for reading and writing file contents in multiple functions but isn't explicitly mentioned as a separate library in the given list since Python standardizes its operation (I/O manipulations). Similarly,'encoded', an encryption independent string method to count bytes, may not be seen here as named entities, yet impacts tasks related to graph file saving ('create_code_graph'). \\n\\nIn summary, these dependencies contribute to different aspects of the codebase such as data processing, visualization, error handling, formatting output, file manipulation, encoding support, and improved language features ensuring a comprehensive documentation generation pipeline for Python files along with dependency graphs.\"\n  Functions:\n    Value:\n    - read_file, write_file, convert_json_to_html, preserve_spacing, combine_json_files, create_code_graph, save_python_data\n    Purpose: \"In the given context of 'save_output.py' Python file, the specified set of functions ('read_file', 'write_file', 'convert_json_to_html', 'preserve_spacing', 'combine_json_files', 'create_code_graph', and 'save_python_data') hold significant roles to accomplish complex data manipulation and formatting tasks for various input file formats such as JSON, YAML, HTML, Python code dependencies graphs generation, along with documentation organization.\\n\\n1. read_file(file_path): This function reads content from given files based on their extensions (JSON or YAML) stored at a particular path and returns the data in dictionary format for further processing. It helps initiate the workflow by extracting relevant information from input files.\\n\\n2. write_file(data, file_path): After manipulating data within the program, this function writes the modified content back into JSON or YAML files at specified locations, ensuring proper formatting is maintained based on extensions.\\n\\n3. convert_json_to_html(directory): Primarily responsible for transforming JSON files from a chosen directory to HTML format and organizes data within HTML tables. The process adds structure while retaining spaces for improved readability and understanding during representation in the HTML file contents.\\n\\n4. preserve_spacing(text, tab_width): It is an auxiliary function used within 'convert_json_to_html' to maintain whitespaces and tabs in text strings without losing their original formatting while converting JSON files into HTML format. This preservation helps represent structured data in a human-readable manner during presentation.\\n\\n5. combine_json_files(directory, html, questions): This significant function combines multiple JSON files from specified directories to generate distinct output formats ('instruct.json', 'sharegpt.json', 'document_code.json', and 'code_details.yaml') alongside optionally converting JSON files into HTML if instructed by the 'html' flag. It also filters out relevant data for Python code generation instructions from questions dictionary input.\\n\\n6. create_code_graph(file_details, base_name, output_subdir): Developing directed graphical depiction illustrating relationships amongst code chunks. With provided input dictionaries ('file_info'), it generates images representing Python file dependencies as PNGs in a designated output directory using NetworkX and Matplotlib libraries for visualization purposes.\\n\\n7. save_python_data(file_details, instruct_list, relative_path, output_dir): It collectively stores Python file data into YAML format ('file_info.yaml') and JSON files associated with instructions while saving generated code graphs as well. Handling exceptions is crucial to ensure a smooth process execution despite potential errors during graph creation. \\n\\nThese functions collaboratively perform intricate operations, converting and managing data from diverse formats for extensive documentation generation along with organizing output representations. Each function contributes toward effective structuring, conversion, merging of information from input files while addressing unique tasks within the codebase logic flow.  \\n\\nExplanation for abbreviated notation used ['('read_file', 'write_file', 'convert_json_to_html', 'preserve_spacing', 'combine_json_files', 'create_code_graph', 'save_python_data']: Each entry represents a function name enclosed within single quotes denoting their importance in the codebase, signifying key operations carried out by them within 'save_output.py'. The brackets ('()') encapsulate the entire list maintaining structure to express functionality names systematically in an enumerated sequence corresponding with descriptions mentioned above. These functions facilitate smooth functioning of data processing, handling varied input file types and forming relevant outputs through extensive manipulation. Their collective usage results in generating documentation and visualizations for Python code management. \\n\\nIn simpler terms: Each function listed plays a vital role in reading/writing JSON or YAML files ('read_file', 'write_file'), transforming JSON data into HTML format ('convert_json_to_html'), maintaining whitespace integrity ('preserve_spacing'), combining multiple JSON files ('combine_json_files'), creating code dependency graphs as images ('create_code_graph'), and saving Python file details along with managing exceptions during graph generation ('save_python_data').\"\n  read_file:\n    Inputs:\n      Value:\n      - file_path\n      Purpose: In the context given for the 'read_file' function within the Python code file 'save_output.py', the primary input object is referred to as 'file_path'. This input represents a Path object containing details about the location of the file that needs to be read. Its purpose is to identify the specific file the program will operate on. It plays a significant role in determining the type of data contained within it by extracting the suffix - indicating if it's either JSON or YAML - enabling further decisions about which parsing method ('json.load()' or 'yaml.load()') to be employed for converting the file content into a dictionary format. This input essentially acts as an anchor point where the operation starts within the function, allowing efficient handling of different data types while maintaining uniform output structure as a Python dictionary across both JSON and YAML files. Without proper identification through 'file_path', reading data efficiently or selecting the right approach for conversion might have been impossible resulting in misinterpretation of input formats during further manipulation. Therefore,'file_path' instantiates one of the critical factors shaping functionality within 'read_file'.\n    Calls:\n      Value:\n      - file_path.open, json.load, yaml.load\n      Purpose: \"In the context given for the function 'read_file,' the primary purpose of the mentioned calls is to retrieve data stored within files having JSON or YAML formats based on their file extension located at the specified path represented by 'file_path'. These calls play a crucial role in reading and parsing content from files into a usable Python dictionary format.\\n\\n1. 'file_path.open': This call opens the given file path for reading its contents. It is essential to access the data stored within the file for further processing in Python code. The path can contain different extensions indicating JSON or YAML formats due to conditional checking in line number 14 ('file_type = file_path.suffix[1:]').\\n\\n2. 'json.load': If the file extension is determined as JSON ('file_type == \\\"json\\\"'), this call from the json library loads the contents of the opened file into a Python dictionary format using json.load(). It helps read JSON files seamlessly for further manipulation within the program logic.\\n\\n3. 'yaml.load': When the file extension matches YAML ('file_type == \\\"yaml\\\"'), the call from yaml module's loader reads and parses the file contents into a Python dictionary using yaml.load(). This enables handling YAML files as well, ensuring flexibility in processing various data formats within the same function 'read_file'. \\n\\nIn summary, these calls enable reading data stored in different formats (JSON or YAML) from given paths and convert them into a unified dictionary format for further operations within the codebase. This uniformity simplifies handling diverse input files in the 'read_file' function of the provided Python module.\"\n    Variables:\n      Value:\n      - file_type, file_path\n      Purpose: \"In the 'read_file' function within the given Python code context of 'save_output.py', the variables 'file_type' and 'file_path' hold crucial roles to determine and process the input file format appropriately.\\n\\nThe purpose of 'file_path' is to represent the path pointing towards a specific file in the system where data resides. It acts as an input argument for the function 'read_file'. Inside the function, it gets opened using the '.open()' method with necessary permissions to read its contents. This variable plays a significant role in identifying the actual location of the JSON or YAML file that needs processing.\\n\\nOn the other hand, 'file_type' serves as an identifier for the file format extracted from 'file_path'. It captures the suffix after removing the leading dot ('.'), which represents either 'json' or 'yaml', indicating whether the input file is in JSON or YAML format. This information helps the function decide how to parse the data correctly - by using 'json.load()' for JSON files and 'yaml.load()' for YAML files, thereby ensuring correct interpretation of data stored in these formats. Hence, both variables collaborate to facilitate successful extraction of data from the input file while handling different file types efficiently. \\n\\nIn summary, 'file_path' specifies the location of the data source while 'file_type' denotes its associated format, making them vital components in successfully executing read operations within the 'read_file' function.\"\n    Returns:\n      Value:\n      - '{}, json.load(f), yaml.load(f, Loader=yaml.SafeLoader)'\n      Purpose: 'In the given context within the 'read_file' function, two different returns are associated with handling distinct file types - JSON or YAML formats. These returns aim to retrieve and process data from files depending on their extensions.\n        1. {'{}, json.load(f)' corresponds to reading a JSON file located at the specified path. Here, '{'{' indicates an empty dictionary initialization as a placeholder for holding the loaded JSON content. The actual data loading occurs through the built-in Python library 'json' using the 'json.load(f)' method where 'f' represents an open file handle from the given path. This return value represents parsed JSON data ready to be used further in the program flow.\n        2. The second part, 'yaml.load(f, Loader=yaml.SafeLoader)', focuses on loading YAML files. Similar to the previous case, it initializes an empty dictionary as a placeholder ('{}') but uses the 'yaml' library with its 'Loaders' feature set to 'yaml.SafeLoader'. This loader ensures safe parsing of YAML content from the file handle 'f'. The returned data represents successfully read YAML data from the given path.\n        Together, both scenarios enable 'read_file' functionality to interpret various file formats seamlessly and provide necessary data structures (JSON or YAML dictionaries) based on their respective extensions detected by the '.suffix[1:]' operation in the function definition. This flexibility allows handling diverse input files within a unified manner throughout the codebase.'\n  write_file:\n    Inputs:\n      Value:\n      - data, file_path\n      Purpose: \"In the context given for the 'write_file' function inside the code module 'save_output.py', the inputs are a tuple containing two variables - 'data' and 'file_path'. These inputs play crucial roles during the process of writing data into either JSON or YAML files based on their extensions.\\n\\nThe 'data' parameter holds a Python dictionary holding structured information ready to be written inside a target file. It carries significant contents like key-value pairs extracted from original sources that will finally end up being stored in the output file after serialization by 'write_file'. On the other hand, 'file_path' is a Path object representing the precise location where the serialized data should be saved - either as JSON or YAML depending on the extension identified through suffix extraction ('file_path.suffix[1:]'). This Path object ensures accurate navigation within the file system for writing operations while keeping it cross-platform compatible due to Python's 'pathlib'. As an output directory reference, 'file_path' guides the write function accurately and maintains robustness when handling various file formats and paths. Together, these inputs ('data', 'file_path') ensure smooth data serialization into target files using appropriate methods such as json.dump() or yaml.SafeDumper within the 'write_file' functionality. \\n\\nWith their combination in 'write_file(data: Dict, file_path: Path) -> None', they work collectively to write serialized dictionary data into desired formats while handling encoding and formatting aspects effectively.\"\n    Calls:\n      Value:\n      - file_path.open, json.dump, yaml.dump, float\n      Purpose: \"In the `write_file` function within the given context of 'save_output.py', these objects hold crucial purposes for handling different data saving processes based on file type ('json' or 'yaml') while opening appropriate file pointers for writing output contents efficiently. \\n\\n1. `file_path.open():` Opens the provided `file_path` with specified mode (either read or write depending on the situation) to interact with the actual data storage medium (like a file). This call enables reading or writing access in `write_file`.\\n\\n2. `json.dump():` Used when saving contents as 'json' files after converting Python dictionary data into JSON format. It serializes the given data structured by parameters and saves it within an open file represented by 'file', enabling simple persistence for easy transportability among applications that consume JSON format inputs.\\n\\n3. `yaml.dump():` Applied when saving contents as 'yaml' files after converting Python dictionary data into YAML format using SafeDumper from yaml library. This call ensures safe loading of complex Python objects while writing the structured data to an open file pointer ('file'). It maintains compatibility with YAML syntax and semantics.\\n\\n4. `float('inf'):` Appears in the context of `yaml.dump()`, setting 'width' parameter to infinite value for unlimited width during YAML formatting. This ensures no truncation of data while writing YAML files, allowing preserving original structure and readability without losing information during serialization. \\n\\nIn summary, these calls in `write_file` facilitate writing data into desired formats (JSON or YAML) with necessary conversions using relevant libraries (json and yaml), file handling (open function from pathlib), providing easy accessibility of processed Python data as required for subsequent usages across distinct programs consuming diverse format requirements. Their synchronization lets the program ensure both JSON ('json.dump()') and YAML ('yaml.dump()') formatting options in a single `write_file` function.\"\n    Variables:\n      Value:\n      - data, file_type, file_path\n      Purpose: 'In the context given for the function 'write_file,' the significant variables are data, file_type, and file_path. Their purposes and roles within this function are as follows:\n        1. data: This variable represents the dictionary content that needs to be written into an output file. It acts as input information carrying key-value pairs which will be saved in either JSON or YAML format depending on the file extension detected through file_type. The dictionary 'data' acts as crucial information being processed and stored in the targeted files by 'write_file.'\n        2. file_type: This variable identifies the file type of the input path determined by its suffix (i.e., removing the last character from Path object extension). It helps differentiate between JSON and YAML while deciding which specific module to utilize for saving the content in write_file - json or yaml loader. Based on 'file_type,' appropriate methods like json.dump() or yaml loading options are chosen accordingly.\n        3. file_path: This variable represents the path where the data needs to be written as an output file after processing. It is a Path object containing encoding settings and other relevant details required for opening and saving operations in write_file function call, creating destination for final stored JSON or YAML file according to given dictionary data from 'data'.\n        In the write_file() function execution context, data holds the content to be persisted, file_type helps identify the file format for handling loading/dumping logic accordingly while file_path defines the destination where the processed information will be stored as output. Together they facilitate saving the given dictionary data into a new JSON or YAML file according to its type.'\n  convert_json_to_html:\n    Inputs:\n      Value:\n      - directory\n      Purpose: \"In the context given for the 'convert_json_to_html' function within the 'save_output.py' code module, the primary input object is referred to as 'directory', which represents a string path denoting the target directory containing JSON files that need conversion into HTML format. This method serves as an integral part of the combine_json_files functionality where it transforms these JSON files into HTML representations with preserved whitespaces and structured tables showcasing dataset contents in an organized manner.\\n\\nThe 'directory' input holds significant value as it triggers the processing loop iterating through all JSON files within this path, reading their content using read_file(), constructing HTML templates with necessary tags like '<html>', '<head>', '<body>', '<table>', and so on to preserve each file's data layout while generating tabular rows based on JSON entries. Each row corresponds to a dictionary entry in the dataset, ensuring consistent spacing for keys and values with the help of 'preserve_spacing()'. Once the HTML content is generated for all JSON files within the directory, it saves them by appending '.html' extension to their original names using relative Path objects derived from 'directory'. Thus, 'directory' acts as a catalyst driving the conversion process and shaping the output format for better human readability. \\n\\nTo summarize, in 'convert_json_to_html', 'directory' is an essential input that triggers HTML conversion for JSON files stored within it to facilitate comprehension of dataset structures by creating well-organized HTML tables from their contents.\"\n    Calls:\n      Value:\n      - text.replace(, &nbsp;').replace, text.replace, Path(directory).rglob, Path, read_file, len, dataset[0].keys, round, escape, str, preserve_spacing, value.replace, row_parts.append, html_rows.append, .join, json_file.with_suffix, open, file.write, logging.info\n      Purpose: \"In the `convert_json_to_html` function within the given Python context, several key operations contribute to converting JSON files in a directory into HTML format. The purpose of these calls can be summarized as follows:\\n\\n1. (\\\"text.replace(, &nbsp;').replace and text.replace: These calls are part of `preserve_spacing()`, which ensures spaces and tabs remain intact while converting data for HTML representation. It replaces standard space characters with non-breaking space entities ('&nbsp;') and handles tabulations equally to preserve original formatting when rendering JSON files as HTML tables later on.\\n\\n2. Path(directory).rglob: This function iterates through all the files within a given directory while focusing solely on \\\"*.json\\\" types (since this resides inside convert_json_to_html) and facilitates traversal in managing and handling these specific file formats for HTML conversion.\\n\\n3. read_file(): Used to extract dataset content from JSON files into a dictionary format as part of processing each discovered json_file. This function identifies the file type (JSON or YAML) based on its suffix and loads data accordingly using json.load() or yaml.load().\\n\\n4. len: It calculates the number of columns in an individual dataset row to determine column width for HTML table creation.\\n\\n5. round: This built-in function is used to round a floating value returned by dividing 100 by the number of columns extracted from dataset[0].keys() (number of keys represents column count) into an integer with two decimal places, ensuring accurate percentage distribution in HTML layout planning.\\n\\n6. escape(): It escapes special characters within string values to be safely rendered in HTML contexts without causing errors or issues. In this case, it handles string manipulation for JSON dataset entries before converting them to HTML format.\\n\\n7. row_parts.append and html_rows.append: These statements construct the rows (table rows) piecewise during HTML generation from individual JSON objects' key-value pairs by forming proper table structure in HTML syntax.\\n\\n8. .join: This Python string method concatenates elements of lists 'html_content', 'html_rows', and code_filename list into one large string format suitable for file saving operations ahead.\\n\\n9. json_file.with_suffix(\\\"\\\"): This call changes a JSON filename extension temporarily to convert it back into original form after removing \\\".json\\\" while creating an HTML version of the same file with updated content later on.\\n\\n10. open: A standard Python function for opening files in read/write mode as required by `file.write()` and other similar operations within the context.\\n\\n11. file.write(): Writes generated HTML string content into the corresponding filename with '.html' extension created via json_file.with_suffix(). This writes newly converted HTML representations replacing original JSON files.\\n\\n12. logging.info(): Provides status updates about file saving success or failure during HTML conversion processes by printing relevant messages to log files for debugging purposes. \\n\\nIn summary, `convert_json_to_html` converts JSON files into HTML format preserving whitespaces and creating tabular representations of dataset contents in an organized manner using the combined effect of listed functions. This functionality makes visualizing datasets more manageable without compromising initial structure while producing easier human comprehensible representations for later review.\"\n    Variables:\n      Value:\n      - value, html_content, html_rows, row_parts, directory, column_count, dataset, column_width, html_file_path\n      Purpose: \"In the context of the 'convert_json_to_html' function within the given Python code ('save_output.py'), these listed objects hold crucial roles for transforming JSON files into HTML format with structured tables representing their contents. Their purposes and significance are explained as follows:\\n\\n1. 'value': Temporarily stores escaped string values obtained from JSON data while generating HTML content. It ensures proper HTML encoding when rendering data inside <td> tags within the table cells.\\n2. 'html_content': Accumulates overall HTML structure, forming an organized table starting from its header (<thead>, body (<tbody>) including <table>, <tr>, <th> tags representing keys as columns headers along with <td> for data values from JSON files. It finally defines the entire HTML output.\\n3. 'html_rows': An intermediate list that holds constructed <tr> strings containing table rows formed by iterating through each entry in dataset. Each row consists of escaped value cells corresponding to JSON keys.\\n4. 'row_parts': Short-lived sublist formed in row_parts generation mechanism while structuring one particular <td> HTML row during 'for item in purpose_data' loop iteration. It holds opening <tr>, cell values as <td> tags with preserved whitespaces and line breaks ('<br/>').\\n5. 'directory': Represents the input directory path where JSON files are located for conversion into HTML format. This variable is used to access JSON files during processing.\\n6. 'column_count': Calculated by counting keys in the first JSON entry dataset[0].keys(). It determines column width percentage allocation in HTML table styling.\\n7. 'dataset': A collection of dictionaries obtained from reading individual JSON files using read_file() function inside a loop over Path(directory).content(). Each dictionary represents one JSON file data to be converted into HTML format.\\n8. 'column_width': Derived by dividing 100 with column_count and rounded to two decimal places, this variable defines width percentage assigned to each table column for even distribution in the final HTML output.\\n9. 'html_file_path': A Pathlib object representing the generated HTML file name after appending '.html' suffix to original JSON filename. It stores the destination path where converted HTML content will be saved after writing operations. \\n\\nThese variables work collaboratively within 'convert_json_to_html' function to read JSON files, create an organized table structure in HTML format, and save it as a new file with '.html' extension in the specified directory. This conversion ensures better human-readability of dataset contents compared to raw JSON data.\"\n    Returns:\n      Value:\n      - text.replace(, &nbsp;').replace('\\\\t, &nbsp;' * tab_width)\n      Purpose: 'In the given context, within the \"convert_json_to_html\" function, there is an inner helper method called \"preserve_spacing\" not explicitly mentioned before but relevant to its primary operation. This method replaces original spaces (\" \") with HTML entities \"&nbsp;\" and tabs (\\t) with multiple \"&nbsp;\" as per specified tab width (default is 4). The main purpose of this transformation is to maintain whitespaces while converting JSON files into HTML format without losing their structure when rendering tables.\n        The significant returns from the `convert_json_to_html` function are as follows:\n        1. An intermediate string variable named \"html_content\": This string holds the entire HTML structure with table tags, headers representing keys from JSON objects as columns, and rows containing escaped values from each entry. It forms a well-structured HTML representation of JSON data for readability after replacing spaces with non-breaking spaces (\"&nbsp;\") and tabs with tab width number (\"&nbsp;\" * tab_width) times repetitions to maintain spacing when rendered as a table.\n        2. An array of HTML file paths named \"html_rows\": This list comprises rows formed by splitting each JSON entry into separate parts for each cell value creation within the table body section of HTML content generation. Each row is appended with \"<td>\" tag around escaped values before adding \"</tr>\" to close a row in HTML format.\n        Both these returns are used to build the final HTML representation within the main function \"convert_json_to_html\" by concatenating \"html_content\" with all elements from \"html_rows,\" eventually writing them into new files with modified extensions (from \".json\" to \".html\"). This way, they aid in translating JSON files' structure into visually comprehensible HTML tables containing the data from those JSON entries. Together, they achieve proper visualization of dataset contents while preserving whitespaces and tabulations during conversion.'\n  preserve_spacing:\n    Inputs:\n      Value:\n      - text, tab_width\n      Purpose: \"In the given context, the 'preserve_spacing' function is called within the 'convert_json_to_html' method during HTML generation from JSON files. Its purpose is to ensure the proper maintenance of spaces and tabs when transforming data into HTML format for presentation. When dealing with nested data in JSON files that might have white spaces or tabs within string values, these characters may get converted into different entities like '&nbsp;' (non-breaking space) during translation. To preserve their original appearance in the HTML output, this function plays a crucial role.\\n\\nThe two inputs for 'preserve_spacing' are as follows:\\n1. 'text': This input represents the string value from JSON data that needs to have its whitespaces retained after conversion. It goes through transformations like replacing spaces with non-breaking spaces ('&nbsp;') and tabs with multiple non-breaking spaces ('&nbsp;'*tab_width) before inserting '<br/>' for newline characters ('\\\\n'). Thus, ensuring whitespaces in values remain visually identical in the generated HTML output as they appeared initially within JSON data.\\n2. 'tab_width': A predefined number denoting how many spaces should represent each tab character ('\\\\t') during translation. In simpler terms, this determines how many non-breaking spaces should be used to replace a single tab encountered in the input string while converting it into HTML format. \\n\\nBoth inputs together contribute towards preserving whitespaces and tabs in JSON values while generating HTML tables from JSON files within the 'convert_json_to_html' function execution flow.\"\n    Calls:\n      Value:\n      - text.replace(, &nbsp;').replace, text.replace\n      Purpose: 'In the given context, within the function \"convert_json_to_html\" of the code module \"save_output.py,\" there is a method called \"preserve_spacing\" that deals with maintaining spaces and tabs in text while converting JSON files into HTML format. This function plays an essential role when generating HTML tables representing the dataset structure by ensuring whitespaces are retained without being collapsed or converted to line breaks during conversion. The relevant calls made inside this method are related to replacing specific characters within a given text input (\"text\"):\n        1. \"text.replace(\" \", \"&nbsp;\") - It substitutes standard spaces in the input string with HTML entities \"&nbsp;\" which preserves white space appearance while converting JSON files into HTML format where spaces will appear as non-breaking spaces on webpages. This maintains proper table cell formatting when rendering tables within HTML output.\n        2. \"text.replace(\"\\t\", \"&nbsp;\" * tab_width)\" - Here, it substitutes tab characters with a specified number of \"&nbsp;\" repeated as many times as the given \"tab_width\" value (defaulted to 4). This preserves tabs as well during conversion and helps keep the table formatting consistent with other spaces when converting JSON files into HTML tables.\n        Hence, in `preserve_spacing`, both replacements aim to protect original whitespace appearances (spaces and tabs) while handling text manipulation during HTML generation from JSON data. This way, the HTML output retains its readability for better comprehension even after being transferred digitally into web page content from original dataset tables or grids structured as JSON files. These call modifications enable HTML conversions that ensure original tabulations are visually maintained in converted HTML format without getting lost during translation.'\n    Variables:\n      Value:\n      - text, tab_width\n      Purpose: \"In the given context, the function 'preserve_spacing' is nested within the 'convert_json_to_html' method of the 'save_output.py' file during HTML conversion for JSON files. It specifically focuses on maintaining spaces and tabs in the text provided as its input while generating HTML content from JSON data.\\n\\nThe two variables involved in this function are 'text' and 'tab_width'. \\n\\n1. 'text': This variable represents a string value containing text extracted from a JSON file that needs to be converted into an HTML format with preserved whitespaces. In other words, it carries crucial information necessary for proper representation within the generated HTML table cells during conversion. It will have values such as JSON keys and their corresponding JSON object values after escaping special characters using 'escape()' function call.\\n\\n2. 'tab_width': This variable holds an integer value representing the number of spaces equivalent to one tab character in HTML encoding. When generating HTML tables, it helps adjust column widths proportionally for better visual alignment while ensuring readability. It assists in converting tabs into multiple HTML non-breakable space characters ('&nbsp;') as per the specified tab width value. This variable allows customization of indentation levels within table cells to match JSON structure aesthetically in HTML output. \\n\\nIn summary, both 'text' and 'tab_width' variables play significant roles in preserving whitespaces (spaces and tabs) during JSON-to-HTML conversion by ensuring proper representation of data while generating HTML tables from JSON files within the codebase.\"\n    Returns:\n      Value:\n      - text.replace(, &nbsp;').replace('\\\\t, &nbsp;' * tab_width)\n      Purpose: \"In the given context, the function `preserve_spacing()` lies within the inner `convert_json_to_html()`, which transforms JSON files into HTML format while preserving whitespaces and tabs during the process. This particular portion of code snippet from `preserve_spacing()`, i.e., \\\"(\\\"text.replace(, &nbsp;').replace('\\\\\\\\\\\\\\\\t, &nbsp;' * tab_width)\\\", refers to creating a modified version of text values found in JSON files where spaces are replaced with HTML non-breaking space character ('&nbsp;') and all tabs with an equivalent number of non-breaking spaces equal to `tab_width`. This ensures that the original whitespace formatting is maintained when converting data into HTML tables within the generated web pages, providing readability in representing the JSON structure clearly. Thus, its two primary returns - first replace occurrences of a comma after \\\"text.replace()\\\" with '&nbsp;' and secondly replace all tab characters ('\\\\\\\\t') with `tab_width` number of non-breaking spaces ('&nbsp;'). Both actions contribute to preserving the original formatting while converting JSON data into HTML format for better visualization in tables within HTML files. \\n\\nIn summary, `preserve_spacing()` plays a crucial role in retaining whitespaces and tabs during HTML conversion within the codebase by substituting them with HTML entities to ensure proper representation of JSON content in web pages generated from JSON files. Each operation improves the visualization of JSON structure within tables without altering the actual text contents.\"\n  combine_json_files:\n    Inputs:\n      Value:\n      - directory, html, questions\n      Purpose: \"In the context given for the 'combine_json_files' function within the 'save_output.py' code module, the three inputs hold significant roles in organizing and processing JSON files from a specified directory while generating desired output files. They contribute to consolidating data structures needed for Python code generation tasks.\\n\\n1. 'directory': This input represents the string path indicating the folder containing various JSON files that need to be combined and processed further. It acts as the source location where all necessary data resides for further manipulation within the function. The directory serves as a foundation for combining different JSON files into distinct targets such as instruct, training, sharegpt, document_code files alongside HTML versions (if desired), as well as retrieving filter-based purposes through question instructions (contained in 'questions').\\n\\n2. 'html' (Boolean): This input denotes whether to convert JSON files into HTML format after processing them into the specified directory during data combination steps. It influences whether HTML conversion is enabled or skipped by checking this flag within the function execution flow. If set to True, it will proceed with transforming JSON files into HTML tables containing dataset structures for better visual representation as previously explained in the 'convert_json_to_html()' call within 'combine_json_files()'. Otherwise, the operation will be omitted if html=False.\\n\\n3. 'questions': This parameter represents a dictionary comprising Human instructions associated with particular IDs related to specific questions like file_purpose in the dataset context. Particularly, it helps identify relevant data required for Python code generation instructions by extracting purpose_question from this dictionary object ('purpose_question = [item[\\\"text\\\"] for item in questions if item[\\\"id\\\"] == \\\"file_purpose\\\"][0]'). Questions input serves a vital role in isolating context-specific guidelines while organizing instruct data from the JSON files collected within 'combine_json_files()'. \\n\\nTo sum up, 'directory', 'html', and 'questions' together define how to process data present inside a specified directory ('directory'), whether to convert JSON files into HTML format ('html') during operation, and aid in filtering purposeful instructions ('questions') related to Python code generation from the dataset for generating required output files like instruct.json, sharegpt.json, document_code.json, code_details.yaml along with handling JSON files transformation if necessary (HTML conversion). Each input contributes differently yet harmoniously to perform complex operations in combining JSON data structures while adhering to the specified function goal of 'save_output.py'.\"\n    Calls:\n      Value:\n      - logging.info, Path(directory).rglob, Path, read_file, combined_data.extend, json_file.relative_to(directory).with_suffix(').as_posix().replace, json_file.relative_to(directory).with_suffix(').as_posix, json_file.relative_to(directory).with_suffix, json_file.relative_to, code_filename.append, write_file, purpose_question.split, item['instruction'].startswith, enumerate, len, conv['value'].encode, open, f.read, code_details.append, f.write, \\\\n'.join, convert_json_to_html\n      Purpose: \"In the `combine_json_files` function within the given context, various object calls serve specific purposes advancing the process of combining JSON files into targeted formats while generating auxiliary data files. Let's elaborate on each one:\\n\\n1. logging.info: This is used for informational logging messages throughout the function to keep track of actions like reading files or creating graphs. It helps in debugging and understanding the workflow progression.\\n2. Path(directory).rglob: It scans a given directory recursively searching for matching file patterns specified by wildcards ('*.json' here) to process JSON files within it.\\n3. Path: This class is utilized for handling file paths throughout the function providing convenient methods like manipulating path components and operations.\\n4. read_file: Loads individual JSON or YAML files into a dictionary format based on their extension for further processing inside 'combine_json_files'.\\n5. combined_data.extend: Merges all data loaded from multiple JSON files into one list called 'combined_data' to create the final 'instruct.json'.\\n6. json_file.relative_to(directory).with_suffix(').as_posix().replace & json_file.relative_to(directory).with_suffix(').as_posix: These manipulate JSON file paths within the directory for generating filenames without extensions and replacing them with desired suffixes like 'instruct', 'sharegpt', or 'document_code'.\\n7. json_file.relative_to(directory).with_suffix & json_file.relative_to: Extract relative paths of JSON files for later use in saving corresponding output files with proper names.\\n8. code_filename.append: Collects filename strings related to code files within 'document_code' list used later to create relationships between them in the 'sharegpt.json'.\\n9. write_file: Saves combined data as JSON or YAML files after processing in specified formats ('instruct.json', 'document_code.json', 'sharegpt.json'). It completes forming intermediate outcomes for later tasks like generating code dependencies or graphs conversion to HTML (optional).\\n10. purpose_question.split: Splits a combined instructional string into parts separating fixed text from variable filename placeholders ('{filename}') for filtering relevant data related to Python code generation instructions.\\n11. item['instruction'].startswith: Checks if an instruction starts with the filtered question text ('purpose_question'), segregating applicable data for 'document_code'.\\n12. enumerate: Iterates combined_data list alongside indices generating tuples containing index and corresponding JSON object for further processing in 'sharegpt' creation.\\n13. len(conv['value'].encode('utf-8'): Determines number of bytes of each conversation entry within the GPT conversation triplet needed to set edge weight attribute ('nbytes') while generating 'sharegpt'.json.\\n14. open & f.read: Interactively read '.code_details.yaml' content into 'file_data'. Note code details read is an off-line activity performed explicitly inside except clause while calling the 'combine_json_files' (if errors arise while accessing 'file').\\n15. code_details.append & f.write: Appends read '.code_details.yaml' content into a string named 'output_text', then writes it to a new file in the output directory ('code_details.yaml').\\n16. convert_json_to_html(directory): Invoked conditionally if HTML conversion is requested, converting JSON files into HTML tables representing dataset structure for better human readability. \\n\\nThese calls work collaboratively within `combine_json_files` to manage data organization and generate auxiliary files while preparing groundwork for advanced tasks like code dependency graph generation through 'create_code_graph'. They ensure smooth progression from reading/manipulating input JSONs toward the end product consisting of combined data representations alongside graph visualizations if necessary. This approach promotes clarity and usability within the larger context of file processing pipeline.\\n```\"\n    Variables:\n      Value:\n      - purpose_data, file_data, html, questions, purpose_question, directory, code_details, cleaned_name, sharegpt, skip_files, system_value, nbytes, document_code\n      Purpose: \"In the context of the 'combine_json_files' function within the given Python code module 'save_output.py', these listed variables hold specific roles contributing to its overall functionality:\\n\\n1. purpose_data: This variable temporarily stores filtered data from combined JSON files based on a common prefix with the instruction related to generating Python code (\\\"file_purpose\\\" ID in questions dictionary). It helps identify relevant entries for creating 'document_code' list containing required information for Python code generation.\\n\\n2. file_data: Initially read JSON content during loop execution through Path objects representing files within a directory. It holds intermediate data before saving it into target files like \\\"instruct.json\\\" and \\\"sharegpt.json\\\".\\n\\n3. html (Boolean): Determines whether HTML conversion should be performed on JSON files or not as an input argument to the function. If True, it triggers the conversion process of JSON files to HTML format within the directory.\\n\\n4. questions: A dictionary containing IDs ('key-value') pairs where values represent human instructions for instructing AI model interactions in the Python code generation task. The \\\"file_purpose\\\" ID extract is crucial here for finding suitable instructions linked to create relevant entries for generating output documents like \\\"instruct.json\\\".\\n\\n5. purpose_question: Derived from 'questions', this variable isolates a string prefix until \\\"{filename}\\\" which assists in filtering relevant JSON entries related to Python code generation instructions within combined_data list preparation.\\n\\n6. directory: Represents the path where input JSON files are located. It is essential for accessing, reading and manipulating the dataset as well as creating target output files with required combinations of data.\\n\\n7. code_details: Initially empty but grows during execution to store generated content from reading \\\"*code_details.yaml\\\" files within the directory. This variable holds combined data after appending each file's content line by line.\\n\\n8. cleaned_name: A temporary string created from JSON file names excluding extensions (\\\"*.json\\\") while generating relative paths for saving files like \\\"document_code.json\\\". It helps construct output filenames without any confusion about extension differences.\\n\\n9. sharegpt: An intermediate list holding conversation details (system prompt, human input, AI response as 'gpt') for each entry in document_code list during the creation of 'sharegpt.json'. This variable stores metadata related to Python code generation using GPT model interactions.\\n\\n10. skip_files: A set containing file names to be skipped while iterating through JSON files (\\\"instruct.json\\\", \\\"sharegpt.json\\\") as they are already generated during the combination process. It avoids redundant reading and writing operations.\\n\\n11. system_value: A constant string ('Use the provided documentation to output the corresponding Python code') serving as a prompt for AI interactions within 'sharegpt' list generation in GPT model conversations.\\n\\n12. nbytes: Initially zero but grows during loop execution by adding encoded lengths of human prompts appended in each edge dictionary ('nbytes' key). It is later stored in JSON metadata for tracking edge sizes in code dependency graphs creation.\\n\\n13. document_code: A list containing Python code details extracted from purpose_data with specific keys (\\\"document\\\" and \\\"code\\\") which represents relevant pairs required to save as \\\"document_code.json\\\". \\n\\nEach variable mentioned above plays a unique role within the combine_json_files function to execute different steps involved in managing dataset combinations, reading metadata, creating necessary output files (JSON, HTML, YAML), and generating Python code graphs if needed. Their significance lies in streamlining complex operations while maintaining organization and efficiency throughout the process.\"\n    Returns:\n      Value:\n      - '{'instruct_list': combined_data}'\n      Purpose: \"In the given context, the `combine_json_files` function plays a crucial role in consolidating data from multiple JSON files within a specified directory into targeted output formats such as \\\"instruct.json,\\\" \\\"sharegpt.json,\\\" and \\\"code_details.yaml.\\\" Its primary return value is a dictionary containing the combined data of processed JSON files with the key 'instruct_list' pointing to this consolidated content named as 'combined_data'. Each of these returned components holds specific functionalities in achieving overall organizational objectives within the codebase:\\n\\n1. 'instruct_list': This return value represents a list comprising merged contents from input JSON files after filtering and structuring them according to certain criteria like matching file instructions related to Python code generation queries. This aggregated information becomes vital for further operations such as saving as instruct.json file, facilitating code analysis and utilization by external applications or systems requiring this combined dataset.\\n\\n2. Apart from 'instruct_list', the function performs other tasks silently in the background like generating \\\"sharegpt.json\\\" and \\\"document_code.json,\\\" creating \\\"code_details.yaml\\\" file, optionally converting JSON files to HTML format if instructed through the `html` parameter. However, these outputs are not explicitly returned as separate values but are generated within the function scope for further internal processing or external usage when required.\\n\\n   a. 'sharegpt.json': This output stores system prompts, user requests followed by corresponding Python code produced after following those instructions taken from \\\"instruct.json,\\\" indicating the dialogue between human queries and AI responses. It also includes metadata related to file sizes in bytes for each generated code snippet.\\n   b. 'document_code.json': This output represents a list of Python code files along with their corresponding documentation, creating a connection between input data and its resulting output code.\\n   c. 'code_details.yaml': It stores details about the code dependencies in YAML format, which helps visualize relationships among different Python files within the dataset.\\n   d. HTML conversion (if `html` parameter is True): This functionality converts JSON files into interactive tables facilitating readability while providing better user experiences during inspection. While this feature is part of the same function yet doesn't explicitly appear as a returned object but is invoked when `html=True`. \\n\\nThus, primarily focusing on '{\\\"instruct_list\\\": combined_data}', we can conclude that it encapsulates the consolidated dataset after processing JSON files according to specific criteria mentioned earlier. Other outputs are generated within the function scope for downstream operations or user convenience but not directly returned as separate values from `combine_json_files`.\"\n  create_code_graph:\n    Inputs:\n      Value:\n      - file_details, base_name, output_subdir\n      Purpose: \"In the context given for the function 'create_code_graph,' the inputs 'file_details,' 'base_name,' and 'output_subdir' hold significant roles during its execution. These inputs are passed when invoking this particular method to generate Python code dependency graphs as PNG images within an output directory using NetworkX and Matplotlib libraries.\\n\\n1. 'file_details': This input represents a dictionary containing comprehensive information about the Python file being processed, specifically focusing on its code structure and relationships with other files in terms of inputs and outputs. Within the function create_code_graph(), it's used to fetch the necessary details for generating the code graph representation such as nodes ('file_info[\\\"code_graph\\\"]'). It provides fundamental context to plot relationships accurately based on extracted file attributes like source-target interactions or data flows within Python codes.\\n\\n2. 'base_name': This parameter primarily functions as a identifier and holds string information obtained typically from Path object representing an individual processed Python file. Within the function, 'base_name' creates distinct image file names to save corresponding generated graph files maintaining the reference to its original filename. For instance, if processing 'myfile.py', the output graph image will be saved as 'myfile.entire_code_graph.png'.\\n\\n3. 'output_subdir': It denotes an existing or newly created subdirectory path where all resulting graph images should be stored after generation. The method 'create_code_graph()' utilizes this input to save generated graphs as PNGs in the specified location. This ensures organized storage of visual representations for each processed Python file within a particular output directory structure, allowing easy accessibility and understanding of code dependencies across multiple files in the project or dataset. \\n\\nTogether, these inputs facilitate the generation process of meaningful graphical representations to visually exhibit Python code relationships within a project, assisting developers in analyzing complex code structures and identifying potential issues more efficiently. They provide contextual information necessary for creating accurate visualizations while maintaining file-specific identities and organized storage within an output directory.\"\n    Calls:\n      Value:\n      - nx.DiGraph, G.add_nodes_from, G.add_edge, edge.items, plt.figure, nx.spring_layout, nx.draw, G.edges, label.append, .join, \\\\n'.join, nx.draw_networkx_edge_labels, plt.savefig, plt.close, logging.error\n      Purpose: \"In the `create_graph_code` function within the given context of 'save_output.py', several notable library functions are called to create visualizations representing Python file dependencies as graphs saving them as PNG images. Their purpose and significance can be explained as follows:\\n\\n1. nx.DiGraph(): This creates an empty Directed Graph object from networkx library named G, which will store nodes and edges for constructing the code dependency graph later on.\\n2. G.add_nodes_from(file_details[\\\"file_info\\\"][graph_type][\\\"nodes\\\"]: It adds all nodes extracted from 'file_info' dictionary under given 'graph_type' key as vertices to our Graph object G.\\n3. G.add_edge(): This method connects two nodes in the graph by defining edges with their respective attributes related to source and target files using input data provided under 'edges'. It enhances G representing complex code flow relations among files more effectively.\\n4. edge.items(): It extracts key-value pairs for current edge during construction making additional node link attributes more easily accessible inside graph definition loop cycles.\\n5. plt.figure(figsize=(20, 20)): Initiates a new Matplotlib plot with custom dimensions of width 20 and height 20 inches for displaying our code graph visualization in better clarity.\\n6. nx.spring_layout(G): This function calculates node positions using spring algorithm to arrange nodes aesthetically within the graph without edge crossings, improving readability.\\n7. nx.draw(): Renders graphical representation of G on the Matplotlib canvas with specified options like labels as bold text, node shapes as small squares ('s'), size 500 pixels for nodes, edges width as 1 pixel, arrowsize as 12 pixels, and edge labels font size as 6 pixels.\\n8. label.append(): Appends strings to a list representing multi-line labels for each graph edge showing input requirements at source node side ('Inputs: ') and return types at target node side ('Returns: '). These will be joined together using '\\\\n' later in one string format for display on edges.\\n9. '.join(label)': Joins strings in a list into a single string separated by newline character '\\\\n'. This creates multi-line labels for edge visual annotation related to data passing within connected code dependencies in Graph nodes.\\n10. nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels): Adds these multi-line edge labels calculated earlier onto the graphical representation for better understanding of input requirements and output types between nodes.\\n11. plt.savefig(output_file): Saves the generated graph as a PNG image in the specified output directory with given filename prefix ('{base_name}.{graph_type}.png'. This allows users to examine file interdependencies visually.\\n12. plt.close(): Closes the Matplotlib plotting session after saving the graph image preventing memory leaks or unwanted outputs when multiple graphs are generated sequentially.\\n13. logging.error(f\\\"Error creating graph for {base_name}: {e}\\\", exc_info=True): Logs any error occurred during graph creation with filename and exception details if any, ensuring developers can identify issues in graph generation process. \\n\\nThese calls together facilitate generating code dependency graphs as PNG images from Python file information present within the data dictionary ('file_details'). It enhances software documentation comprehensibility for better user understanding of files relationships in complex Python project structures. The resulting graphs visualize how different files interact with each other, making debugging and maintenance easier. \\n\\nIn summary, these operations form a crucial part of `create_code_graph` functionality enabling data-driven code analysis while preserving Graph Visualization features through standard python libraries utilizations in combination. Their importance lies within optimized code representation for improved user experience and project management efficiency.\"\n    Variables:\n      Value:\n      - output_file, output_subdir, graph_type, pos, edge_labels, base_name, G, file_details, label\n      Purpose: \"In the context of the 'create_code_graph' function within the given Python code (save_output.py), these objects serve crucial purposes as follows:\\n\\n1. output_file: This variable holds the path to save the generated graph image representing a specific code dependency visualization as a PNG file. It is created using the output directory name along with a predefined filename format concatenated with \\\"graph_type\\\" suffix (entire_code_graph in this case). Its primary purpose is to store the final graph result after creating it with Matplotlib.\\n\\n2. output_subdir: Represents the parent folder within an indicated target directory path where PNG image outputs shall be stored or saved, which may help in maintaining organized structure and separation of different graph images. It gets generated using Pathlib functions during function execution to ensure error handling when creating directories if they don't exist yet ('exist_ok=True').\\n\\n3. graph_type: This string variable signifies the type of code dependency graph being created within the function, which is set as \\\"entire_code_graph\\\" in this case. It helps identify the specific graph representation that needs to be drawn according to user requirements or specified flow.\\n\\n4. pos: It stores positions (coordinates) for nodes and edges derived from the spring layout algorithm applied on the NetworkX DiGraph object 'G'. This variable is essential for drawing nodes at appropriate locations in the generated graph visualization using nx.draw().\\n\\n5. edge_labels: A dictionary used to store labels associated with each directed edge in the graph. It holds tuples containing source and target nodes as keys and edge metadata ('Inputs', 'Returns') from respective 'edge[2]' data collected earlier while iterating over 'G.edges'. These labels appear beside edges during drawing with nx.draw_networkx_edge_labels() for better visual representation.\\n\\n6. base_name: This variable captures the name of the file related to which graph is being generated. It helps in creating a unique filename for each graph output while keeping its reference related to an input Python file being processed in save_python_data().\\n\\n7. G (NetworkX DiGraph): It's a directed graph created from extracted nodes and edges information from the 'file_details[\\\"file_info\\\"] dictionary containing graph data ('nodes', 'edges'). This object is central for constructing code dependency relationships using NetworkX library functions like 'add_nodes_from()' and 'add_edge()'.\\n\\n8. file_details: A dictionary holding comprehensive information about the Python file being processed, including its \\\"file_info\\\" subsection that contains graph-related data ('nodes', 'edges'). This variable serves as an input source for extracting necessary details to generate code dependency graphs within the function execution flow.\\n\\n9. label: Temporarily stores strings containing edge metadata ('Inputs' and 'Returns') concatenated with relevant values from each edge dictionary collected while iterating over 'G.edges()'. These strings contribute to generating comprehensive graph labels within edge_labels for better visual representation when drawn on the final graph using nx.draw_networkx_edge_labels(). However, label scope is limited to this function call only as it's not assigned globally. \\n\\nOverall, these variables work together in 'create_code_graph' to generate code dependency graphs for Python files within a project representing clear flow logic visually which are eventually saved as PNG images to offer easier analysis or inspection opportunities related to input dataset structuring. They establish critical linkages between different parts of the codebase while ensuring error handling during graph creation processes.\"\n  save_python_data:\n    Inputs:\n      Value:\n      - file_details, instruct_list, relative_path, output_dir\n      Purpose: 'In the context of the 'save_python_data' function within the given Python code module 'save_output.py', the inputs hold significant roles during its execution for saving Python file details along with instruction data as JSON files and generating code graphs while managing exceptions if any occur during graph creation. Each input has a specific purpose as follows:\n        1. 'file_details': This parameter represents comprehensive information about a particular Python file, including metadata related to code structure and dependencies. It serves as crucial data for generating code graphs using create_code_graph().\n        2. 'instruct_list': A list containing combined data from multiple JSON files after processing through combine_json_files(). It holds instructional data essential for Python code generation instructions required by the system.\n        3. 'relative_path': This Path object denotes the input file's location within a directory structure. It helps identify and access specific files in relation to their parent directories while saving Python file details into YAML format ('file_details') as well as writing JSON files with instructions extracted from 'instruct_list'.\n        4. 'output_dir': An output string path defining where processed files and images (code graph PNGs) will be saved after performing operations. It creates a subdirectory within this location to store generated outputs neatly organized.\n        These inputs collaborate to ensure that 'save_python_data' method collectively executes functions across multiple areas in the codebase to arrange diverse outputs following required transformations on different formats, create code dependency graphs if desired and organize files into a structured hierarchy while managing exceptions during graph generation. It ultimately assists in consolidating the overall documentation process for better understanding and usage of Python files within the dataset handling workflow.'\n    Calls:\n      Value:\n      - Path, output_subdir.mkdir, write_file, open, f.write, create_code_graph, logging.error\n      Purpose: \"In the `save_python_data` function within the given context, these objects serve specific purposes as follows:\\n\\n1. Path: This built-in Python type is used extensively throughout the codebase for representing file paths or directories. It helps create relative paths to handle input files and output locations efficiently. In `save_python_data`, it appears in three instances - defining input arguments `relative_path` as an originating file path, creating output subdirectory `output_subdir` for saving results, and handling error scenarios in exception management during graph creation.\\n\\n2. output_subdir.mkdir(parents=True, exist_ok=True): This method call creates the necessary parent directories of `output_subdir` if they do not already exist (with `parents=True`) and ignores errors when creating directories if they're previously built (with `exist_ok=True`). It ensures output files are saved in proper locations without raising exceptions.\\n\\n3. write_file(file_details, ...): Calling the 'write_file' function writes the provided dictionary data (file_details) into targeted JSON or YAML file format as mentioned earlier. This helps save Python file details into a YAML format (\\\"{base_name}.details.yaml\\\").\\n\\n4. open(..., 'w'): Opening files in write mode ('w') creates a new file if it doesn't exist or overwrites existing content when writing code details as text to create \\\"{base_name}.code_details.yaml\\\". This is required to manipulate output texts efficiently during Python data saving processes.\\n\\n5. f.write(...): Writing data into the opened file handle 'f', updating its contents with given strings creates \\\"{base_name}.code_details.yaml\\\" file containing extracted code dependency information.\\n\\n6. create_code_graph(..., output_subdir): Invoking `create_code_graph` generates graphical representations of Python code dependencies as PNG images within the specified `output_subdir`. It visually explains code relationships and aids in understanding complex file interdependencies. However, it may log errors related to graph creation via 'logging.error'.\\n\\n7. logging.error(...): Error handling mechanism inside `create_code_graph` logs mistakes during graph generation processes for debugging purposes, indicating potential issues encountered while creating graphs in `save_python_data`. It ensures users can track failures for better maintenance and development of the codebase. \\n\\nThus, these objects play crucial roles in managing file operations, data saving, error handling, and generating visualizations within the `save_python_data` function, ultimately enabling efficient output preparation for Python code dataset analysis tasks. Each operation optimizes distinct processes toward overall code functionality accomplishment.\"\n    Variables:\n      Value:\n      - output_subdir, output_dir, relative_path, base_name, file_details, output_text, instruct_list\n      Purpose: \"In the context of the 'save_python_data' function within the given Python code module 'save_output.py', these variables hold specific roles contributing to saving Python file details as YAML format, instruction data as JSON files, and generating code graphs while handling exceptions if any occur during graph creation.\\n\\n1. output_subdir: Represents an output directory path created within the provided 'output_dir' with parent paths if needed for storing generated images and other auxiliary results. It helps organize output files neatly after executing tasks related to code graphs generation.\\n\\n2. output_dir: Indicates a larger targeted storage destination for the combined processing results across several operations - essentially encompasses output_subdir containing Python file data (in YAML format), instruction data as JSON files, and graph images.\\n\\n3. relative_path: Refers to an input file path related to the current operation within the overall directory structure ('output_dir'). It helps identify the specific file for which Python details are being processed and saved with a focus on managing internal functionality neatly and easily referenceable.\\n\\n4. base_name: Implicitly derives from 'relative_path', used in graph image names ('{base_name}.code_graph.png') for organizing saved outputs efficiently according to individual file processing outcomes within 'output_subdir'. This assists identification in naming output graphs created after execute networkX functionality in 'create_code_graph()'.\\n\\n5. file_details: Holds comprehensive information about the Python file being processed - specifically, data extracted from 'combine_json_files()' which includes code dependencies ('file_info') and other relevant details required for saving Python file data into YAML format ('save_python_data'). It serves as a central hub of data related to the current file under consideration.\\n\\n6. output_text: Contains generated content from 'file_details[\\\"code_qa_response\\\"] within \\\"code_details.yaml\\\" format that is later written into an actual YAML file after manipulation at 'output_subdir'/\\\"{base_name}.code_details.yaml\\\". Its crucial utility aligns with writing ancillary instruction information supporting YAML output creation.\\n\\n7. instruct_list: Represents a List of combined data from JSON files processed in 'combine_json_files()', particularly related to instructions - it stores parsed information necessary for JSON file saving under the name 'instruct.json'. It acts as input for further operations associated with storing instruction data according to predefined specifications within this function ('save_python_data'). \\n\\nAll together these variables combine their functionality to ensure a seamless flow of processing Python files, generating required outputs while maintaining an organized structure throughout the execution of diverse tasks in 'save_python_data'. They enable saving Python file details as YAML format, instruction data as JSON files, creating code graphs for each file while handling exceptions if any occur during graph creation. Their combined use ensures efficient management and clarity in output generation processes. \\n\\nIn summary, these variables contribute to effective data handling during operation by 'save_python_data' making the program user friendly to implement with flexibility towards output structure while streamlining data flows throughout function execution stages.\""
+    purpose: 'I) The given Python file `save_output.py` primarily serves as a comprehensive documentation generator and organizer for managing various data formats related to a dataset processing workflow. It reads JSON or YAML files from a specified directory, converts them into HTML format if desired, combines the content into specific target files while generating Python code graphs as images, writes instructional data in JSON format, and saves Python file details in YAML format. Its purpose can be broken down into several key functionalities provided by different methods:
+
+
+        1. `read_file` - Loads either JSON or YAML content from a given path into a dictionary format. It identifies the file type based on its extension and calls `json.load()` or `yaml.load()`.
+
+        2. `write_file` - Writes a provided dictionary data into JSON or YAML files by determining the file type and using appropriate methods like `json.dump()` or `yaml.Dumper`.
+
+        3. `convert_json_to_html` - Transforms JSON files within a directory to HTML format while preserving whitespaces in values, creates HTML tables representing the dataset structure with headers corresponding to keys and values from each JSON entry.
+
+        4. `combine_json_files` - Combines multiple JSON files into "instruct.json," generates "sharegpt.json," "document_code.json," and "code_details.yaml" files after reading them, optionally converts JSON files to HTML format if instructed. It also creates a purpose question filter for identifying relevant data related to Python code generation instructions.
+
+        5. `create_code_graph` - Generates graphs representing the code dependencies using NetworkX library and saves them as PNG images in an output directory.
+
+        6. `save_python_data` - Saves Python file details into YAML format, instruction data as JSON files, creates "code_details.yaml," generates code graphs for each file while handling exceptions if any occur during graph creation.
+
+
+        II) API Signatures:
+
+        a. read_file(file_path: Path) -> Dict: Reads JSON or YAML content from specified path and returns dictionary data.
+
+        - Dependencies: json, logging, yaml, pathlib
+
+        b. write_file(data: Dict, file_path: Path) -> None: Writes dictionary data into JSON or YAML files based on extension.
+
+        - Dependencies: json, yaml
+
+        c. convert_json_to_html(directory: None) -> None: Converts JSON files in directory to HTML format maintaining whitespaces while creating HTML tables from their contents.
+
+        - Dependencies: html, pathlib
+
+        d. combine_json_files(directory: str, html: bool, questions: Dict) -> Dict[str, List[Dict]: Combines JSON files into specific target formats and generates "document_code.json," "sharegpt.json," "code_details.yaml." Optionally converts JSON files to HTML if `html` is True.
+
+        - Dependencies: json, logging, pathlib, yaml
+
+        e. create_code_graph(file_details: dict, base_name: str, output_subdir: Path) -> None: Generates code dependency graphs as PNG images in an output directory using NetworkX and Matplotlib libraries.
+
+        - Dependencies: networkx, matplotlib.pyplot, logging
+
+        f. save_python_data(file_details: dict, instruct_list: List, relative_path: Path, output_dir: str) -> None: Stores Python file data into "file_info.yaml," saves instruction data as JSON files and creates code graphs while handling exceptions.
+
+        - Dependencies: logging, pathlib, yaml
+
+
+        III) Inputs, Variables, Calls & Returns Analysis:
+
+        a. read_file():
+
+        - file_path input is a Path object representing the file location. It returns JSON or YAML content as a dictionary based on extension.
+
+        - Uses `file_type`, `f` (file handle), `json.load()`, `yaml.load()`.
+
+        b. write_file():
+
+        - `data` is a dictionary to be written into file and `file_path` represents its location. It returns None after writing the data.
+
+        - Uses `file_type`, `f` (file handle), `json.dump()`, `yaml.SafeDumper`.
+
+        c. convert_json_to_html():
+
+        - Directory input as string path to process JSON files conversion into HTML format. It returns None after writing HTML content in files.
+
+        - Uses `json_file` (Path object), `preserve_spacing()`, `html_content`, `row_parts`, `html_rows`.
+
+        d. combine_json_files():
+
+        - Directory input as string path, boolean flag for HTML conversion named ''html'', a Dict named `questions` to contain human instruction IDs and values. Returns {''instruct_list'': combined data of JSON files} dictionary containing merged information.
+
+        - Uses `logging`, `Path()`, `read_file()`, `json_file` (Path object), `purpose_question`, `code_filename`, `write_file()`.
+
+        e. create_code_graph():
+
+        - Takes file details dictionary and output directory path as strings, saves code graph images within the directory as PNGs. Returns None after processing graphs.
+
+        - Uses `output_file` (Path object), `nx`, `plt`, `logging`, `G`, `edge_labels`.
+
+        f. save_python_data():
+
+        - file details dictionary, instruction list data for JSON saving, relative path as Path object representing the input file location, output directory string path. Returns None after processing Python file details and graphs handling exceptions if any occur.
+
+        - Uses `Path()`, `write_file()`, `create_code_graph()`, `logging`.'
+functions:
+    read_file:
+        function_name: read_file
+        function_code: "def read_file(file_path: Path) -> Dict:\n    \"\"\"Read a JSON or YAML file and return its contents as a dictionary.\"\"\"\n    file_type = file_path.suffix[1:]\n    with file_path.open() as f:\n        if file_type == 'json':\n            return json.load(f)\n        if file_type == 'yaml':\n            return yaml.load(f, Loader=yaml.SafeLoader)\n        return {}"
+        function_docstring: Read a JSON or YAML file and return its contents as a dictionary.
+        function_inputs:
+        - file_path
+        function_defaults: []
+        function_returns:
+        - '{}'
+        - json.load(f)
+        - yaml.load(f, Loader=yaml.SafeLoader)
+        function_calls:
+        - file_path.open
+        - json.load
+        - yaml.load
+        function_call_inputs:
+            file_path.open: []
+            json.load:
+            - f
+            yaml.load:
+            - f
+        function_variables:
+        - file_type
+        - file_path
+        function_decorators: []
+        function_annotations: []
+        function_properties: []
+    write_file:
+        function_name: write_file
+        function_code: "def write_file(data: Dict, file_path: Path) -> None:\n    \"\"\"Write a dictionary to a JSON or YAML file.\"\"\"\n    file_type = file_path.suffix[1:]\n    with file_path.open('w', encoding='utf-8') as f:\n        if file_type == 'json':\n            json.dump(data, f, indent=4)\n        elif file_type == 'yaml':\n            yaml.SafeDumper.ignore_aliases = lambda *args: True\n            yaml.dump(data, f, Dumper=yaml.SafeDumper, width=float('inf'), sort_keys=False, default_flow_style=False, indent=4, allow_unicode=True, encoding='utf-8')"
+        function_docstring: Write a dictionary to a JSON or YAML file.
+        function_inputs:
+        - data
+        - file_path
+        function_defaults: []
+        function_returns: []
+        function_calls:
+        - file_path.open
+        - json.dump
+        - yaml.dump
+        - float
+        function_call_inputs:
+            file_path.open:
+            - '''w'''
+            json.dump:
+            - data
+            - f
+            yaml.dump:
+            - data
+            - f
+            float:
+            - '''inf'''
+        function_variables:
+        - data
+        - file_type
+        - file_path
+        function_decorators: []
+        function_annotations: []
+        function_properties:
+        - yaml.SafeDumper.ignore_aliases
+    convert_json_to_html:
+        function_name: convert_json_to_html
+        function_code: "def convert_json_to_html(directory: str) -> None:\n    \"\"\"Convert JSON files within given directory to HTML format and save it.\"\"\"\n\n    def preserve_spacing(text: str, tab_width: int=4) -> str:\n        \"\"\"Preserve spaces and tabs in the provided text.\"\"\"\n        return text.replace(' ', '&nbsp;').replace('\\t', '&nbsp;' * tab_width)\n    for json_file in Path(directory).rglob('*.json'):\n        try:\n            dataset = read_file(json_file)\n            if not dataset:\n                continue\n        except Exception:\n            continue\n        html_content = '\\n        <html>\\n        <head>\\n            <style>\\n                table {border-collapse: collapse; width: 100%; table-layout: fixed;}\\n                th, td {\\n                    border: 1px solid black;\\n                    padding: 8px;\\n                    text-align: left;\\n                    white-space: pre-line;\\n                    vertical-align: top;\\n                    word-wrap: break-word;\\n                }\\n            </style>\\n        </head>\\n        <body>\\n            <table>\\n                <thead>\\n                    <tr>\\n        '\n        column_count = len(dataset[0].keys())\n        column_width = round(100 / column_count, 2)\n        for key in dataset[0].keys():\n            html_content += f\"<th style='width: {column_width}%;'>{key}</th>\"\n        html_content += '\\n                    </tr>\\n                </thead>\\n                <tbody>\\n        '\n        html_rows = []\n        for entry in dataset:\n            row_parts = ['<tr>']\n            for key in entry:\n                value = escape(str(entry[key]))\n                value = preserve_spacing(value)\n                value = value.replace('\\n', '<br/>')\n                row_parts.append(f'<td>{value}</td>')\n            row_parts.append('</tr>')\n            html_rows.append(''.join(row_parts))\n        html_content += ''.join(html_rows)\n        html_content += '\\n                </tbody>\\n            </table>\\n        </body>\\n        </html>\\n        '\n        html_file_path = json_file.with_suffix('.html')\n        try:\n            with open(html_file_path, 'w', encoding='utf-8') as file:\n                file.write(html_content)\n        except Exception:\n            logging.info(f'Failed saving: {html_file_path}')"
+        function_docstring: Convert JSON files within given directory to HTML format and save it.
+        function_inputs:
+        - directory
+        function_defaults: []
+        function_returns:
+        - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+        function_calls:
+        - text.replace(' ', '&nbsp;').replace
+        - text.replace
+        - Path(directory).rglob
+        - Path
+        - read_file
+        - len
+        - dataset[0].keys
+        - round
+        - escape
+        - str
+        - preserve_spacing
+        - value.replace
+        - row_parts.append
+        - html_rows.append
+        - '''''.join'
+        - json_file.with_suffix
+        - open
+        - file.write
+        - logging.info
+        function_call_inputs:
+            text.replace(' ', '&nbsp;').replace:
+            - '''\t'''
+            - '''&nbsp;'' * tab_width'
+            text.replace:
+            - ''' '''
+            - '''&nbsp;'''
+            Path(directory).rglob:
+            - '''*.json'''
+            Path:
+            - directory
+            read_file:
+            - json_file
+            len:
+            - dataset[0].keys()
+            dataset[0].keys: []
+            round:
+            - 100 / column_count
+            - '2'
+            escape:
+            - str(entry[key])
+            str:
+            - entry[key]
+            preserve_spacing:
+            - value
+            value.replace:
+            - '''\n'''
+            - '''<br/>'''
+            row_parts.append:
+            - '''</tr>'''
+            html_rows.append:
+            - '''''.join(row_parts)'
+            '''''.join':
+            - html_rows
+            json_file.with_suffix:
+            - '''.html'''
+            open:
+            - html_file_path
+            - '''w'''
+            file.write:
+            - html_content
+            logging.info:
+            - 'f''Failed saving: {html_file_path}'''
+        function_variables:
+        - value
+        - html_content
+        - html_rows
+        - row_parts
+        - directory
+        - column_count
+        - dataset
+        - column_width
+        - html_file_path
+        function_decorators: []
+        function_annotations: []
+        function_properties: []
+    preserve_spacing:
+        function_name: preserve_spacing
+        function_code: "def preserve_spacing(text: str, tab_width: int=4) -> str:\n    \"\"\"Preserve spaces and tabs in the provided text.\"\"\"\n    return text.replace(' ', '&nbsp;').replace('\\t', '&nbsp;' * tab_width)"
+        function_docstring: Preserve spaces and tabs in the provided text.
+        function_inputs:
+        - text
+        - tab_width
+        function_defaults:
+        - '4'
+        function_returns:
+        - text.replace(' ', '&nbsp;').replace('\t', '&nbsp;' * tab_width)
+        function_calls:
+        - text.replace(' ', '&nbsp;').replace
+        - text.replace
+        function_call_inputs:
+            text.replace(' ', '&nbsp;').replace:
+            - '''\t'''
+            - '''&nbsp;'' * tab_width'
+            text.replace:
+            - ''' '''
+            - '''&nbsp;'''
+        function_variables:
+        - text
+        - tab_width
+        function_decorators: []
+        function_annotations: []
+        function_properties: []
+    combine_json_files:
+        function_name: combine_json_files
+        function_code: "def combine_json_files(directory: str, html: bool, questions: Dict) -> Dict[str, List[Dict]]:\n    \"\"\"Create instruct, training, sharegpt, instruct, document_code json and code_details yaml files.\"\"\"\n    logging.info(f'Combining JSON files in {directory}')\n    combined_data, code_filename = ([], [])\n    skip_files = {'instruct.json', 'sharegpt.json', 'document_code.json'}\n    for json_file in Path(directory).rglob('*.json'):\n        if json_file.name in skip_files:\n            continue\n        try:\n            file_data = read_file(json_file)\n            if file_data:\n                combined_data.extend(file_data)\n                cleaned_name = json_file.relative_to(directory).with_suffix('').as_posix().replace('.instruct', '')\n                code_filename.append(cleaned_name)\n        except Exception as e:\n            logging.info(f'Failed reading: {json_file}. Error: {e}')\n    write_file(combined_data, Path(directory) / 'instruct.json')\n    logging.info(f'Generating document_code.json file in {directory}')\n    purpose_question = [item['text'] for item in questions if item['id'] == 'file_purpose'][0]\n    purpose_question = purpose_question.split('{filename}')[0]\n    purpose_data = [item for item in combined_data if item['instruction'].startswith(purpose_question)]\n    document_code = [{'document': item['output'], 'code': item['input']} for item in purpose_data]\n    for i, item in enumerate(document_code):\n        item['code filename'] = code_filename[i]\n    write_file(document_code, Path(directory) / 'document_code.json')\n    logging.info(f'Generating sharegpt.json file in {directory}')\n    system_value = 'Use the provided documentation to output the corresponding Python code.'\n    sharegpt = [{'conversation': [{'from': 'system', 'value': system_value}, {'from': 'human', 'value': f\"Create Python code based on this documentation: {item['document']}\"}, {'from': 'gpt', 'value': item['code']}], 'nbytes': '0', 'source': item['code filename']} for item in document_code]\n    for item in sharegpt:\n        nbytes = 0\n        for conv in item['conversation']:\n            nbytes += len(conv['value'].encode('utf-8'))\n        item['nbytes'] = nbytes\n    write_file(sharegpt, Path(directory) / 'sharegpt.json')\n    code_details = []\n    logging.info(f'Combining *.code_details.yaml files in {directory}')\n    for yaml_file in Path(directory).rglob('*.code_details.yaml'):\n        try:\n            with open(yaml_file, 'r') as f:\n                file_data = f.read()\n                code_details.append(file_data)\n        except Exception as e:\n            logging.info(f'Failed reading: {yaml_file}. Error: {e}')\n    with open(Path(directory) / 'code_details.yaml', 'w') as f:\n        f.write('\\n'.join(code_details))\n    if html:\n        logging.info('Converting JSON files to HTML')\n        convert_json_to_html(directory)\n    return {'instruct_list': combined_data}"
+        function_docstring: Create instruct, training, sharegpt, instruct, document_code json and code_details yaml files.
+        function_inputs:
+        - directory
+        - html
+        - questions
+        function_defaults: []
+        function_returns:
+        - '{''instruct_list'': combined_data}'
+        function_calls:
+        - logging.info
+        - Path(directory).rglob
+        - Path
+        - read_file
+        - combined_data.extend
+        - json_file.relative_to(directory).with_suffix('').as_posix().replace
+        - json_file.relative_to(directory).with_suffix('').as_posix
+        - json_file.relative_to(directory).with_suffix
+        - json_file.relative_to
+        - code_filename.append
+        - write_file
+        - purpose_question.split
+        - item['instruction'].startswith
+        - enumerate
+        - len
+        - conv['value'].encode
+        - open
+        - f.read
+        - code_details.append
+        - f.write
+        - '''\n''.join'
+        - convert_json_to_html
+        function_call_inputs:
+            logging.info:
+            - '''Converting JSON files to HTML'''
+            Path(directory).rglob:
+            - '''*.code_details.yaml'''
+            Path:
+            - directory
+            read_file:
+            - json_file
+            combined_data.extend:
+            - file_data
+            json_file.relative_to(directory).with_suffix('').as_posix().replace:
+            - '''.instruct'''
+            - ''''''
+            json_file.relative_to(directory).with_suffix('').as_posix: []
+            json_file.relative_to(directory).with_suffix:
+            - ''''''
+            json_file.relative_to:
+            - directory
+            code_filename.append:
+            - cleaned_name
+            write_file:
+            - sharegpt
+            - Path(directory) / 'sharegpt.json'
+            purpose_question.split:
+            - '''{filename}'''
+            item['instruction'].startswith:
+            - purpose_question
+            enumerate:
+            - document_code
+            len:
+            - conv['value'].encode('utf-8')
+            conv['value'].encode:
+            - '''utf-8'''
+            open:
+            - Path(directory) / 'code_details.yaml'
+            - '''w'''
+            f.read: []
+            code_details.append:
+            - file_data
+            f.write:
+            - '''\n''.join(code_details)'
+            '''\n''.join':
+            - code_details
+            convert_json_to_html:
+            - directory
+        function_variables:
+        - purpose_data
+        - file_data
+        - html
+        - questions
+        - purpose_question
+        - directory
+        - code_details
+        - cleaned_name
+        - sharegpt
+        - skip_files
+        - system_value
+        - nbytes
+        - document_code
+        function_decorators: []
+        function_annotations: []
+        function_properties: []
+    create_code_graph:
+        function_name: create_code_graph
+        function_code: "def create_code_graph(file_details: Dict, base_name: str, output_subdir: Path) -> None:\n    \"\"\"Generate graphs from the file_details and save them as PNG images.\"\"\"\n    graph_type = 'entire_code_graph'\n    G = nx.DiGraph()\n    G.add_nodes_from(file_details['file_info'][graph_type]['nodes'])\n    for edge in file_details['file_info'][graph_type]['edges']:\n        source, target = (edge['source'], edge['target'])\n        if source in G.nodes and target in G.nodes:\n            G.add_edge(source, target, **{k: v for k, v in edge.items() if k in ['target_inputs', 'target_returns']})\n    plt.figure(figsize=(20, 20))\n    pos = nx.spring_layout(G)\n    nx.draw(G, pos, with_labels=True, font_weight='bold', font_size=8, node_shape='s', node_size=500, width=1, arrowsize=12)\n    edge_labels = {}\n    for edge in G.edges(data=True):\n        label = []\n        if 'target_inputs' in edge[2] and edge[2]['target_inputs']:\n            label.append(f\"Inputs: {', '.join(edge[2]['target_inputs'])}\")\n        if 'target_returns' in edge[2] and edge[2]['target_returns']:\n            label.append(f\"\\nReturns: {', '.join(edge[2]['target_returns'])}\")\n        edge_labels[edge[0], edge[1]] = '\\n'.join(label)\n    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)\n    try:\n        output_file = output_subdir / f'{base_name}.{graph_type}.png'\n        plt.savefig(output_file)\n        plt.close()\n    except Exception as e:\n        logging.error(f'Error saving graph for {base_name}: {e}', exc_info=True)"
+        function_docstring: Generate graphs from the file_details and save them as PNG images.
+        function_inputs:
+        - file_details
+        - base_name
+        - output_subdir
+        function_defaults: []
+        function_returns: []
+        function_calls:
+        - nx.DiGraph
+        - G.add_nodes_from
+        - G.add_edge
+        - edge.items
+        - plt.figure
+        - nx.spring_layout
+        - nx.draw
+        - G.edges
+        - label.append
+        - ''', ''.join'
+        - '''\n''.join'
+        - nx.draw_networkx_edge_labels
+        - plt.savefig
+        - plt.close
+        - logging.error
+        function_call_inputs:
+            nx.DiGraph: []
+            G.add_nodes_from:
+            - file_details['file_info'][graph_type]['nodes']
+            G.add_edge:
+            - source
+            - target
+            edge.items: []
+            plt.figure: []
+            nx.spring_layout:
+            - G
+            nx.draw:
+            - G
+            - pos
+            G.edges: []
+            label.append:
+            - 'f"\nReturns: {'', ''.join(edge[2][''target_returns''])}"'
+            ''', ''.join':
+            - edge[2]['target_returns']
+            '''\n''.join':
+            - label
+            nx.draw_networkx_edge_labels:
+            - G
+            - pos
+            plt.savefig:
+            - output_file
+            plt.close: []
+            logging.error:
+            - 'f''Error saving graph for {base_name}: {e}'''
+        function_variables:
+        - output_file
+        - output_subdir
+        - graph_type
+        - pos
+        - edge_labels
+        - base_name
+        - G
+        - file_details
+        - label
+        function_decorators: []
+        function_annotations: []
+        function_properties: []
+    save_python_data:
+        function_name: save_python_data
+        function_code: "def save_python_data(file_details: dict, instruct_list: list, relative_path: Path, output_dir: str) -> None:\n    \"\"\"Save Python file details as a YAML file, the instruction data as JSON files,\n    and generate and save code graphs.\n    \"\"\"\n    output_subdir = Path(output_dir) / relative_path.parent\n    output_subdir.mkdir(parents=True, exist_ok=True)\n    base_name = relative_path.name\n    write_file(instruct_list, output_subdir / f'{base_name}.instruct.json')\n    write_file(file_details, output_subdir / f'{base_name}.details.yaml')\n    output_text = file_details['file_info']['code_qa_response']\n    with open(output_subdir / f'{base_name}.code_details.yaml', 'w') as f:\n        f.write(output_text)\n    try:\n        create_code_graph(file_details, base_name, output_subdir)\n    except Exception as e:\n        logging.error(f'Error creating graph for {base_name}: {e}', exc_info=True)"
+        function_docstring: "Save Python file details as a YAML file, the instruction data as JSON files,\n    and generate and save code graphs.\n    "
+        function_inputs:
+        - file_details
+        - instruct_list
+        - relative_path
+        - output_dir
+        function_defaults: []
+        function_returns: []
+        function_calls:
+        - Path
+        - output_subdir.mkdir
+        - write_file
+        - open
+        - f.write
+        - create_code_graph
+        - logging.error
+        function_call_inputs:
+            Path:
+            - output_dir
+            output_subdir.mkdir: []
+            write_file:
+            - file_details
+            - output_subdir / f'{base_name}.details.yaml'
+            open:
+            - output_subdir / f'{base_name}.code_details.yaml'
+            - '''w'''
+            f.write:
+            - output_text
+            create_code_graph:
+            - file_details
+            - base_name
+            - output_subdir
+            logging.error:
+            - 'f''Error creating graph for {base_name}: {e}'''
+        function_variables:
+        - output_subdir
+        - output_dir
+        - relative_path
+        - base_name
+        - file_details
+        - output_text
+        - instruct_list
+        function_decorators: []
+        function_annotations: []
+        function_properties: []
+classes: {}
