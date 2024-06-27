@@ -41,9 +41,11 @@ Analyzing the weight matrices of a model provides insights into layer contributi
 The SVD metric assesses each layer's contribution to the model's overall function by analyzing the intrinsic dimensionality and structure of each layer's weight matrix. SVD provides crucial insights into the internal structure of weight matrices in neural networks, particularly their rank and the distribution of singular values.
 
 Let $\lambda_i$ be the singular values of a layer's weight matrix, sorted in descending order. The SVD-based contribution metric is defined as:
+
 $$
 M_{SVD} = \frac{1}{n} \sum_{i=1}^n \frac{i}{n}
 $$
+
 where $n$ is the total number of singular values, and $i$ represents the rank of each singular value.
 
 The computational approach works by first computing the SVD on each layer's weight matrix, which is then used to compute the metric by summing the normalized ranks of the singular values and dividing by the total number of singular values. This method assigns higher importance to larger singular values that correspond to more significant directions in the weight space.
