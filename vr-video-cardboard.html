@@ -161,9 +161,9 @@
         let videoURL = null;
         let xrSession = null;
         let hideOverlayTimer = null;
-        let currentZoom = 0.6;
+        let currentZoom = 1.6;
         let panOffset = 0;
-        let currentZoomLevel = 2;
+        let currentZoomLevel = 4;
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8];
 
         fileInput.addEventListener('change', function(e) {
@@ -281,7 +281,7 @@
 
                 const width = 6;
                 const height = width / aspect;
-                const distance = 1;
+                const distance = 2;
 
                 if (mode === '2d') {
                     const geometry = new THREE.PlaneGeometry(width, height);
@@ -478,8 +478,8 @@
         }
 
         function resetZoom() {
-            currentZoomLevel = 2;
-            currentZoom = zoomLevels[0];
+            currentZoomLevel = 4;
+            currentZoom = zoomLevels[4];
             showOverlay();
         }
 
