@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>VR Video - Official Cardboard</title>
+    <title>VR Video - Optimized Cardboard Player</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -10,252 +10,139 @@
     <meta name="theme-color" content="#000000">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            font-family: Arial, sans-serif;
-            background: #000;
-            color: white;
-        }
-        #setup {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            z-index: 10000;
-            background: #1a1a1a;
-            padding: 20px;
-            overflow-y: auto;
-        }
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #000; color: white; }
+        #setup { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000; background: #1a1a1a; padding: 20px; overflow-y: auto; }
         #setup.hidden { display: none; }
-        .section {
-            background: rgba(255,255,255,0.1);
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 8px;
-        }
-        button {
-            background: #007BFF;
-            color: white;
-            border: none;
-            padding: 15px;
-            font-size: 18px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 5px 0;
-            width: 100%;
-        }
+        .section { background: rgba(255,255,255,0.1); padding: 15px; margin: 10px 0; border-radius: 8px; }
+        button { background: #007BFF; color: white; border: none; padding: 15px; font-size: 18px; border-radius: 5px; cursor: pointer; margin: 5px 0; width: 100%; }
         button:active { background: #0056b3; }
         button:disabled { background: #555; }
-        input[type="file"] {
-            width: 100%;
-            padding: 10px;
-            background: white;
-            color: black;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
+        input[type="file"] { width: 100%; padding: 10px; background: white; color: black; border-radius: 5px; margin: 10px 0; }
         input[type="radio"] { margin: 10px 5px; }
         label { margin-right: 15px; }
-        #testVideo {
-            width: 100%;
-            max-width: 400px;
-            background: #000;
-            margin: 10px 0;
-        }
-        .status {
-            padding: 10px;
-            margin: 10px 0;
-            background: #000;
-            border-radius: 5px;
-        }
+        #testVideo { width: 100%; max-width: 400px; background: #000; margin: 10px 0; }
+        .status { padding: 10px; margin: 10px 0; background: #000; border-radius: 5px; }
         .success { color: #4CAF50; }
-        #vrButton {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: #007BFF;
-            border: none;
-            cursor: pointer;
-            display: none;
-            z-index: 999;
-            font-size: 24px;
-        }
+        #vrButton { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: #007BFF; border: none; cursor: pointer; display: none; z-index: 999; font-size: 24px; }
         #vrButton.active { display: none; }
-        
-        #progressOverlay {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            display: none;
-            z-index: 998;
-            transition: opacity 0.3s;
-        }
+        #progressOverlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.8); padding: 15px; display: none; z-index: 998; transition: opacity 0.3s; }
         #progressOverlay.visible { display: flex; }
         #progressOverlay.fading { opacity: 0; }
-        
-        .eye-controls {
-            width: 50%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 0 10px;
-        }
-        
-        .progressBar {
-            width: 100%;
-            height: 8px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 10px;
-            position: relative;
-        }
-        .progressFill {
-            height: 100%;
-            background: #007BFF;
-            border-radius: 4px;
-            width: 0%;
-            transition: width 0.1s;
-        }
-        .timeDisplay {
-            text-align: center;
-            font-size: 16px;
-            color: white;
-        }
-        .controls {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .control-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            font-size: 20px;
-            cursor: pointer;
-            padding: 0;
-        }
-        .control-btn:active {
-            background: rgba(255,255,255,0.4);
-        }
-        .zoom-reset {
-            width: 70px;
-            font-size: 14px;
-        }
+        .eye-controls { width: 50%; display: flex; flex-direction: column; align-items: center; padding: 0 10px; }
+        .progressBar { width: 100%; height: 8px; background: rgba(255,255,255,0.3); border-radius: 4px; cursor: pointer; margin-bottom: 10px; position: relative; }
+        .progressFill { height: 100%; background: #007BFF; border-radius: 4px; width: 0%; transition: width 0.1s; }
+        .timeDisplay { text-align: center; font-size: 16px; color: white; }
+        .controls { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+        .control-btn { background: rgba(255,255,255,0.2); border: none; color: white; width: 50px; height: 50px; border-radius: 50%; font-size: 20px; cursor: pointer; padding: 0; }
+        .control-btn:active { background: rgba(255,255,255,0.4); }
+        .zoom-reset { width: 70px; font-size: 14px; }
     </style>
 </head>
 <body>
     <div id="setup">
         <h2>VR Official Cardboard Player</h2>
-        
-        <div class="section">
-            <strong>Video Type</strong><br>
-            <input type="radio" id="mode2d" name="mode" value="2d" checked>
-            <label for="mode2d">2D</label>
-            <input type="radio" id="mode3d" name="mode" value="3d">
-            <label for="mode3d">SBS 3D</label>
-        </div>
-
-        <div class="section">
-            <strong>Select Video</strong><br>
-            <input type="file" id="fileInput" accept="video/*">
-        </div>
-
-        <div class="section">
-            <strong>Test</strong><br>
-            <video id="testVideo" controls playsinline webkit-playsinline></video>
-            <div id="status" class="status">Load video...</div>
-        </div>
-
-        <div class="section">
-            <button id="startBtn" disabled>START VR</button>
-            <div style="font-size: 13px; color: #aaa; margin-top: 10px;">
-                &bull; Official Cardboard rendering<br>
-                &bull; Barrel distortion correction<br>
-                &bull; Gyroscope tracking<br>
-                &bull; Tap to show/hide controls<br>
-                &bull; True fullscreen mode<br>
-                &bull; Landscape video support<br>
-                &bull; Dual controls for VR viewing
-            </div>
-        </div>
+        <div class="section"><strong>Video Type</strong><br><input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label><input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label></div>
+        <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
+        <div class="section"><strong>Test</strong><br><video id="testVideo" controls playsinline webkit-playsinline></video><div id="status" class="status">Load video...</div></div>
+        <div class="section"><button id="startBtn" disabled>START VR</button><div style="font-size: 13px; color: #aaa; margin-top: 10px;">&bull; Official Cardboard rendering<br>&bull; Barrel distortion correction<br>&bull; Gyroscope tracking<br>&bull; Tap to show/hide controls<br>&bull; True fullscreen mode<br>&bull; Landscape video support<br>&bull; Dual controls for VR viewing</div></div>
     </div>
 
     <button id="vrButton">VR</button>
-    
     <div id="progressOverlay">
         <div class="eye-controls">
-            <div class="progressBar" data-eye="left">
-                <div class="progressFill"></div>
-            </div>
+            <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls">
-                <button class="control-btn pan-left-btn">&lt;</button>
-                <button class="control-btn pan-center-btn">o</button>
-                <button class="control-btn pan-right-btn">&gt;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn rewind-btn">&lt;&lt;</button>
-                <button class="control-btn play-pause-btn">||</button>
-                <button class="control-btn forward-btn">&gt;&gt;</button>
-            </div>
-            <div class="controls" style="margin-top: 5px;">
-                <button class="control-btn zoom-out-btn">-</button>
-                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
-                <button class="control-btn zoom-in-btn">+</button>
-            </div>
+            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
+            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
+            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
-        
         <div class="eye-controls">
-            <div class="progressBar" data-eye="right">
-                <div class="progressFill"></div>
-            </div>
+            <div class="progressBar" data-eye="right"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls">
-                <button class="control-btn pan-left-btn">&lt;</button>
-                <button class="control-btn pan-center-btn">o</button>
-                <button class="control-btn pan-right-btn">&gt;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn rewind-btn">&lt;&lt;</button>
-                <button class="control-btn play-pause-btn">||</button>
-                <button class="control-btn forward-btn">&gt;&gt;</button>
-            </div>
-            <div class="controls" style="margin-top: 5px;">
-                <button class="control-btn zoom-out-btn">-</button>
-                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
-                <button class="control-btn zoom-in-btn">+</button>
-            </div>
+            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
+            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
+            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
     </div>
 
-    <script>
-        let camera, scene, renderer, effect;
-        let video, videoTexture;
-        let controls;
-        let mode = '2d';
-        let isPlaying = false;
-        let videoURL = null;
-        let xrSession = null;
-        let xrRefSpace = null;
-        let orientationPermissionGranted = false;
-        let progressOverlayVisible = true;
-        let hideOverlayTimer = null;
-        let currentZoom = 1.0;
-        let videoScreen = null;
-        let panOffset = 0;
-        const zoomLevels = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8];
-        let currentZoomLevel = 0;
+    <script id="vertexShader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+    
+    <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
+        uniform sampler2D tDiffuse;
+        uniform float k1;
+        uniform float k2;
+        uniform float eyeOffset;
+        uniform float panOffset;
+        uniform float zoomLevel;
+        uniform vec2 texelSize;
+        varying vec2 vUv;
+        
+        const float PI = 3.14159265359;
+        const float HALF_PI = 1.57079632679;
+        
+        vec2 distort(vec2 p) {
+            vec2 center = vec2(0.5 + eyeOffset, 0.5);
+            vec2 v = p - center;
+            float r2 = dot(v, v);
+            float distortion = 1.0 + r2 * (k1 + k2 * r2);
+            return center + v * distortion;
+        }
+        
+        float lanczos2(float x) {
+            x = abs(x);
+            if (x < 0.0001) return 1.0;
+            if (x >= 2.0) return 0.0;
+            float pix = PI * x;
+            float pix_half = HALF_PI * x;
+            return (sin(pix) / pix) * (sin(pix_half) / pix_half);
+        }
+        
+        vec4 sampleLanczos2(vec2 uv) {
+            vec2 center = uv / texelSize - 0.5;
+            vec2 centerFloor = floor(center);
+            vec2 f = center - centerFloor;
+            
+            vec4 color = vec4(0.0);
+            float weightSum = 0.0;
+            
+            for (int y = -1; y <= 2; y++) {
+                float fy = float(y) - f.y;
+                float wy = lanczos2(fy);
+                for (int x = -1; x <= 2; x++) {
+                    float weight = lanczos2(float(x) - f.x) * wy;
+                    vec2 sampleUV = (centerFloor + vec2(float(x), float(y)) + 0.5) * texelSize;
+                    
+                    if (sampleUV.x >= 0.0 && sampleUV.x <= 1.0 && sampleUV.y >= 0.0 && sampleUV.y <= 1.0) {
+                        color += texture2D(tDiffuse, sampleUV) * weight;
+                        weightSum += weight;
+                    }
+                }
+            }
+            
+            return weightSum > 0.0001 ? color / weightSum : vec4(0.0);
+        }
+        
+        void main() {
+            vec2 distortedUV = distort(vUv);
+            vec2 uv = (distortedUV - 0.5) / zoomLevel;
+            uv.x += panOffset;
+            uv += 0.5;
+            
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            } else {
+                gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
+            }
+        }
+    </script>
 
+    <script>
         const fileInput = document.getElementById('fileInput');
         const testVideo = document.getElementById('testVideo');
         const startBtn = document.getElementById('startBtn');
@@ -263,19 +150,21 @@
         const status = document.getElementById('status');
         const vrButton = document.getElementById('vrButton');
         const progressOverlay = document.getElementById('progressOverlay');
-        
-        const progressBars = document.querySelectorAll('.progressBar');
         const progressFills = document.querySelectorAll('.progressFill');
         const timeDisplays = document.querySelectorAll('.timeDisplay');
         const playPauseBtns = document.querySelectorAll('.play-pause-btn');
-        const rewindBtns = document.querySelectorAll('.rewind-btn');
-        const forwardBtns = document.querySelectorAll('.forward-btn');
-        const zoomInBtns = document.querySelectorAll('.zoom-in-btn');
-        const zoomOutBtns = document.querySelectorAll('.zoom-out-btn');
-        const zoomResetBtns = document.querySelectorAll('.zoom-reset-btn');
-        const panLeftBtns = document.querySelectorAll('.pan-left-btn');
-        const panCenterBtns = document.querySelectorAll('.pan-center-btn');
-        const panRightBtns = document.querySelectorAll('.pan-right-btn');
+
+        let camera, scene, renderer, effect;
+        let video, videoTexture, controls;
+        let mode = '2d';
+        let isPlaying = false;
+        let videoURL = null;
+        let xrSession = null;
+        let hideOverlayTimer = null;
+        let currentZoom = 1.0;
+        let panOffset = 0;
+        let currentZoomLevel = 0;
+        const zoomLevels = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8];
 
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -296,44 +185,38 @@
             testVideo.load();
         });
 
-        function requestFullscreen() {
+        startBtn.addEventListener('click', async function() {
+            if (!videoURL) return;
+            
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission !== 'granted') {
+                        alert('Device orientation permission denied. Head tracking will not work.');
+                    }
+                } catch (error) {
+                    console.error('Error requesting orientation permission:', error);
+                }
+            }
+
             const elem = document.documentElement;
             if (elem.requestFullscreen) {
                 elem.requestFullscreen();
             } else if (elem.webkitRequestFullscreen) {
                 elem.webkitRequestFullscreen();
-            } else if (elem.mozRequestFullScreen) {
-                elem.mozRequestFullScreen();
-            } else if (elem.msRequestFullscreen) {
-                elem.msRequestFullscreen();
             }
             
             if (screen.orientation && screen.orientation.lock) {
                 screen.orientation.lock('landscape').catch(() => {});
             }
-        }
-
-        async function requestOrientationPermission() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && 
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission === 'granted') {
-                        orientationPermissionGranted = true;
-                        return true;
-                    } else {
-                        alert('Device orientation permission denied. Head tracking will not work.');
-                        return false;
-                    }
-                } catch (error) {
-                    console.error('Error requesting orientation permission:', error);
-                    return false;
-                }
-            } else {
-                orientationPermissionGranted = true;
-                return true;
-            }
-        }
+            
+            setTimeout(() => {
+                setupDiv.classList.add('hidden');
+                disposeResources();
+                initVR();
+            }, 100);
+        });
 
         function disposeResources() {
             if (videoTexture) {
@@ -371,21 +254,7 @@
                 });
                 scene = null;
             }
-            videoScreen = null;
         }
-
-        startBtn.addEventListener('click', async function() {
-            if (!videoURL) return;
-            
-            await requestOrientationPermission();
-            requestFullscreen();
-            
-            setTimeout(() => {
-                setupDiv.classList.add('hidden');
-                disposeResources();
-                initVR();
-            }, 100);
-        });
 
         function initVR() {
             scene = new THREE.Scene();
@@ -423,7 +292,6 @@
                     const screen = new THREE.Mesh(geometry, material);
                     screen.position.set(0, 0, -distance);
                     scene.add(screen);
-                    videoScreen = screen;
                 } else {
                     const geometryL = new THREE.PlaneGeometry(width, height);
                     const materialL = new THREE.ShaderMaterial({
@@ -474,8 +342,6 @@
                     screenR.position.set(0, 0, -distance);
                     screenR.layers.set(2);
                     scene.add(screenR);
-                    
-                    videoScreen = [screenL, screenR];
                 }
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -491,19 +357,8 @@
 
                 window.addEventListener('resize', onResize);
                 document.addEventListener('click', toggleOverlay);
-                
-                progressBars.forEach(bar => bar.addEventListener('click', seekVideo));
-                playPauseBtns.forEach(btn => btn.addEventListener('click', togglePlayPause));
-                rewindBtns.forEach(btn => btn.addEventListener('click', () => seekRelative(-10)));
-                forwardBtns.forEach(btn => btn.addEventListener('click', () => seekRelative(10)));
-                zoomInBtns.forEach(btn => btn.addEventListener('click', () => adjustZoom(1)));
-                zoomOutBtns.forEach(btn => btn.addEventListener('click', () => adjustZoom(-1)));
-                zoomResetBtns.forEach(btn => btn.addEventListener('click', resetZoom));
-                panLeftBtns.forEach(btn => btn.addEventListener('click', () => adjustPan(-2)));
-                panCenterBtns.forEach(btn => btn.addEventListener('click', centerPan));
-                panRightBtns.forEach(btn => btn.addEventListener('click', () => adjustPan(2)));
-
                 video.addEventListener('timeupdate', updateProgress);
+                progressOverlay.addEventListener('click', handleControls);
 
                 showOverlay();
 
@@ -513,63 +368,23 @@
                     animate();
                 }).catch(err => {
                     console.error('Error playing video:', err);
-                    document.addEventListener('click', () => {
-                        video.play().then(() => {
-                            isPlaying = true;
-                            updatePlayPauseButtons();
-                        });
-                    }, { once: true });
                 });
             });
 
             video.load();
         }
 
-        vrButton.addEventListener('click', async function(e) {
-            e.stopPropagation();
-            if (!navigator.xr) return;
+        function animate() {
+            requestAnimationFrame(animate);
+            if (xrSession) return;
+            if (controls) controls.update();
+            effect.render(scene, camera);
+        }
 
-            try {
-                xrSession = await navigator.xr.requestSession('immersive-vr', {
-                    requiredFeatures: ['local-floor']
-                });
-                
-                xrSession.addEventListener('end', () => {
-                    xrSession = null;
-                    xrRefSpace = null;
-                });
-
-                const glLayer = new XRWebGLLayer(xrSession, renderer.getContext());
-                await xrSession.updateRenderState({ baseLayer: glLayer });
-                
-                xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
-                
-                xrSession.requestAnimationFrame(onXRFrame);
-            } catch (err) {
-                console.error('Failed to start XR session:', err);
-            }
-        });
-
-        function onXRFrame(time, frame) {
-            const session = frame.session;
-            session.requestAnimationFrame(onXRFrame);
-
-            const pose = frame.getViewerPose(xrRefSpace);
-            if (pose) {
-                const glLayer = session.renderState.baseLayer;
-                renderer.setFramebuffer(glLayer.framebuffer);
-
-                for (const view of pose.views) {
-                    const viewport = glLayer.getViewport(view);
-                    renderer.setViewport(viewport.x, viewport.y, viewport.width, viewport.height);
-
-                    camera.matrix.fromArray(view.transform.matrix);
-                    camera.projectionMatrix.fromArray(view.projectionMatrix);
-                    camera.updateMatrixWorld(true);
-
-                    renderer.render(scene, camera);
-                }
-            }
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            effect.setSize(window.innerWidth, window.innerHeight);
         }
 
         function updatePlayPauseButtons() {
@@ -578,8 +393,7 @@
             });
         }
 
-        function togglePlayPause(e) {
-            if (e) e.stopPropagation();
+        function togglePlayPause() {
             if (!video) return;
             if (isPlaying) {
                 video.pause();
@@ -593,7 +407,6 @@
         }
 
         function seekVideo(e) {
-            e.stopPropagation();
             if (!video) return;
             const rect = e.currentTarget.getBoundingClientRect();
             const pos = (e.clientX - rect.left) / rect.width;
@@ -630,7 +443,7 @@
         function toggleOverlay(e) {
             if (e.target.closest('#progressOverlay')) return;
             
-            if (progressOverlayVisible) {
+            if (progressOverlay.classList.contains('visible')) {
                 hideOverlay();
             } else {
                 showOverlay();
@@ -640,12 +453,18 @@
         function showOverlay() {
             progressOverlay.classList.add('visible');
             progressOverlay.classList.remove('fading');
-            progressOverlayVisible = true;
             
             if (hideOverlayTimer) clearTimeout(hideOverlayTimer);
             hideOverlayTimer = setTimeout(() => {
                 if (isPlaying) hideOverlay();
             }, 3000);
+        }
+
+        function hideOverlay() {
+            progressOverlay.classList.add('fading');
+            setTimeout(() => {
+                progressOverlay.classList.remove('visible');
+            }, 300);
         }
 
         function adjustZoom(direction) {
@@ -677,25 +496,26 @@
             showOverlay();
         }
 
-        function hideOverlay() {
-            progressOverlay.classList.add('fading');
-            setTimeout(() => {
-                progressOverlay.classList.remove('visible');
-                progressOverlayVisible = false;
-            }, 300);
-        }
+        function handleControls(e) {
+            e.stopPropagation();
+            const target = e.target.closest('.control-btn, .progressBar');
+            if (!target) return;
 
-        function onResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            effect.setSize(window.innerWidth, window.innerHeight);
-        }
+            if (target.matches('.progressBar')) {
+                seekVideo(e);
+                return;
+            }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            if (xrSession) return;
-            if (controls) controls.update();
-            effect.render(scene, camera);
+            const classList = target.classList;
+            if (classList.contains('play-pause-btn')) togglePlayPause();
+            else if (classList.contains('rewind-btn')) seekRelative(-10);
+            else if (classList.contains('forward-btn')) seekRelative(10);
+            else if (classList.contains('zoom-in-btn')) adjustZoom(1);
+            else if (classList.contains('zoom-out-btn')) adjustZoom(-1);
+            else if (classList.contains('zoom-reset-btn')) resetZoom();
+            else if (classList.contains('pan-left-btn')) adjustPan(-2);
+            else if (classList.contains('pan-center-btn')) centerPan();
+            else if (classList.contains('pan-right-btn')) adjustPan(2);
         }
 
         THREE.DeviceOrientationControls = function(camera) {
@@ -803,90 +623,16 @@
                     zoomLevel: { value: 1.0 },
                     texelSize: { value: new THREE.Vector2(1.0 / rtWidth, 1.0 / rtHeight) }
                 },
-                vertexShader: `
-                    varying vec2 vUv;
-                    void main() {
-                        vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                    }
-                `,
-                fragmentShader: `
-                    uniform sampler2D tDiffuse;
-                    uniform float k1;
-                    uniform float k2;
-                    uniform float eyeOffset;
-                    uniform float panOffset;
-                    uniform float zoomLevel;
-                    uniform vec2 texelSize;
-                    varying vec2 vUv;
-                    
-                    const float PI = 3.14159265359;
-                    const float HALF_PI = 1.57079632679;
-                    
-                    vec2 distort(vec2 p) {
-                        vec2 center = vec2(0.5 + eyeOffset, 0.5);
-                        vec2 v = p - center;
-                        float r2 = dot(v, v);
-                        float distortion = 1.0 + r2 * (k1 + k2 * r2);
-                        return center + v * distortion;
-                    }
-                    
-                    float lanczos2(float x) {
-                        x = abs(x);
-                        if (x < 0.0001) return 1.0;
-                        if (x >= 2.0) return 0.0;
-                        float pix = PI * x;
-                        float pix_half = HALF_PI * x;
-                        return (sin(pix) / pix) * (sin(pix_half) / pix_half);
-                    }
-                    
-                    vec4 sampleLanczos2(vec2 uv) {
-                        vec2 center = uv / texelSize - 0.5;
-                        vec2 centerFloor = floor(center);
-                        vec2 f = center - centerFloor;
-                        
-                        vec4 color = vec4(0.0);
-                        float weightSum = 0.0;
-                        
-                        for (int y = -1; y <= 2; y++) {
-                            float fy = float(y) - f.y;
-                            float wy = lanczos2(fy);
-                            for (int x = -1; x <= 2; x++) {
-                                float fx = float(x) - f.x;
-                                float weight = lanczos2(fx) * wy;
-                                vec2 sampleUV = (centerFloor + vec2(float(x), float(y)) + 0.5) * texelSize;
-                                
-                                if (sampleUV.x >= 0.0 && sampleUV.x <= 1.0 && sampleUV.y >= 0.0 && sampleUV.y <= 1.0) {
-                                    color += texture2D(tDiffuse, sampleUV) * weight;
-                                    weightSum += weight;
-                                }
-                            }
-                        }
-                        
-                        return weightSum > 0.0001 ? color / weightSum : vec4(0.0);
-                    }
-                    
-                    void main() {
-                        vec2 distortedUV = distort(vUv);
-                        vec2 uv = (distortedUV - 0.5) / zoomLevel;
-                        uv.x += panOffset;
-                        uv += 0.5;
-                        
-                        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-                            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-                        } else {
-                            gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
-                        }
-                    }
-                `
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
-            const quadMeshL = new THREE.Mesh(quadGeometry, distortionMaterial);
-            const quadMeshR = new THREE.Mesh(quadGeometry, distortionMaterial);
+            const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
             const orthoScene = new THREE.Scene();
             const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-            
+            orthoScene.add(quadMesh);
+
             const sizeVec = new THREE.Vector2();
 
             this.setSize = function(width, height) {
@@ -950,20 +696,16 @@
                 distortionMaterial.uniforms.panOffset.value = panUVOffset;
                 distortionMaterial.uniforms.zoomLevel.value = currentZoom;
                 
-                orthoScene.add(quadMeshL);
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
-                orthoScene.remove(quadMeshL);
 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 distortionMaterial.uniforms.eyeOffset.value = 0.20;
                 
-                orthoScene.add(quadMeshR);
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
-                orthoScene.remove(quadMeshR);
 
                 renderer.setScissorTest(false);
             };
