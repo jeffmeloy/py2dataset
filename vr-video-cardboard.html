@@ -731,11 +731,10 @@
             this.resetOrientation = function() {
                 const device = scope.deviceOrientation;
                 if (device && device.beta !== null) {
+                    scope.yawOffset = THREE.MathUtils.degToRad(device.alpha || 0);
                     if (Math.abs(scope.screenOrientation) === 90) {
-                        scope.yawOffset = THREE.MathUtils.degToRad(device.beta);
                         scope.pitchOffset = THREE.MathUtils.degToRad(device.gamma);
                     } else {
-                        scope.yawOffset = THREE.MathUtils.degToRad(device.alpha || 0);
                         scope.pitchOffset = THREE.MathUtils.degToRad(device.beta);
                     }
                 }
@@ -750,12 +749,14 @@
                     let yaw, pitch;
                     
                     if (Math.abs(scope.screenOrientation) === 90) {
-                        yaw = THREE.MathUtils.degToRad(device.beta) - scope.yawOffset;
+                        yaw = THREE.MathUtils.degToRad(device.alpha || 0) - scope.yawOffset;
                         pitch = THREE.MathUtils.degToRad(device.gamma) - scope.pitchOffset;
                     } else {
                         yaw = THREE.MathUtils.degToRad(device.alpha || 0) - scope.yawOffset;
                         pitch = THREE.MathUtils.degToRad(device.beta) - scope.pitchOffset;
                     }
+
+                    pitch = Math.max(-1.48, Math.min(1.48, pitch));
 
                     const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
                     const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -pitch);
