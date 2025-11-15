@@ -701,12 +701,11 @@
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
             this.camera = camera;
-            this.camera.rotation.reorder('YXZ');
             this.enabled = true;
             this.deviceOrientation = {};
             this.screenOrientation = 0;
-            this.alphaOffset = 0;
-            this.resetQuaternion = new THREE.Quaternion();
+            this.yawOffset = 0;
+            this.pitchOffset = 0;
 
             const onDeviceOrientationChangeEvent = function(event) {
                 scope.deviceOrientation = event;
@@ -730,7 +729,16 @@
             };
 
             this.resetOrientation = function() {
-                scope.resetQuaternion.copy(scope.camera.quaternion).invert();
+                const device = scope.deviceOrientation;
+                if (device && device.beta !== null) {
+                    if (Math.abs(scope.screenOrientation) === 90) {
+                        scope.yawOffset = THREE.MathUtils.degToRad(device.beta);
+                        scope.pitchOffset = THREE.MathUtils.degToRad(device.gamma);
+                    } else {
+                        scope.yawOffset = THREE.MathUtils.degToRad(device.alpha || 0);
+                        scope.pitchOffset = THREE.MathUtils.degToRad(device.beta);
+                    }
+                }
             };
 
             this.update = function() {
@@ -738,27 +746,21 @@
 
                 const device = scope.deviceOrientation;
 
-                if (device) {
-                    const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
-                    const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
-                    const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
-                    const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
-
-                    const euler = new THREE.Euler();
-                    euler.set(beta, alpha, -gamma, 'YXZ');
-                    scope.camera.quaternion.setFromEuler(euler);
-                    
-                    scope.camera.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -orient));
+                if (device && device.beta !== null) {
+                    let yaw, pitch;
                     
                     if (Math.abs(scope.screenOrientation) === 90) {
-                        const landscapeCorrection = new THREE.Quaternion().setFromAxisAngle(
-                            new THREE.Vector3(0, 0, 1), 
-                            THREE.MathUtils.degToRad(90)
-                        );
-                        scope.camera.quaternion.multiply(landscapeCorrection);
+                        yaw = THREE.MathUtils.degToRad(device.beta) - scope.yawOffset;
+                        pitch = THREE.MathUtils.degToRad(device.gamma) - scope.pitchOffset;
+                    } else {
+                        yaw = THREE.MathUtils.degToRad(device.alpha || 0) - scope.yawOffset;
+                        pitch = THREE.MathUtils.degToRad(device.beta) - scope.pitchOffset;
                     }
+
+                    const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+                    const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -pitch);
                     
-                    scope.camera.quaternion.multiply(scope.resetQuaternion);
+                    scope.camera.quaternion.copy(yawQuat).multiply(pitchQuat);
                 }
             };
 
