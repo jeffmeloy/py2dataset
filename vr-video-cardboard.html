@@ -23,6 +23,8 @@
         #testVideo { width: 100%; max-width: 400px; background: #000; margin: 10px 0; }
         .status { padding: 10px; margin: 10px 0; background: #000; border-radius: 5px; }
         .success { color: #4CAF50; }
+        #vrButton { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: #007BFF; border: none; cursor: pointer; display: none; z-index: 999; font-size: 24px; }
+        #vrButton.active { display: none; }
         #progressOverlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.8); padding: 15px; display: none; z-index: 998; transition: opacity 0.3s; }
         #progressOverlay.visible { display: flex; }
         #progressOverlay.fading { opacity: 0; }
@@ -38,13 +40,14 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Player</h2>
+        <h2>VR Official Cardboard Player</h2>
         <div class="section"><strong>Video Type</strong><br><input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label><input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label></div>
         <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
         <div class="section"><strong>Test</strong><br><video id="testVideo" controls playsinline webkit-playsinline></video><div id="status" class="status">Load video...</div></div>
         <div class="section"><button id="startBtn" disabled>START VR</button><div style="font-size: 13px; color: #aaa; margin-top: 10px;">&bull; Official Cardboard rendering<br>&bull; Barrel distortion correction<br>&bull; Gyroscope tracking<br>&bull; Tap to show/hide controls<br>&bull; True fullscreen mode<br>&bull; Landscape video support<br>&bull; Dual controls for VR viewing</div></div>
     </div>
 
+    <button id="vrButton">VR</button>
     <div id="progressOverlay">
         <div class="eye-controls">
             <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
@@ -140,80 +143,117 @@
     </script>
 
     <script>
-        // --- Globals & DOM Elements ---
         const fileInput = document.getElementById('fileInput');
         const testVideo = document.getElementById('testVideo');
         const startBtn = document.getElementById('startBtn');
         const setupDiv = document.getElementById('setup');
         const status = document.getElementById('status');
+        const vrButton = document.getElementById('vrButton');
         const progressOverlay = document.getElementById('progressOverlay');
         const progressFills = document.querySelectorAll('.progressFill');
         const timeDisplays = document.querySelectorAll('.timeDisplay');
         const playPauseBtns = document.querySelectorAll('.play-pause-btn');
 
-        // --- State Variables ---
         let camera, scene, renderer, effect;
         let video, videoTexture, controls;
-        let mode = '2d', isPlaying = false, videoURL = null, xrSession = null;
-        let hideOverlayTimer = null, currentZoom = 1.0, panOffset = 0, currentZoomLevel = 0;
+        let mode = '2d';
+        let isPlaying = false;
+        let videoURL = null;
+        let xrSession = null;
+        let hideOverlayTimer = null;
+        let currentZoom = 1.0;
+        let panOffset = 0;
+        let currentZoomLevel = 0;
         const zoomLevels = [1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8];
 
-        // --- Event Listeners ---
-        fileInput.addEventListener('change', handleFileSelect);
-        startBtn.addEventListener('click', startVR);
-        
-        // --- Core Functions ---
-        function handleFileSelect(e) {
+        fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
             if (videoURL) URL.revokeObjectURL(videoURL);
             videoURL = URL.createObjectURL(file);
+            
             testVideo.src = videoURL;
             mode = document.querySelector('input[name="mode"]:checked').value;
 
             testVideo.addEventListener('loadedmetadata', function() {
-                status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
+                status.textContent = 'Ready: ' + testVideo.videoWidth + 'x' + testVideo.videoHeight;
                 status.className = 'status success';
                 startBtn.disabled = false;
             }, { once: true });
-            testVideo.load();
-        }
 
-        async function startVR() {
+            testVideo.load();
+        });
+
+        startBtn.addEventListener('click', async function() {
             if (!videoURL) return;
             
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                await DeviceOrientationEvent.requestPermission().catch(err => console.error(err));
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission !== 'granted') {
+                        alert('Device orientation permission denied. Head tracking will not work.');
+                    }
+                } catch (error) {
+                    console.error('Error requesting orientation permission:', error);
+                }
             }
 
             const elem = document.documentElement;
-            elem.requestFullscreen?.() || elem.webkitRequestFullscreen?.();
-            screen.orientation?.lock?.('landscape').catch(() => {});
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            }
+            
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
+            }
             
             setTimeout(() => {
                 setupDiv.classList.add('hidden');
                 disposeResources();
                 initVR();
             }, 100);
-        }
+        });
 
         function disposeResources() {
-            videoTexture?.dispose();
-            if (video) { video.pause(); video.src = ''; video.load(); }
-            effect?.dispose();
-            controls?.dispose();
+            if (videoTexture) {
+                videoTexture.dispose();
+                videoTexture = null;
+            }
+            if (video) {
+                video.pause();
+                video.src = '';
+                video.load();
+                video = null;
+            }
+            if (effect && effect.dispose) {
+                effect.dispose();
+                effect = null;
+            }
+            if (controls) {
+                controls.dispose();
+                controls = null;
+            }
             if (renderer) {
                 renderer.dispose();
-                renderer.domElement.parentElement?.removeChild(renderer.domElement);
-            }
-            scene?.traverse((obj) => {
-                obj.geometry?.dispose();
-                if (obj.material) {
-                    obj.material.map?.dispose();
-                    obj.material.dispose();
+                if (renderer.domElement && renderer.domElement.parentNode) {
+                    renderer.domElement.parentNode.removeChild(renderer.domElement);
                 }
-            });
+                renderer = null;
+            }
+            if (scene) {
+                scene.traverse((obj) => {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (obj.material.map) obj.material.map.dispose();
+                        obj.material.dispose();
+                    }
+                });
+                scene = null;
+            }
         }
 
         function initVR() {
@@ -221,7 +261,8 @@
             scene.background = new THREE.Color(0x000000);
 
             camera = new THREE.PerspectiveCamera(105, window.innerWidth / window.innerHeight, 0.1, 1000);
-            
+            camera.position.set(0, 0, 0);
+
             video = document.createElement('video');
             video.src = videoURL;
             video.loop = false;
@@ -234,34 +275,73 @@
                 videoTexture.minFilter = THREE.LinearFilter;
                 videoTexture.magFilter = THREE.LinearFilter;
 
-                const aspect = (mode === '3d' ? video.videoWidth / 2 : video.videoWidth) / video.videoHeight;
+                const aspect = mode === '3d'
+                    ? (video.videoWidth / 2) / video.videoHeight
+                    : video.videoWidth / video.videoHeight;
+
                 const width = 6;
                 const height = width / aspect;
                 const distance = 2;
 
                 if (mode === '2d') {
                     const geometry = new THREE.PlaneGeometry(width, height);
-                    const material = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
-                    scene.add(new THREE.Mesh(geometry, material).position.set(0, 0, -distance));
+                    const material = new THREE.MeshBasicMaterial({
+                        map: videoTexture,
+                        side: THREE.DoubleSide
+                    });
+                    const screen = new THREE.Mesh(geometry, material);
+                    screen.position.set(0, 0, -distance);
+                    scene.add(screen);
                 } else {
-                    const createEyeScreen = (isLeft) => {
-                        const geometry = new THREE.PlaneGeometry(width, height);
-                        const material = new THREE.ShaderMaterial({
-                            uniforms: { tex: { value: videoTexture } },
-                            vertexShader: document.getElementById('vertexShader').textContent,
-                            fragmentShader: `
-                                uniform sampler2D tex; varying vec2 vUv;
-                                void main() { gl_FragColor = texture2D(tex, vec2(vUv.x * 0.5 + ${isLeft ? '0.0' : '0.5'}, vUv.y)); }
-                            `,
-                            side: THREE.DoubleSide
-                        });
-                        const screen = new THREE.Mesh(geometry, material);
-                        screen.position.set(0, 0, -distance);
-                        screen.layers.set(isLeft ? 1 : 2);
-                        scene.add(screen);
-                    };
-                    createEyeScreen(true);
-                    createEyeScreen(false);
+                    const geometryL = new THREE.PlaneGeometry(width, height);
+                    const materialL = new THREE.ShaderMaterial({
+                        uniforms: { tex: { value: videoTexture } },
+                        vertexShader: `
+                            varying vec2 vUv;
+                            void main() {
+                                vUv = uv;
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                            }
+                        `,
+                        fragmentShader: `
+                            uniform sampler2D tex;
+                            varying vec2 vUv;
+                            void main() {
+                                vec2 uv = vec2(vUv.x * 0.5, vUv.y);
+                                gl_FragColor = texture2D(tex, uv);
+                            }
+                        `,
+                        side: THREE.DoubleSide
+                    });
+                    const screenL = new THREE.Mesh(geometryL, materialL);
+                    screenL.position.set(0, 0, -distance);
+                    screenL.layers.set(1);
+                    scene.add(screenL);
+
+                    const geometryR = new THREE.PlaneGeometry(width, height);
+                    const materialR = new THREE.ShaderMaterial({
+                        uniforms: { tex: { value: videoTexture } },
+                        vertexShader: `
+                            varying vec2 vUv;
+                            void main() {
+                                vUv = uv;
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                            }
+                        `,
+                        fragmentShader: `
+                            uniform sampler2D tex;
+                            varying vec2 vUv;
+                            void main() {
+                                vec2 uv = vec2(vUv.x * 0.5 + 0.5, vUv.y);
+                                gl_FragColor = texture2D(tex, uv);
+                            }
+                        `,
+                        side: THREE.DoubleSide
+                    });
+                    const screenR = new THREE.Mesh(geometryR, materialR);
+                    screenR.position.set(0, 0, -distance);
+                    screenR.layers.set(2);
+                    scene.add(screenR);
                 }
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -273,16 +353,6 @@
                 effect.setSize(window.innerWidth, window.innerHeight);
 
                 controls = new THREE.DeviceOrientationControls(camera);
-                
-                // *** THE MINIMAL FIX: This is the safest way to auto-center ***
-                // It adds a one-time listener that calls the existing, working resetOrientation()
-                // as soon as the device provides its first valid orientation data.
-                window.addEventListener('deviceorientation', function autoCenterListener(event) {
-                    if (event.alpha !== null) {
-                        controls.resetOrientation();
-                    }
-                }, { once: true }); // { once: true } makes the browser automatically remove this listener after it runs.
-
                 controls.connect();
 
                 window.addEventListener('resize', onResize);
@@ -296,40 +366,158 @@
                     isPlaying = true;
                     updatePlayPauseButtons();
                     animate();
-                }).catch(err => console.error('Error playing video:', err));
+                }).catch(err => {
+                    console.error('Error playing video:', err);
+                });
             });
+
             video.load();
         }
 
         function animate() {
             requestAnimationFrame(animate);
             if (xrSession) return;
-            controls?.update();
-            effect?.render(scene, camera);
+            if (controls) controls.update();
+            effect.render(scene, camera);
         }
 
         function onResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
-            effect?.setSize(window.innerWidth, window.innerHeight);
+            effect.setSize(window.innerWidth, window.innerHeight);
         }
-        
-        // --- UI and Controls Functions (Unchanged) ---
-        function updatePlayPauseButtons() { playPauseBtns.forEach(btn => btn.textContent = isPlaying ? '||' : '>'); }
-        function togglePlayPause() { if (!video) return; isPlaying ? video.pause() : video.play(); isPlaying = !isPlaying; updatePlayPauseButtons(); showOverlay(); }
-        function seekVideo(e) { const rect = e.currentTarget.getBoundingClientRect(); video.currentTime = (e.clientX - rect.left) / rect.width * video.duration; showOverlay(); }
-        function seekRelative(seconds) { video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds)); showOverlay(); }
-        function updateProgress() { if (!video || !video.duration) return; const percent = (video.currentTime / video.duration) * 100; const formatTime = t => `${Math.floor(t/60)}:${Math.floor(t%60).toString().padStart(2,'0')}`; const timeText = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`; progressFills.forEach(fill => fill.style.width = percent + '%'); timeDisplays.forEach(display => display.textContent = timeText); }
-        function toggleOverlay(e) { if (e.target.closest('#progressOverlay')) return; progressOverlay.classList.contains('visible') ? hideOverlay() : showOverlay(); }
-        function showOverlay() { progressOverlay.classList.add('visible'); progressOverlay.classList.remove('fading'); clearTimeout(hideOverlayTimer); hideOverlayTimer = setTimeout(() => { if (isPlaying) hideOverlay(); }, 3000); }
-        function hideOverlay() { progressOverlay.classList.add('fading'); setTimeout(() => { progressOverlay.classList.remove('visible'); }, 300); }
-        function adjustZoom(direction) { currentZoomLevel = Math.max(0, Math.min(zoomLevels.length - 1, currentZoomLevel + direction)); currentZoom = zoomLevels[currentZoomLevel]; showOverlay(); }
-        function resetZoom() { currentZoomLevel = 0; currentZoom = zoomLevels[0]; showOverlay(); }
-        function adjustPan(degrees) { panOffset += degrees; showOverlay(); }
-        function centerPan() { panOffset = 0; if (controls) controls.resetOrientation(); showOverlay(); }
-        function handleControls(e) { e.stopPropagation(); const target = e.target.closest('.control-btn, .progressBar'); if (!target) return; if (target.matches('.progressBar')) { seekVideo(e); return; } const classList = target.classList; if (classList.contains('play-pause-btn')) togglePlayPause(); else if (classList.contains('rewind-btn')) seekRelative(-10); else if (classList.contains('forward-btn')) seekRelative(10); else if (classList.contains('zoom-in-btn')) adjustZoom(1); else if (classList.contains('zoom-out-btn')) adjustZoom(-1); else if (classList.contains('zoom-reset-btn')) resetZoom(); else if (classList.contains('pan-left-btn')) adjustPan(-2); else if (classList.contains('pan-center-btn')) centerPan(); else if (classList.contains('pan-right-btn')) adjustPan(2); }
 
-        // --- GIMBAL-LOCK-PROOF CONTROLS (UNCHANGED STABLE VERSION) ---
+        function updatePlayPauseButtons() {
+            playPauseBtns.forEach(btn => {
+                btn.textContent = isPlaying ? '||' : '>';
+            });
+        }
+
+        function togglePlayPause() {
+            if (!video) return;
+            if (isPlaying) {
+                video.pause();
+                isPlaying = false;
+            } else {
+                video.play();
+                isPlaying = true;
+            }
+            updatePlayPauseButtons();
+            showOverlay();
+        }
+
+        function seekVideo(e) {
+            if (!video) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            video.currentTime = pos * video.duration;
+            showOverlay();
+        }
+
+        function seekRelative(seconds) {
+            if (!video) return;
+            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
+            showOverlay();
+        }
+
+        function updateProgress() {
+            if (!video) return;
+            const percent = (video.currentTime / video.duration) * 100;
+            
+            progressFills.forEach(fill => {
+                fill.style.width = percent + '%';
+            });
+            
+            const currentMin = Math.floor(video.currentTime / 60);
+            const currentSec = Math.floor(video.currentTime % 60);
+            const durationMin = Math.floor(video.duration / 60);
+            const durationSec = Math.floor(video.duration % 60);
+            
+            const timeText = `${currentMin}:${currentSec.toString().padStart(2, '0')} / ${durationMin}:${durationSec.toString().padStart(2, '0')}`;
+            
+            timeDisplays.forEach(display => {
+                display.textContent = timeText;
+            });
+        }
+
+        function toggleOverlay(e) {
+            if (e.target.closest('#progressOverlay')) return;
+            
+            if (progressOverlay.classList.contains('visible')) {
+                hideOverlay();
+            } else {
+                showOverlay();
+            }
+        }
+
+        function showOverlay() {
+            progressOverlay.classList.add('visible');
+            progressOverlay.classList.remove('fading');
+            
+            if (hideOverlayTimer) clearTimeout(hideOverlayTimer);
+            hideOverlayTimer = setTimeout(() => {
+                if (isPlaying) hideOverlay();
+            }, 3000);
+        }
+
+        function hideOverlay() {
+            progressOverlay.classList.add('fading');
+            setTimeout(() => {
+                progressOverlay.classList.remove('visible');
+            }, 300);
+        }
+
+        function adjustZoom(direction) {
+            if (direction > 0) {
+                currentZoomLevel = Math.min(zoomLevels.length - 1, currentZoomLevel + 1);
+            } else {
+                currentZoomLevel = Math.max(0, currentZoomLevel - 1);
+            }
+            currentZoom = zoomLevels[currentZoomLevel];
+            showOverlay();
+        }
+
+        function resetZoom() {
+            currentZoomLevel = 0;
+            currentZoom = zoomLevels[0];
+            showOverlay();
+        }
+
+        function adjustPan(degrees) {
+            panOffset += degrees;
+            showOverlay();
+        }
+
+        function centerPan() {
+            panOffset = 0;
+            if (controls && controls.resetOrientation) {
+                controls.resetOrientation();
+            }
+            showOverlay();
+        }
+
+        function handleControls(e) {
+            e.stopPropagation();
+            const target = e.target.closest('.control-btn, .progressBar');
+            if (!target) return;
+
+            if (target.matches('.progressBar')) {
+                seekVideo(e);
+                return;
+            }
+
+            const classList = target.classList;
+            if (classList.contains('play-pause-btn')) togglePlayPause();
+            else if (classList.contains('rewind-btn')) seekRelative(-10);
+            else if (classList.contains('forward-btn')) seekRelative(10);
+            else if (classList.contains('zoom-in-btn')) adjustZoom(1);
+            else if (classList.contains('zoom-out-btn')) adjustZoom(-1);
+            else if (classList.contains('zoom-reset-btn')) resetZoom();
+            else if (classList.contains('pan-left-btn')) adjustPan(-2);
+            else if (classList.contains('pan-center-btn')) centerPan();
+            else if (classList.contains('pan-right-btn')) adjustPan(2);
+        }
+
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
             this.camera = camera;
@@ -370,7 +558,7 @@
                 if (!scope.enabled) return;
 
                 const device = scope.deviceOrientation;
-                if (device && device.alpha !== null) {
+                if (device) {
                     const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
                     const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
                     const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
@@ -394,19 +582,33 @@
             };
         };
 
-        // --- STEREO EFFECT (Unchanged) ---
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera();
             _stereo.aspect = 0.5;
 
+            const dpr = window.devicePixelRatio || 1;
             const maxTextureSize = renderer.capabilities.maxTextureSize;
-            let rtWidth, rtHeight, renderTargetL, renderTargetR;
+            let rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), maxTextureSize);
+            let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), maxTextureSize);
             
+            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter
+            });
+            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+                minFilter: THREE.LinearFilter,
+                magFilter: THREE.LinearFilter
+            });
+
             const distortionMaterial = new THREE.ShaderMaterial({
                 uniforms: {
-                    tDiffuse: { value: null }, k1: { value: 0.22 }, k2: { value: 0.18 },
-                    eyeOffset: { value: 0.0 }, panOffset: { value: 0.0 }, zoomLevel: { value: 1.0 },
-                    texelSize: { value: new THREE.Vector2() }
+                    tDiffuse: { value: null },
+                    k1: { value: 0.22 },
+                    k2: { value: 0.18 },
+                    eyeOffset: { value: 0.0 },
+                    panOffset: { value: 0.0 },
+                    zoomLevel: { value: 1.0 },
+                    texelSize: { value: new THREE.Vector2(1.0 / rtWidth, 1.0 / rtHeight) }
                 },
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
@@ -422,17 +624,27 @@
 
             this.setSize = function(width, height) {
                 renderer.setSize(width, height);
-                const dpr = window.devicePixelRatio || 1;
-                const newRtWidth = Math.min(Math.floor(width * dpr / 2), maxTextureSize);
-                const newRtHeight = Math.min(Math.floor(height * dpr), maxTextureSize);
+                
+                const newDpr = window.devicePixelRatio || 1;
+                const newRtWidth = Math.min(Math.floor(width * newDpr / 2), maxTextureSize);
+                const newRtHeight = Math.min(Math.floor(height * newDpr), maxTextureSize);
                 
                 if (newRtWidth !== rtWidth || newRtHeight !== rtHeight) {
-                    renderTargetL?.dispose();
-                    renderTargetR?.dispose();
+                    renderTargetL.dispose();
+                    renderTargetR.dispose();
+                    
                     rtWidth = newRtWidth;
                     rtHeight = newRtHeight;
-                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
+                    
+                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+                        minFilter: THREE.LinearFilter,
+                        magFilter: THREE.LinearFilter
+                    });
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
+                        minFilter: THREE.LinearFilter,
+                        magFilter: THREE.LinearFilter
+                    });
+                    
                     distortionMaterial.uniforms.texelSize.value.set(1.0 / rtWidth, 1.0 / rtHeight);
                 }
             };
@@ -440,7 +652,9 @@
             this.render = function(scene, camera) {
                 scene.updateMatrixWorld();
                 if (camera.parent === null) camera.updateMatrixWorld();
+
                 _stereo.update(camera);
+
                 renderer.getSize(sizeVec);
                 const halfWidth = sizeVec.width * 0.5;
 
@@ -449,23 +663,33 @@
                     _stereo.cameraR.layers.set(2);
                 }
 
-                renderer.setRenderTarget(renderTargetL); renderer.clear(); renderer.render(scene, _stereo.cameraL);
-                renderer.setRenderTarget(renderTargetR); renderer.clear(); renderer.render(scene, _stereo.cameraR);
-                renderer.setRenderTarget(null); renderer.clear();
+                renderer.setRenderTarget(renderTargetL);
+                renderer.clear();
+                renderer.render(scene, _stereo.cameraL);
+
+                renderer.setRenderTarget(renderTargetR);
+                renderer.clear();
+                renderer.render(scene, _stereo.cameraR);
+
+                renderer.setRenderTarget(null);
+                renderer.clear();
+
                 renderer.setScissorTest(true);
 
                 const panUVOffset = panOffset / 180.0;
+
+                distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
+                distortionMaterial.uniforms.eyeOffset.value = -0.20;
                 distortionMaterial.uniforms.panOffset.value = panUVOffset;
                 distortionMaterial.uniforms.zoomLevel.value = currentZoom;
                 
-                distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
-                distortionMaterial.uniforms.eyeOffset.value = -0.20;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 distortionMaterial.uniforms.eyeOffset.value = 0.20;
+                
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
@@ -474,8 +698,8 @@
             };
 
             this.dispose = function() {
-                renderTargetL?.dispose();
-                renderTargetR?.dispose();
+                renderTargetL.dispose();
+                renderTargetR.dispose();
                 distortionMaterial.dispose();
                 quadGeometry.dispose();
             };
