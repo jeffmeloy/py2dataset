@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR 2 Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -166,7 +166,7 @@
         let camera, scene, renderer, effect;
         let video, videoTexture, controls;
         let mode = '2d', isPlaying = false, videoURL = null, xrSession = null;
-        let hideOverlayTimer = null, currentZoom = 1.0, panOffset = 0, currentZoomLevel = 4;
+        let hideOverlayTimer = null, currentZoom = 0.6, panOffset = 0, currentZoomLevel = 2;
         let screenGroup = null; // <<< NEW: group for the screen geometry
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8];
 
@@ -289,7 +289,7 @@
 
                 const width = 6;
                 const height = width / aspect;
-                const distance = 2;
+                const distance = 1;
 
                 // <<< NEW: group to hold screen(s)
                 screenGroup = new THREE.Object3D();
