@@ -23,8 +23,6 @@
         #testVideo { width: 100%; max-width: 400px; background: #000; margin: 10px 0; }
         .status { padding: 10px; margin: 10px 0; background: #000; border-radius: 5px; }
         .success { color: #4CAF50; }
-        #vrButton { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: #007BFF; border: none; cursor: pointer; display: none; z-index: 999; font-size: 24px; }
-        #vrButton.active { display: none; }
         #progressOverlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.8); padding: 15px; display: none; z-index: 998; transition: opacity 0.3s; }
         #progressOverlay.visible { display: flex; }
         #progressOverlay.fading { opacity: 0; }
@@ -47,7 +45,6 @@
         <div class="section"><button id="startBtn" disabled>START VR</button><div style="font-size: 13px; color: #aaa; margin-top: 10px;">&bull; Official Cardboard rendering<br>&bull; Barrel distortion correction<br>&bull; Gyroscope tracking<br>&bull; Tap to show/hide controls<br>&bull; True fullscreen mode<br>&bull; Landscape video support<br>&bull; Dual controls for VR viewing</div></div>
     </div>
 
-    <button id="vrButton">VR</button>
     <div id="progressOverlay">
         <div class="eye-controls">
             <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
@@ -148,7 +145,6 @@
         const startBtn = document.getElementById('startBtn');
         const setupDiv = document.getElementById('setup');
         const status = document.getElementById('status');
-        const vrButton = document.getElementById('vrButton');
         const progressOverlay = document.getElementById('progressOverlay');
         const progressFills = document.querySelectorAll('.progressFill');
         const timeDisplays = document.querySelectorAll('.timeDisplay');
@@ -489,7 +485,6 @@
         }
 
         function centerPan() {
-            panOffset = 0;
             if (controls && controls.resetOrientation) {
                 controls.resetOrientation();
             }
@@ -517,8 +512,6 @@
             else if (classList.contains('pan-center-btn')) centerPan();
             else if (classList.contains('pan-right-btn')) adjustPan(2);
         }
-        
-        // --- GIMBAL-LOCK-PROOF AND AUTO-CENTERING CONTROLS ---
 
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
@@ -533,9 +526,18 @@
             const euler = new THREE.Euler(0, 0, 0, 'YXZ');
             const q0 = new THREE.Quaternion();
             const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+            const q1Inv = new THREE.Quaternion(Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
             const zAxis = new THREE.Vector3(0, 0, 1);
+            const tempQuat = new THREE.Quaternion();
+            const tempEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+            let isFirstEvent = true;
 
             const onDeviceOrientationChangeEvent = (event) => {
+                if (isFirstEvent && event.alpha !== null) {
+                    scope.resetOrientation();
+                    isFirstEvent = false;
+                }
                 scope.deviceOrientation = event;
             };
 
@@ -545,18 +547,8 @@
 
             this.connect = function() {
                 onScreenOrientationChangeEvent();
-                
-                const onFirstDeviceOrientation = (event) => {
-                    if (event.alpha !== null) {
-                        scope.resetOrientation();
-                        window.removeEventListener('deviceorientation', onFirstDeviceOrientation);
-                        window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent);
-                    }
-                };
-
                 window.addEventListener('orientationchange', onScreenOrientationChangeEvent);
-                window.addEventListener('deviceorientation', onFirstDeviceOrientation);
-
+                window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent);
                 scope.enabled = true;
             };
 
@@ -570,8 +562,8 @@
                 if (!scope.enabled) return;
 
                 const device = scope.deviceOrientation;
-                if (device) {
-                    const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
+                if (device && device.alpha !== null) {
+                    const alpha = THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset;
                     const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
                     const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
                     const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
@@ -584,9 +576,16 @@
             };
 
             this.resetOrientation = function() {
-                if (scope.deviceOrientation.alpha) {
-                    scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
-                }
+                if (scope.deviceOrientation.alpha === null) return;
+
+                tempQuat.copy(scope.camera.quaternion);
+                
+                const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
+                tempQuat.multiply(q0.setFromAxisAngle(zAxis, orient));
+                tempQuat.multiply(q1Inv);
+                
+                tempEuler.setFromQuaternion(tempQuat, 'YXZ');
+                scope.alphaOffset = -tempEuler.y;
             };
 
             this.dispose = function() {
