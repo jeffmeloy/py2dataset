@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR 2 Player</h2>
+        <h2>VR 3 Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -548,7 +548,7 @@
             else if (classList.contains('pan-right-btn')) adjustPan(2);
         }
 
-        // --- Device Orientation Controls (clean recenter logic) ---
+        // --- Device Orientation Controls (fixed recenter logic) ---
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
             this.camera = camera;
@@ -606,7 +606,6 @@
 
             this.resetOrientation = function() {
                 if (scope.deviceOrientation && scope.deviceOrientation.alpha != null) {
-                    // make current yaw the new "zero"
                     scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
                 }
             };
@@ -616,7 +615,7 @@
             };
         };
 
-        // --- STEREO EFFECT (only eyeOffset centered) ---
+        // --- STEREO EFFECT (correct per-eye distortion center) ---
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera();
             _stereo.aspect = 0.5;
@@ -690,16 +689,16 @@
                 distortionMaterial.uniforms.panOffset.value = panUVOffset;
                 distortionMaterial.uniforms.zoomLevel.value = currentZoom;
                 
-                // Left eye: center distortion in the middle of the half-screen
+                // Left eye: distortion center at uv.x = 0.25
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
-                distortionMaterial.uniforms.eyeOffset.value = 0.0;
+                distortionMaterial.uniforms.eyeOffset.value = -0.25;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
-                // Right eye: same center, separate half of the screen
+                // Right eye: distortion center at uv.x = 0.75
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
-                distortionMaterial.uniforms.eyeOffset.value = 0.0;
+                distortionMaterial.uniforms.eyeOffset.value = 0.25;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
