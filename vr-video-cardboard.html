@@ -275,19 +275,41 @@
                 videoTexture.minFilter = THREE.LinearFilter;
                 videoTexture.magFilter = THREE.LinearFilter;
 
-                const radius = 2.5;
+                const aspect = mode === '3d'
+                    ? (video.videoWidth / 2) / video.videoHeight
+                    : video.videoWidth / video.videoHeight;
+
+                const radius = 3;
+                const arcAngle = Math.PI * 0.65;
+                const height = 2.5;
                 const segments = 64;
 
                 if (mode === '2d') {
-                    const geometry = new THREE.SphereGeometry(radius, segments, segments);
+                    const geometry = new THREE.CylinderGeometry(radius, radius, height, segments, 1, true, -arcAngle/2, arcAngle);
+                    geometry.scale(-1, 1, 1);
+                    
+                    const uvs = geometry.attributes.uv.array;
+                    for (let i = 0; i < uvs.length; i += 2) {
+                        uvs[i] = 1 - uvs[i];
+                    }
+                    geometry.attributes.uv.needsUpdate = true;
+
                     const material = new THREE.MeshBasicMaterial({
                         map: videoTexture,
-                        side: THREE.BackSide
+                        side: THREE.DoubleSide
                     });
-                    const sphere = new THREE.Mesh(geometry, material);
-                    scene.add(sphere);
+                    const cylinder = new THREE.Mesh(geometry, material);
+                    scene.add(cylinder);
                 } else {
-                    const geometryL = new THREE.SphereGeometry(radius, segments, segments);
+                    const geometryL = new THREE.CylinderGeometry(radius, radius, height, segments, 1, true, -arcAngle/2, arcAngle);
+                    geometryL.scale(-1, 1, 1);
+                    
+                    const uvsL = geometryL.attributes.uv.array;
+                    for (let i = 0; i < uvsL.length; i += 2) {
+                        uvsL[i] = 1 - uvsL[i];
+                    }
+                    geometryL.attributes.uv.needsUpdate = true;
+
                     const materialL = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
                         vertexShader: `
@@ -305,13 +327,21 @@
                                 gl_FragColor = texture2D(tex, uv);
                             }
                         `,
-                        side: THREE.BackSide
+                        side: THREE.DoubleSide
                     });
-                    const sphereL = new THREE.Mesh(geometryL, materialL);
-                    sphereL.layers.set(1);
-                    scene.add(sphereL);
+                    const cylinderL = new THREE.Mesh(geometryL, materialL);
+                    cylinderL.layers.set(1);
+                    scene.add(cylinderL);
 
-                    const geometryR = new THREE.SphereGeometry(radius, segments, segments);
+                    const geometryR = new THREE.CylinderGeometry(radius, radius, height, segments, 1, true, -arcAngle/2, arcAngle);
+                    geometryR.scale(-1, 1, 1);
+                    
+                    const uvsR = geometryR.attributes.uv.array;
+                    for (let i = 0; i < uvsR.length; i += 2) {
+                        uvsR[i] = 1 - uvsR[i];
+                    }
+                    geometryR.attributes.uv.needsUpdate = true;
+
                     const materialR = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
                         vertexShader: `
@@ -329,11 +359,11 @@
                                 gl_FragColor = texture2D(tex, uv);
                             }
                         `,
-                        side: THREE.BackSide
+                        side: THREE.DoubleSide
                     });
-                    const sphereR = new THREE.Mesh(geometryR, materialR);
-                    sphereR.layers.set(2);
-                    scene.add(sphereR);
+                    const cylinderR = new THREE.Mesh(geometryR, materialR);
+                    cylinderR.layers.set(2);
+                    scene.add(cylinderR);
                 }
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -553,7 +583,7 @@
                 if (device) {
                     const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
                     const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
-                    const gamma = device.gamma ? THREE.MathUtils.degToRad(gamma) : 0;
+                    const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
                     const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
 
                     euler.set(beta, alpha, -gamma, 'YXZ');
