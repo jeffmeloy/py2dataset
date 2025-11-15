@@ -489,6 +489,7 @@
         }
 
         function centerPan() {
+            panOffset = 0;
             if (controls && controls.resetOrientation) {
                 controls.resetOrientation();
             }
@@ -516,6 +517,8 @@
             else if (classList.contains('pan-center-btn')) centerPan();
             else if (classList.contains('pan-right-btn')) adjustPan(2);
         }
+        
+        // --- GIMBAL-LOCK-PROOF AND AUTO-CENTERING CONTROLS ---
 
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
@@ -542,8 +545,18 @@
 
             this.connect = function() {
                 onScreenOrientationChangeEvent();
+                
+                const onFirstDeviceOrientation = (event) => {
+                    if (event.alpha !== null) {
+                        scope.resetOrientation();
+                        window.removeEventListener('deviceorientation', onFirstDeviceOrientation);
+                        window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent);
+                    }
+                };
+
                 window.addEventListener('orientationchange', onScreenOrientationChangeEvent);
-                window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent);
+                window.addEventListener('deviceorientation', onFirstDeviceOrientation);
+
                 scope.enabled = true;
             };
 
