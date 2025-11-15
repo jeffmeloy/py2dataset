@@ -39,26 +39,61 @@
 <body>
     <div id="setup">
         <h2>VR 2 Player</h2>
-        <div class="section"><strong>Video Type</strong><br><input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label><input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label></div>
+        <div class="section">
+            <strong>Video Type</strong><br>
+            <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
+            <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label>
+        </div>
         <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
-        <div class="section"><strong>Test</strong><br><video id="testVideo" controls playsinline webkit-playsinline></video><div id="status" class="status">Load video...</div></div>
-        <div class="section"><button id="startBtn" disabled>START VR</button><div style="font-size: 13px; color: #aaa; margin-top: 10px;"></div></div>
+        <div class="section">
+            <strong>Test</strong><br>
+            <video id="testVideo" controls playsinline webkit-playsinline></video>
+            <div id="status" class="status">Load video...</div>
+        </div>
+        <div class="section">
+            <button id="startBtn" disabled>START VR</button>
+            <div style="font-size: 13px; color: #aaa; margin-top: 10px;"></div>
+        </div>
     </div>
 
     <div id="progressOverlay">
         <div class="eye-controls">
             <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
-            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
-            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
+            <div class="controls">
+                <button class="control-btn pan-left-btn">&lt;</button>
+                <button class="control-btn pan-center-btn">o</button>
+                <button class="control-btn pan-right-btn">&gt;</button>
+            </div>
+            <div class="controls">
+                <button class="control-btn rewind-btn">&lt;&lt;</button>
+                <button class="control-btn play-pause-btn">||</button>
+                <button class="control-btn forward-btn">&gt;&gt;</button>
+            </div>
+            <div class="controls" style="margin-top: 5px;">
+                <button class="control-btn zoom-out-btn">-</button>
+                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
+                <button class="control-btn zoom-in-btn">+</button>
+            </div>
         </div>
         <div class="eye-controls">
             <div class="progressBar" data-eye="right"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
-            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
-            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
+            <div class="controls">
+                <button class="control-btn pan-left-btn">&lt;</button>
+                <button class="control-btn pan-center-btn">o</button>
+                <button class="control-btn pan-right-btn">&gt;</button>
+            </div>
+            <div class="controls">
+                <button class="control-btn rewind-btn">&lt;&lt;</button>
+                <button class="control-btn play-pause-btn">||</button>
+                <button class="control-btn forward-btn">&gt;&gt;</button>
+            </div>
+            <div class="controls" style="margin-top: 5px;">
+                <button class="control-btn zoom-out-btn">-</button>
+                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
+                <button class="control-btn zoom-in-btn">+</button>
+            </div>
         </div>
     </div>
 
@@ -182,6 +217,9 @@
 
         async function startVR() {
             if (!videoURL) return;
+
+            // ✅ Re-read 2D/3D mode at VR start (Bug 2)
+            mode = document.querySelector('input[name="mode"]:checked').value;
             
             if (typeof DeviceOrientationEvent !== 'undefined' && 
                 typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -214,6 +252,14 @@
         }
 
         function disposeResources() {
+            // ✅ Clean up global event listeners & video events
+            window.removeEventListener('resize', onResize);
+            document.removeEventListener('click', toggleOverlay);
+            if (video) {
+                video.removeEventListener('timeupdate', updateProgress);
+            }
+            progressOverlay.removeEventListener('click', handleControls);
+
             if (videoTexture) {
                 videoTexture.dispose();
                 videoTexture = null;
@@ -401,9 +447,10 @@
             showOverlay();
         }
 
-        function seekVideo(e) {
+        // ✅ Bug 1: use the actual progressBar element for seeking
+        function seekVideo(e, bar) {
             if (!video) return;
-            const rect = e.currentTarget.getBoundingClientRect();
+            const rect = bar.getBoundingClientRect();
             const pos = (e.clientX - rect.left) / rect.width;
             video.currentTime = pos * video.duration;
             showOverlay();
@@ -497,7 +544,7 @@
             if (!target) return;
 
             if (target.matches('.progressBar')) {
-                seekVideo(e);
+                seekVideo(e, target); // ✅ pass the actual bar element
                 return;
             }
 
@@ -524,7 +571,6 @@
             this.screenOrientation = 0;
             this.alphaOffset = 0;
 
-            // *** THE ONLY CHANGE IS HERE ***
             // Flag to ensure auto-centering happens only once.
             let hasAutoCentered = false;
 
@@ -560,9 +606,6 @@
                 const device = scope.deviceOrientation;
                 if (device && device.alpha !== null) { // Ensure we have valid sensor data
 
-                    // *** THE ONLY CHANGE IS HERE ***
-                    // This is the simplest, safest way to auto-center. It guarantees sensor data exists
-                    // and that it runs inside the render loop, avoiding all race conditions.
                     if (!hasAutoCentered) {
                         scope.resetOrientation();
                         hasAutoCentered = true;
@@ -580,8 +623,9 @@
                 }
             };
 
+            // ✅ Handle alpha === 0 correctly
             this.resetOrientation = function() {
-                if (scope.deviceOrientation.alpha) {
+                if (scope.deviceOrientation && scope.deviceOrientation.alpha != null) {
                     scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
                 }
             };
@@ -591,7 +635,7 @@
             };
         };
 
-        // --- STEREO EFFECT (UNCHANGED FROM YOUR STABLE VERSION) ---
+        // --- STEREO EFFECT (kept functionally identical) ---
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera();
             _stereo.aspect = 0.5;
