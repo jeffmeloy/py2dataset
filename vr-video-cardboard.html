@@ -317,7 +317,7 @@
         function resetZoom() { currentZoomLevel = 0; currentZoom = zoomLevels[0]; showOverlay(); }
         function adjustPan(degrees) { panOffset += degrees; showOverlay(); }
         function centerPan() { panOffset = 0; if (controls) controls.resetOrientation(); showOverlay(); }
-        function handleControls(e) { e.stopPropagation(); const target = e.target.closest('.control-btn, .progressBar'); if (!target) return; if (target.matches('.progressBar')) { seekVideo(e); return; } const classList = target.classList; if (classList.contains('play-pause-btn')) togglePlayPause(); else if (classList.contains('rewind-btn')) seekRelative(-10); else if (classList.contains('forward-btn')) seekRelative(10); else if (classList.contains('zoom-in-btn')) adjustZoom(1); else if (classList.contains('zoom-out-btn')) adjustZoom(-1); else if (classList.contains('zoom-reset-btn')) resetZoom(); else if (classList.contains('pan-left-btn')) adjustPan(-2); else if (classList.contains('pan-center-btn')) centerPan(); else if (classList.contains('pan-right-btn')) adjustPan(2); }
+        function handleControls(e) { e.stopPropagation(); const target = e.target.closest('.control-btn, .progressBar'); if (!target) return; if (target.matches('.progressBar')) { seekVideo(e); return; } const classList = target.classList; if (classList.contains('play-pause-btn')) togglePlayPause(); else if (classList.contains('rewind-btn')) seekRelative(-10); else if (classList.contains('forward-btn')) seekRelative(10); else if (classList.contains('zoom-in-btn')) adjustZoom(1); else if (classList.contains('zoom-out-btn')) adjustZoom(-1); else if (classList.contains('pan-left-btn')) adjustPan(-2); else if (classList.contains('pan-center-btn')) centerPan(); else if (classList.contains('pan-right-btn')) adjustPan(2); }
 
         // --- FINAL WORKING CONTROLS ---
         THREE.DeviceOrientationControls = function(camera) {
@@ -330,20 +330,13 @@
             this.screenOrientation = 0;
             this.alphaOffset = 0;
 
-            // Flag to handle the two distinct recentering cases, as per your analysis
-            let hasUpdatedOnce = false;
+            // Flag to ensure auto-centering happens only once.
+            let hasAutoCentered = false;
 
-            // Pooled objects for performance
             const euler = new THREE.Euler(0, 0, 0, 'YXZ');
             const q0 = new THREE.Quaternion();
             const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
             const zAxis = new THREE.Vector3(0, 0, 1);
-            
-            // Quaternion for runtime recentering logic
-            const tempQuat = new THREE.Quaternion();
-            const tempEuler = new THREE.Euler(0, 0, 0, 'YXZ');
-            const q1Inv = q1.clone().invert();
-
 
             const onDeviceOrientationChangeEvent = (event) => {
                 scope.deviceOrientation = event;
@@ -370,8 +363,15 @@
                 if (!scope.enabled) return;
 
                 const device = scope.deviceOrientation;
-                if (device && device.alpha !== null) {
-                    
+                if (device && device.alpha !== null) { // Ensure we have valid sensor data
+
+                    // This is the safest place to auto-center, as it guarantees we have sensor data
+                    // and are in the render loop, avoiding all race conditions.
+                    if (!hasAutoCentered) {
+                        scope.resetOrientation();
+                        hasAutoCentered = true;
+                    }
+
                     const alpha = THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset;
                     const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
                     const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
@@ -381,32 +381,13 @@
                     scope.camera.quaternion.setFromEuler(euler);
                     scope.camera.quaternion.multiply(q1);
                     scope.camera.quaternion.multiply(q0.setFromAxisAngle(zAxis, -orient));
-                    
-                    // The auto-center must happen *after* the first quaternion is calculated.
-                    if (!hasUpdatedOnce) {
-                        scope.resetOrientation();
-                        hasUpdatedOnce = true;
-                    }
                 }
             };
-            
-            // This function now correctly handles both initialization and runtime recentering.
+
+            // This simple function is now robust because it's only ever called when
+            // `device.alpha` is guaranteed to be a valid number.
             this.resetOrientation = function() {
-                if (scope.deviceOrientation.alpha === null) return;
-                
-                // BIFURCATED LOGIC: Use the correct method based on state.
-                if (hasUpdatedOnce) {
-                    // RUNTIME RECALIBRATION (Manual "o" press)
-                    // This uses quaternion inversion on the live camera view to preserve the current direction.
-                    tempQuat.copy(scope.camera.quaternion);
-                    const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
-                    tempQuat.multiply(q0.setFromAxisAngle(zAxis, orient));
-                    tempQuat.multiply(q1Inv);
-                    tempEuler.setFromQuaternion(tempQuat, 'YXZ');
-                    scope.alphaOffset = -tempEuler.y;
-                } else {
-                    // INITIAL CALIBRATION (Auto-center on start)
-                    // Operates in sensor-space on raw device alpha, as camera.quaternion is not yet valid.
+                if (scope.deviceOrientation.alpha) {
                     scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
                 }
             };
