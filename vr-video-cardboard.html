@@ -38,27 +38,62 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR 3 Player</h2>
-        <div class="section"><strong>Video Type</strong><br><input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label><input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label></div>
+        <h2>VR 2 Player</h2>
+        <div class="section">
+            <strong>Video Type</strong><br>
+            <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
+            <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label>
+        </div>
         <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
-        <div class="section"><strong>Test</strong><br><video id="testVideo" controls playsinline webkit-playsinline></video><div id="status" class="status">Load video...</div></div>
-        <div class="section"><button id="startBtn" disabled>START VR</button><div style="font-size: 13px; color: #aaa; margin-top: 10px;"></div></div>
+        <div class="section">
+            <strong>Test</strong><br>
+            <video id="testVideo" controls playsinline webkit-playsinline></video>
+            <div id="status" class="status">Load video...</div>
+        </div>
+        <div class="section">
+            <button id="startBtn" disabled>START VR</button>
+            <div style="font-size: 13px; color: #aaa; margin-top: 10px;"></div>
+        </div>
     </div>
 
     <div id="progressOverlay">
         <div class="eye-controls">
             <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
-            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
-            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
+            <div class="controls">
+                <button class="control-btn pan-left-btn">&lt;</button>
+                <button class="control-btn pan-center-btn">o</button>
+                <button class="control-btn pan-right-btn">&gt;</button>
+            </div>
+            <div class="controls">
+                <button class="control-btn rewind-btn">&lt;&lt;</button>
+                <button class="control-btn play-pause-btn">||</button>
+                <button class="control-btn forward-btn">&gt;&gt;</button>
+            </div>
+            <div class="controls" style="margin-top: 5px;">
+                <button class="control-btn zoom-out-btn">-</button>
+                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
+                <button class="control-btn zoom-in-btn">+</button>
+            </div>
         </div>
         <div class="eye-controls">
             <div class="progressBar" data-eye="right"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
-            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
-            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
+            <div class="controls">
+                <button class="control-btn pan-left-btn">&lt;</button>
+                <button class="control-btn pan-center-btn">o</button>
+                <button class="control-btn pan-right-btn">&gt;</button>
+            </div>
+            <div class="controls">
+                <button class="control-btn rewind-btn">&lt;&lt;</button>
+                <button class="control-btn play-pause-btn">||</button>
+                <button class="control-btn forward-btn">&gt;&gt;</button>
+            </div>
+            <div class="controls" style="margin-top: 5px;">
+                <button class="control-btn zoom-out-btn">-</button>
+                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
+                <button class="control-btn zoom-in-btn">+</button>
+            </div>
         </div>
     </div>
 
@@ -513,7 +548,7 @@
             else if (classList.contains('pan-right-btn')) adjustPan(2);
         }
 
-        // --- FINAL, WORKING CONTROLS ---
+        // --- Device Orientation Controls (clean recenter logic) ---
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
             this.camera = camera;
@@ -522,10 +557,7 @@
             this.enabled = true;
             this.deviceOrientation = {};
             this.screenOrientation = 0;
-            this.alphaOffset = 0;
-
-            // Flag to ensure auto-centering happens only once.
-            let hasAutoCentered = false;
+            this.alphaOffset = 0; // yaw offset in radians
 
             const euler = new THREE.Euler(0, 0, 0, 'YXZ');
             const q0 = new THREE.Quaternion();
@@ -553,21 +585,11 @@
                 scope.enabled = false;
             };
 
-            // ✅ Updated to treat 0° as valid and recenter correctly
             this.update = function() {
                 if (!scope.enabled) return;
 
                 const device = scope.deviceOrientation;
-
-                // require real sensor data; alpha may be 0 but that's still valid
                 if (device && device.alpha != null) {
-
-                    // auto-center once on first valid reading
-                    if (!hasAutoCentered) {
-                        scope.resetOrientation();
-                        hasAutoCentered = true;
-                    }
-
                     const alpha = THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset;
                     const beta  = device.beta  != null ? THREE.MathUtils.degToRad(device.beta)  : 0;
                     const gamma = device.gamma != null ? THREE.MathUtils.degToRad(device.gamma) : 0;
@@ -582,9 +604,9 @@
                 }
             };
 
-            // ✅ Updated to use alpha != null, so reset works even when alpha is 0°
             this.resetOrientation = function() {
                 if (scope.deviceOrientation && scope.deviceOrientation.alpha != null) {
+                    // make current yaw the new "zero"
                     scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
                 }
             };
@@ -594,7 +616,7 @@
             };
         };
 
-        // --- STEREO EFFECT (UNCHANGED FROM YOUR STABLE VERSION) ---
+        // --- STEREO EFFECT (only eyeOffset centered) ---
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera();
             _stereo.aspect = 0.5;
@@ -651,7 +673,7 @@
                 scene.updateMatrixWorld();
                 if (camera.parent === null) camera.updateMatrixWorld();
                 _stereo.update(camera);
-                const size = renderer.getSize(sizeVec);
+                renderer.getSize(sizeVec);
                 const halfWidth = sizeVec.width * 0.5;
 
                 if (mode === '3d') {
@@ -668,14 +690,16 @@
                 distortionMaterial.uniforms.panOffset.value = panUVOffset;
                 distortionMaterial.uniforms.zoomLevel.value = currentZoom;
                 
+                // Left eye: center distortion in the middle of the half-screen
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
-                distortionMaterial.uniforms.eyeOffset.value = -0.20;
+                distortionMaterial.uniforms.eyeOffset.value = 0.0;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
+                // Right eye: same center, separate half of the screen
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
-                distortionMaterial.uniforms.eyeOffset.value = 0.20;
+                distortionMaterial.uniforms.eyeOffset.value = 0.0;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
