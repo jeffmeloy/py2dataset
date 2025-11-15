@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>VR Video Player</title>
+    <title>VR Video Player (IMAX Architecture)</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -18,8 +18,6 @@
         button:active { background: #0056b3; }
         button:disabled { background: #555; }
         input[type="file"] { width: 100%; padding: 10px; background: white; color: black; border-radius: 5px; margin: 10px 0; }
-        input[type="radio"] { margin: 10px 5px; }
-        label { margin-right: 15px; }
         #testVideo { width: 100%; max-width: 400px; background: #000; margin: 10px 0; }
         .status { padding: 10px; margin: 10px 0; background: #000; border-radius: 5px; }
         .success { color: #4CAF50; }
@@ -47,14 +45,16 @@
 
     <div id="progressOverlay">
         <div class="eye-controls">
-            <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
+            <div class="progressBar"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
+            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
             <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
             <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
         <div class="eye-controls">
-            <div class="progressBar" data-eye="right"><div class="progressFill"></div></div>
+            <div class="progressBar"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
+            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
             <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
             <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
@@ -62,79 +62,28 @@
 
     <script id="vertexShader" type="x-shader/x-vertex">
         varying vec2 vUv;
-        void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
     </script>
     
     <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
         uniform sampler2D tDiffuse;
-        uniform float k1;
-        uniform float k2;
-        uniform float eyeOffset;
-        uniform float zoomLevel;
-        uniform vec2 texelSize;
+        uniform float k1, k2, eyeOffset;
         varying vec2 vUv;
         
-        const float PI = 3.14159265359;
-        const float HALF_PI = 1.57079632679;
-        
         vec2 distort(vec2 p) {
-            vec2 center = vec2(0.5 + eyeOffset, 0.5);
-            vec2 v = p - center;
+            vec2 c = vec2(0.5 + eyeOffset, 0.5);
+            vec2 v = p - c;
             float r2 = dot(v, v);
-            float distortion = 1.0 + r2 * (k1 + k2 * r2);
-            return center + v * distortion;
-        }
-        
-        float lanczos2(float x) {
-            x = abs(x);
-            if (x < 0.0001) return 1.0;
-            if (x >= 2.0) return 0.0;
-            float pix = PI * x;
-            float pix_half = HALF_PI * x;
-            return (sin(pix) / pix) * (sin(pix_half) / pix_half);
-        }
-        
-        vec4 sampleLanczos2(vec2 uv) {
-            vec2 center = uv / texelSize - 0.5;
-            vec2 centerFloor = floor(center);
-            vec2 f = center - centerFloor;
-            
-            vec4 color = vec4(0.0);
-            float weightSum = 0.0;
-            
-            for (int y = -1; y <= 2; y++) {
-                float fy = float(y) - f.y;
-                float wy = lanczos2(fy);
-                for (int x = -1; x <= 2; x++) {
-                    float weight = lanczos2(float(x) - f.x) * wy;
-                    vec2 sampleUV = (centerFloor + vec2(float(x), float(y)) + 0.5) * texelSize;
-                    
-                    if (sampleUV.x >= 0.0 && sampleUV.x <= 1.0 && sampleUV.y >= 0.0 && sampleUV.y <= 1.0) {
-                        color += texture2D(tDiffuse, sampleUV) * weight;
-                        weightSum += weight;
-                    }
-                }
-            }
-            
-            return weightSum > 0.0001 ? color / weightSum : vec4(0.0);
+            return c + v * (1.0 + r2 * (k1 + k2 * r2));
         }
         
         void main() {
-            vec2 distortedUV = distort(vUv);
-            vec2 uv = (distortedUV - 0.5) / zoomLevel + 0.5;
-            
-            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-            } else {
-                gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
-            }
+            gl_FragColor = texture2D(tDiffuse, distort(vUv));
         }
     </script>
 
     <script>
+        // --- Globals & DOM Elements ---
         const fileInput = document.getElementById('fileInput');
         const testVideo = document.getElementById('testVideo');
         const startBtn = document.getElementById('startBtn');
@@ -145,203 +94,106 @@
         const timeDisplays = document.querySelectorAll('.timeDisplay');
         const playPauseBtns = document.querySelectorAll('.play-pause-btn');
 
-        let camera, scene, renderer, effect;
+        // --- State Variables ---
+        let camera, scene, renderer, effect, videoScreen;
         let video, videoTexture, controls;
-        let mode = '2d';
-        let isPlaying = false;
-        let videoURL = null;
-        let hideOverlayTimer = null;
-        let currentZoom = 1.0;
-        let currentZoomLevel = 4;
-        const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
+        let mode = '2d', isPlaying = false, videoURL = null;
+        let hideOverlayTimer = null, currentZoomLevel = 4;
+        let screenOffsetX = 0, screenOffsetY = 0;
+        const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0];
 
-        fileInput.addEventListener('change', function(e) {
+        // --- Event Listeners ---
+        fileInput.addEventListener('change', handleFileSelect);
+        startBtn.addEventListener('click', startVR);
+        
+        // --- Core Functions ---
+        function handleFileSelect(e) {
             const file = e.target.files[0];
             if (!file) return;
-
-            if (videoURL) URL.revokeObjectURL(videoURL);
+            URL.revokeObjectURL(videoURL);
             videoURL = URL.createObjectURL(file);
-            
             testVideo.src = videoURL;
             mode = document.querySelector('input[name="mode"]:checked').value;
-
-            testVideo.addEventListener('loadedmetadata', function() {
-                status.textContent = 'Ready: ' + testVideo.videoWidth + 'x' + testVideo.videoHeight;
+            testVideo.addEventListener('loadedmetadata', () => {
+                status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
                 status.className = 'status success';
                 startBtn.disabled = false;
             }, { once: true });
-
             testVideo.load();
-        });
+        }
 
-        startBtn.addEventListener('click', async function() {
+        async function startVR() {
             if (!videoURL) return;
-            
-            if (typeof DeviceOrientationEvent !== 'undefined' && 
-                typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission !== 'granted') {
-                        alert('Device orientation permission denied. Head tracking will not work.');
-                    }
-                } catch (error) {
-                    console.error('Error requesting orientation permission:', error);
-                }
+            if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+                await DeviceOrientationEvent.requestPermission().catch(err => console.error(err));
             }
-
             const elem = document.documentElement;
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen();
-            } else if (elem.webkitRequestFullscreen) {
-                elem.webkitRequestFullscreen();
-            }
-            
-            if (screen.orientation && screen.orientation.lock) {
-                screen.orientation.lock('landscape').catch(() => {});
-            }
-            
+            elem.requestFullscreen?.() || elem.webkitRequestFullscreen?.();
+            screen.orientation?.lock?.('landscape').catch(() => {});
             setTimeout(() => {
                 setupDiv.classList.add('hidden');
                 disposeResources();
                 initVR();
             }, 100);
-        });
+        }
 
         function disposeResources() {
-            if (videoTexture) {
-                videoTexture.dispose();
-                videoTexture = null;
-            }
-            if (video) {
-                video.pause();
-                video.src = '';
-                video.load();
-                video = null;
-            }
-            if (effect && effect.dispose) {
-                effect.dispose();
-                effect = null;
-            }
-            if (controls) {
-                controls.dispose();
-                controls = null;
-            }
-            if (renderer) {
-                renderer.dispose();
-                if (renderer.domElement && renderer.domElement.parentNode) {
-                    renderer.domElement.parentNode.removeChild(renderer.domElement);
-                }
-                renderer = null;
-            }
-            if (scene) {
-                scene.traverse((obj) => {
-                    if (obj.geometry) obj.geometry.dispose();
-                    if (obj.material) {
-                        if (obj.material.map) obj.material.map.dispose();
-                        obj.material.dispose();
-                    }
-                });
-                scene = null;
-            }
+            videoTexture?.dispose();
+            if(video){ video.pause(); video.src=''; video.load(); }
+            effect?.dispose();
+            controls?.dispose();
+            if(renderer){ renderer.dispose(); renderer.domElement.parentElement?.removeChild(renderer.domElement); }
+            scene?.traverse(o => { o.geometry?.dispose(); if(o.material){ o.material.map?.dispose(); o.material.dispose(); }});
         }
 
         function initVR() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x000000);
 
-            camera = new THREE.PerspectiveCamera(105, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 0);
+            camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 10);
             scene.add(camera);
-
+            
             video = document.createElement('video');
             video.src = videoURL;
-            video.loop = false;
-            video.muted = false;
             video.playsinline = true;
             video.setAttribute('webkit-playsinline', '');
             
-            video.addEventListener('loadeddata', function() {
+            video.addEventListener('loadeddata', () => {
                 videoTexture = new THREE.VideoTexture(video);
                 videoTexture.minFilter = THREE.LinearFilter;
-                videoTexture.magFilter = THREE.LinearFilter;
-
-                const aspect = mode === '3d'
-                    ? (video.videoWidth / 2) / video.videoHeight
-                    : video.videoWidth / video.videoHeight;
-
-                const width = 6;
-                const height = width / aspect;
-                const distance = 2.5;
-
+                const aspect = (mode === '3d' ? video.videoWidth / 2 : video.videoWidth) / video.videoHeight;
+                const height = 2;
+                const width = height * aspect;
+                
                 if (mode === '2d') {
                     const geometry = new THREE.PlaneGeometry(width, height);
-                    const material = new THREE.MeshBasicMaterial({
-                        map: videoTexture,
-                        side: THREE.DoubleSide
-                    });
-                    const screen = new THREE.Mesh(geometry, material);
-                    screen.position.set(0, 0, -distance);
-                    camera.add(screen);
+                    const material = new THREE.MeshBasicMaterial({ map: videoTexture });
+                    videoScreen = new THREE.Mesh(geometry, material);
+                    camera.add(videoScreen);
                 } else {
-                    const geometryL = new THREE.PlaneGeometry(width, height);
-                    const materialL = new THREE.ShaderMaterial({
-                        uniforms: { tex: { value: videoTexture } },
-                        vertexShader: `
-                            varying vec2 vUv;
-                            void main() {
-                                vUv = uv;
-                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                            }
-                        `,
-                        fragmentShader: `
-                            uniform sampler2D tex;
-                            varying vec2 vUv;
-                            void main() {
-                                vec2 uv = vec2(vUv.x * 0.5, vUv.y);
-                                gl_FragColor = texture2D(tex, uv);
-                            }
-                        `,
-                        side: THREE.DoubleSide
-                    });
-                    const screenL = new THREE.Mesh(geometryL, materialL);
-                    screenL.position.set(0, 0, -distance);
-                    screenL.layers.set(1);
-                    camera.add(screenL);
-
-                    const geometryR = new THREE.PlaneGeometry(width, height);
-                    const materialR = new THREE.ShaderMaterial({
-                        uniforms: { tex: { value: videoTexture } },
-                        vertexShader: `
-                            varying vec2 vUv;
-                            void main() {
-                                vUv = uv;
-                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                            }
-                        `,
-                        fragmentShader: `
-                            uniform sampler2D tex;
-                            varying vec2 vUv;
-                            void main() {
-                                vec2 uv = vec2(vUv.x * 0.5 + 0.5, vUv.y);
-                                gl_FragColor = texture2D(tex, uv);
-                            }
-                        `,
-                        side: THREE.DoubleSide
-                    });
-                    const screenR = new THREE.Mesh(geometryR, materialR);
-                    screenR.position.set(0, 0, -distance);
-                    screenR.layers.set(2);
-                    camera.add(screenR);
+                    videoScreen = [];
+                    const createEyeScreen = (isLeft) => {
+                        const geometry = new THREE.PlaneGeometry(width, height);
+                        const material = new THREE.ShaderMaterial({
+                            uniforms: { tex: { value: videoTexture } },
+                            vertexShader: document.getElementById('vertexShader').textContent,
+                            fragmentShader: `uniform sampler2D tex; varying vec2 vUv; void main() { gl_FragColor = texture2D(tex, vec2(vUv.x * 0.5 + ${isLeft ? '0.0':'0.5'}, vUv.y)); }`,
+                        });
+                        const screen = new THREE.Mesh(geometry, material);
+                        screen.layers.set(isLeft ? 1 : 2);
+                        camera.add(screen);
+                        videoScreen.push(screen);
+                    };
+                    createEyeScreen(true);
+                    createEyeScreen(false);
                 }
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
                 renderer.setPixelRatio(window.devicePixelRatio);
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 document.body.appendChild(renderer.domElement);
-
                 effect = new THREE.StereoEffect(renderer);
                 effect.setSize(window.innerWidth, window.innerHeight);
-
                 controls = new THREE.DeviceOrientationControls(camera);
                 controls.connect();
 
@@ -351,22 +203,30 @@
                 progressOverlay.addEventListener('click', handleControls);
 
                 showOverlay();
-
                 video.play().then(() => {
                     isPlaying = true;
                     updatePlayPauseButtons();
                     animate();
-                }).catch(err => {
-                    console.error('Error playing video:', err);
-                });
+                }).catch(err => console.error(err));
             });
-
             video.load();
+        }
+
+        function updateScreenTransform() {
+            if (!videoScreen) return;
+            const scale = zoomLevels[currentZoomLevel];
+            const distance = 2.5;
+            const screens = Array.isArray(videoScreen) ? videoScreen : [videoScreen];
+            screens.forEach(screen => {
+                screen.position.set(screenOffsetX, screenOffsetY, -distance);
+                screen.scale.set(scale, scale, scale);
+            });
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            if (controls) controls.update();
+            controls?.update();
+            updateScreenTransform(); // Apply ergonomic adjustments every frame
             effect.render(scene, camera);
         }
 
@@ -375,311 +235,102 @@
             camera.updateProjectionMatrix();
             effect.setSize(window.innerWidth, window.innerHeight);
         }
-
-        function updatePlayPauseButtons() {
-            playPauseBtns.forEach(btn => {
-                btn.textContent = isPlaying ? '||' : '>';
-            });
-        }
-
-        function togglePlayPause() {
-            if (!video) return;
-            if (isPlaying) {
-                video.pause();
-                isPlaying = false;
-            } else {
-                video.play();
-                isPlaying = true;
-            }
-            updatePlayPauseButtons();
-            showOverlay();
-        }
-
-        function seekVideo(e) {
-            if (!video) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            video.currentTime = pos * video.duration;
-            showOverlay();
-        }
-
-        function seekRelative(seconds) {
-            if (!video) return;
-            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
-            showOverlay();
-        }
-
-        function updateProgress() {
-            if (!video) return;
-            const percent = (video.currentTime / video.duration) * 100;
-            
-            progressFills.forEach(fill => {
-                fill.style.width = percent + '%';
-            });
-            
-            const currentMin = Math.floor(video.currentTime / 60);
-            const currentSec = Math.floor(video.currentTime % 60);
-            const durationMin = Math.floor(video.duration / 60);
-            const durationSec = Math.floor(video.duration % 60);
-            
-            const timeText = `${currentMin}:${currentSec.toString().padStart(2, '0')} / ${durationMin}:${durationSec.toString().padStart(2, '0')}`;
-            
-            timeDisplays.forEach(display => {
-                display.textContent = timeText;
-            });
-        }
-
-        function toggleOverlay(e) {
-            if (e.target.closest('#progressOverlay')) return;
-            
-            if (progressOverlay.classList.contains('visible')) {
-                hideOverlay();
-            } else {
-                showOverlay();
-            }
-        }
-
-        function showOverlay() {
-            progressOverlay.classList.add('visible');
-            progressOverlay.classList.remove('fading');
-            
-            if (hideOverlayTimer) clearTimeout(hideOverlayTimer);
-            hideOverlayTimer = setTimeout(() => {
-                if (isPlaying) hideOverlay();
-            }, 3000);
-        }
-
-        function hideOverlay() {
-            progressOverlay.classList.add('fading');
-            setTimeout(() => {
-                progressOverlay.classList.remove('visible');
-            }, 300);
-        }
-
+        
+        function updatePlayPauseButtons() { playPauseBtns.forEach(btn => btn.textContent = isPlaying ? '||' : '>'); }
+        function togglePlayPause() { if (!video) return; isPlaying ? video.pause() : video.play(); isPlaying = !isPlaying; updatePlayPauseButtons(); showOverlay(); }
+        function seekVideo(e) { const rect = e.currentTarget.getBoundingClientRect(); video.currentTime = (e.clientX - rect.left) / rect.width * video.duration; showOverlay(); }
+        function seekRelative(s) { video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + s)); showOverlay(); }
+        function updateProgress() { if (!video.duration) return; const p = (video.currentTime / video.duration) * 100; const f = t => `${Math.floor(t/60)}:${Math.floor(t%60).toString().padStart(2,'0')}`; const t = `${f(video.currentTime)}/${f(video.duration)}`; progressFills.forEach(fill => fill.style.width = p + '%'); timeDisplays.forEach(display => display.textContent = t); }
+        function toggleOverlay(e) { if (!e.target.closest('#progressOverlay')) { progressOverlay.classList.contains('visible') ? hideOverlay() : showOverlay(); } }
+        function showOverlay() { progressOverlay.classList.add('visible'); progressOverlay.classList.remove('fading'); clearTimeout(hideOverlayTimer); hideOverlayTimer = setTimeout(() => { if (isPlaying) hideOverlay(); }, 3000); }
+        function hideOverlay() { progressOverlay.classList.add('fading'); setTimeout(() => progressOverlay.classList.remove('visible'), 300); }
+        
         function adjustZoom(direction) {
-            if (direction > 0) {
-                currentZoomLevel = Math.min(zoomLevels.length - 1, currentZoomLevel + 1);
-            } else {
-                currentZoomLevel = Math.max(0, currentZoomLevel - 1);
-            }
-            currentZoom = zoomLevels[currentZoomLevel];
+            currentZoomLevel = Math.max(0, Math.min(zoomLevels.length - 1, currentZoomLevel + direction));
             showOverlay();
         }
-
         function resetZoom() {
             currentZoomLevel = 4;
-            currentZoom = zoomLevels[4];
             showOverlay();
+        }
+        function adjustPan(direction) {
+            screenOffsetX += direction * 0.1;
+            showOverlay();
+        }
+        function centerScreen() {
+            screenOffsetX = 0;
+            screenOffsetY = 0;
+            resetZoom();
         }
 
         function handleControls(e) {
             e.stopPropagation();
-            const target = e.target.closest('.control-btn, .progressBar');
-            if (!target) return;
-
-            if (target.matches('.progressBar')) {
-                seekVideo(e);
-                return;
-            }
-
-            const classList = target.classList;
-            if (classList.contains('play-pause-btn')) togglePlayPause();
-            else if (classList.contains('rewind-btn')) seekRelative(-10);
-            else if (classList.contains('forward-btn')) seekRelative(10);
-            else if (classList.contains('zoom-in-btn')) adjustZoom(1);
-            else if (classList.contains('zoom-out-btn')) adjustZoom(-1);
-            else if (classList.contains('zoom-reset-btn')) resetZoom();
+            const t = e.target.closest('.control-btn, .progressBar');
+            if (!t) return;
+            if (t.matches('.progressBar')) { seekVideo(e); return; }
+            const c = t.classList;
+            if      (c.contains('play-pause-btn')) togglePlayPause();
+            else if (c.contains('rewind-btn'))     seekRelative(-10);
+            else if (c.contains('forward-btn'))    seekRelative(10);
+            else if (c.contains('zoom-in-btn'))    adjustZoom(1);
+            else if (c.contains('zoom-out-btn'))   adjustZoom(-1);
+            else if (c.contains('zoom-reset-btn')) resetZoom();
+            else if (c.contains('pan-left-btn'))   adjustPan(-1);
+            else if (c.contains('pan-right-btn'))  adjustPan(1);
+            else if (c.contains('pan-center-btn')) centerScreen();
         }
 
+        // --- SIMPLIFIED CONTROLS FOR IMAX ARCHITECTURE ---
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
             this.camera = camera;
             this.camera.rotation.reorder('YXZ');
-
-            this.enabled = true;
-            this.deviceOrientation = {};
-            this.screenOrientation = 0;
-            this.alphaOffset = 0;
-
-            const euler = new THREE.Euler(0, 0, 0, 'YXZ');
-            const q0 = new THREE.Quaternion();
-            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-            const zAxis = new THREE.Vector3(0, 0, 1);
-
-            const onDeviceOrientationChangeEvent = (event) => {
-                scope.deviceOrientation = event;
-            };
-
-            const onScreenOrientationChangeEvent = () => {
-                scope.screenOrientation = window.orientation || 0;
-            };
-
-            this.connect = function() {
-                onScreenOrientationChangeEvent();
-                window.addEventListener('orientationchange', onScreenOrientationChangeEvent);
-                window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent);
-                scope.enabled = true;
-            };
-
-            this.disconnect = function() {
-                window.removeEventListener('orientationchange', onScreenOrientationChangeEvent);
-                window.removeEventListener('deviceorientation', onDeviceOrientationChangeEvent);
-                scope.enabled = false;
-            };
-
-            this.update = function() {
-                if (!scope.enabled) return;
-
-                const device = scope.deviceOrientation;
-                if (device) {
-                    const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
-                    const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
-                    const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
-                    const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
-
-                    euler.set(beta, alpha, -gamma, 'YXZ');
-                    scope.camera.quaternion.setFromEuler(euler);
-                    scope.camera.quaternion.multiply(q1);
-                    scope.camera.quaternion.multiply(q0.setFromAxisAngle(zAxis, -orient));
-                }
-            };
-
-            this.resetOrientation = function() {
-                if (scope.deviceOrientation.alpha) {
-                    scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
-                }
-            };
-
-            this.dispose = function() {
-                scope.disconnect();
-            };
+            this.enabled = true, this.deviceOrientation = {}, this.screenOrientation = 0;
+            const e = new THREE.Euler(0,0,0,'YXZ'), q0 = new THREE.Quaternion(), q1 = new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5)), z = new THREE.Vector3(0,0,1);
+            const onDeviceOrientation = e => scope.deviceOrientation = e;
+            const onScreenOrientation = () => scope.screenOrientation = window.orientation || 0;
+            this.connect = () => { onScreenOrientation(); window.addEventListener('orientationchange', onScreenOrientation); window.addEventListener('deviceorientation', onDeviceOrientation); scope.enabled = true; };
+            this.disconnect = () => { window.removeEventListener('orientationchange', onScreenOrientation); window.removeEventListener('deviceorientation', onDeviceOrientation); scope.enabled = false; };
+            this.update = function() { if (!scope.enabled) return; const d = scope.deviceOrientation; if (d) { const a=d.alpha?THREE.MathUtils.degToRad(d.alpha):0, b=d.beta?THREE.MathUtils.degToRad(d.beta):0, g=d.gamma?THREE.MathUtils.degToRad(d.gamma):0, o=scope.screenOrientation?THREE.MathUtils.degToRad(scope.screenOrientation):0; e.set(b,a,-g,'YXZ'); scope.camera.quaternion.setFromEuler(e); scope.camera.quaternion.multiply(q1); scope.camera.quaternion.multiply(q0.setFromAxisAngle(z, -o)); }};
+            this.dispose = () => scope.disconnect();
         };
 
+        // --- STEREO EFFECT (SIMPLIFIED FOR IMAX) ---
         THREE.StereoEffect = function(renderer) {
-            const eyeSeparation = 0.064;
-            const dpr = window.devicePixelRatio || 1;
-            const maxTextureSize = renderer.capabilities.maxTextureSize;
-            let rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), maxTextureSize);
-            let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), maxTextureSize);
-            
-            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
-                minFilter: THREE.LinearFilter,
-                magFilter: THREE.LinearFilter
-            });
-            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
-                minFilter: THREE.LinearFilter,
-                magFilter: THREE.LinearFilter
-            });
-
+            const _stereo = new THREE.StereoCamera();
+            _stereo.aspect = 0.5;
+            let rtL, rtR;
             const distortionMaterial = new THREE.ShaderMaterial({
-                uniforms: {
-                    tDiffuse: { value: null },
-                    k1: { value: 0.22 },
-                    k2: { value: 0.18 },
-                    eyeOffset: { value: 0.0 },
-                    zoomLevel: { value: 1.0 },
-                    texelSize: { value: new THREE.Vector2(1.0 / rtWidth, 1.0 / rtHeight) }
-                },
+                uniforms: { tDiffuse: { value: null }, k1: { value: 0.22 }, k2: { value: 0.18 }, eyeOffset: { value: 0.0 } },
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
-
-            const quadGeometry = new THREE.PlaneGeometry(2, 2);
-            const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
+            const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), distortionMaterial);
             const orthoScene = new THREE.Scene();
-            const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-            orthoScene.add(quadMesh);
-
-            const cameraL = new THREE.PerspectiveCamera();
-            const cameraR = new THREE.PerspectiveCamera();
-            const sizeVec = new THREE.Vector2();
-
-            this.setSize = function(width, height) {
-                renderer.setSize(width, height);
-                
-                const newDpr = window.devicePixelRatio || 1;
-                const newRtWidth = Math.min(Math.floor(width * newDpr / 2), maxTextureSize);
-                const newRtHeight = Math.min(Math.floor(height * newDpr), maxTextureSize);
-                
-                if (newRtWidth !== rtWidth || newRtHeight !== rtHeight) {
-                    renderTargetL.dispose();
-                    renderTargetR.dispose();
-                    
-                    rtWidth = newRtWidth;
-                    rtHeight = newRtHeight;
-                    
-                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
-                        minFilter: THREE.LinearFilter,
-                        magFilter: THREE.LinearFilter
-                    });
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
-                        minFilter: THREE.LinearFilter,
-                        magFilter: THREE.LinearFilter
-                    });
-                    
-                    distortionMaterial.uniforms.texelSize.value.set(1.0 / rtWidth, 1.0 / rtHeight);
-                }
-            };
-
-            this.render = function(scene, camera) {
-                scene.updateMatrixWorld();
-                camera.updateMatrixWorld();
-
-                cameraL.copy(camera);
-                cameraR.copy(camera);
-                
-                cameraL.position.copy(camera.position);
-                cameraR.position.copy(camera.position);
-                cameraL.quaternion.copy(camera.quaternion);
-                cameraR.quaternion.copy(camera.quaternion);
-                
-                cameraL.translateX(-eyeSeparation / 2);
-                cameraR.translateX(eyeSeparation / 2);
-
-                if (mode === '3d') {
-                    cameraL.layers.set(1);
-                    cameraR.layers.set(2);
-                }
-
-                renderer.getSize(sizeVec);
-                const halfWidth = sizeVec.width * 0.5;
-
-                renderer.setRenderTarget(renderTargetL);
-                renderer.clear();
-                renderer.render(scene, cameraL);
-
-                renderer.setRenderTarget(renderTargetR);
-                renderer.clear();
-                renderer.render(scene, cameraR);
-
-                renderer.setRenderTarget(null);
-                renderer.clear();
+            orthoScene.add(quad);
+            const orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            const size = new THREE.Vector2();
+            this.setSize = (w, h) => { renderer.setSize(w, h); const dpr = window.devicePixelRatio || 1; const rw = Math.floor(w * dpr / 2), rh = Math.floor(h * dpr); if(rtL){ rtL.dispose(); rtR.dispose(); } rtL = new THREE.WebGLRenderTarget(rw, rh); rtR = new THREE.WebGLRenderTarget(rw, rh); };
+            this.render = (scene, camera) => {
+                scene.updateMatrixWorld(true);
+                if(camera.parent === null) camera.updateMatrixWorld();
+                _stereo.update(camera);
+                renderer.getSize(size);
+                const halfW = size.width/2;
+                if (mode === '3d') { _stereo.cameraL.layers.set(1); _stereo.cameraR.layers.set(2); }
+                renderer.setRenderTarget(rtL); renderer.clear(); renderer.render(scene, _stereo.cameraL);
+                renderer.setRenderTarget(rtR); renderer.clear(); renderer.render(scene, _stereo.cameraR);
+                renderer.setRenderTarget(null); renderer.clear();
                 renderer.setScissorTest(true);
-
-                distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
-                distortionMaterial.uniforms.eyeOffset.value = -0.20;
-                distortionMaterial.uniforms.zoomLevel.value = currentZoom;
-                
-                renderer.setScissor(0, 0, halfWidth, sizeVec.height);
-                renderer.setViewport(0, 0, halfWidth, sizeVec.height);
-                renderer.render(orthoScene, orthoCamera);
-
-                distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
-                distortionMaterial.uniforms.eyeOffset.value = 0.20;
-                
-                renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
-                renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
-                renderer.render(orthoScene, orthoCamera);
-
+                distortionMaterial.uniforms.tDiffuse.value = rtL.texture;
+                distortionMaterial.uniforms.eyeOffset.value = -0.02;
+                renderer.setScissor(0, 0, halfW, size.height); renderer.setViewport(0, 0, halfW, size.height); renderer.render(orthoScene, orthoCam);
+                distortionMaterial.uniforms.tDiffuse.value = rtR.texture;
+                distortionMaterial.uniforms.eyeOffset.value = 0.02;
+                renderer.setScissor(halfW, 0, halfW, size.height); renderer.setViewport(halfW, 0, halfW, size.height); renderer.render(orthoScene, orthoCam);
                 renderer.setScissorTest(false);
             };
-
-            this.dispose = function() {
-                renderTargetL.dispose();
-                renderTargetR.dispose();
-                distortionMaterial.dispose();
-                quadGeometry.dispose();
-            };
+            this.dispose = () => { rtL?.dispose(); rtR?.dispose(); distortionMaterial.dispose(); quad.geometry.dispose(); };
         };
     </script>
 </body>
