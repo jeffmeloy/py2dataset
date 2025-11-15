@@ -23,8 +23,6 @@
         #testVideo { width: 100%; max-width: 400px; background: #000; margin: 10px 0; }
         .status { padding: 10px; margin: 10px 0; background: #000; border-radius: 5px; }
         .success { color: #4CAF50; }
-        #vrButton { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: #007BFF; border: none; cursor: pointer; display: none; z-index: 999; font-size: 24px; }
-        #vrButton.active { display: none; }
         #progressOverlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.8); padding: 15px; display: none; z-index: 998; transition: opacity 0.3s; }
         #progressOverlay.visible { display: flex; }
         #progressOverlay.fading { opacity: 0; }
@@ -40,26 +38,23 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR 1 Player</h2>
+        <h2>VR Player</h2>
         <div class="section"><strong>Video Type</strong><br><input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label><input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label></div>
         <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
         <div class="section"><strong>Test</strong><br><video id="testVideo" controls playsinline webkit-playsinline></video><div id="status" class="status">Load video...</div></div>
-        <div class="section"><button id="startBtn" disabled>START VR</button><div style="font-size: 13px; color: #aaa; margin-top: 10px;"></div></div>
+        <div class="section"><button id="startBtn" disabled>START VR</button></div>
     </div>
 
-    <button id="vrButton">VR</button>
     <div id="progressOverlay">
         <div class="eye-controls">
             <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
             <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
             <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
         <div class="eye-controls">
             <div class="progressBar" data-eye="right"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
             <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
             <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
@@ -78,7 +73,6 @@
         uniform float k1;
         uniform float k2;
         uniform float eyeOffset;
-        uniform float panOffset;
         uniform float zoomLevel;
         uniform vec2 texelSize;
         varying vec2 vUv;
@@ -130,9 +124,7 @@
         
         void main() {
             vec2 distortedUV = distort(vUv);
-            vec2 uv = (distortedUV - 0.5) / zoomLevel;
-            uv.x += panOffset;
-            uv += 0.5;
+            vec2 uv = (distortedUV - 0.5) / zoomLevel + 0.5;
             
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                 gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -148,7 +140,6 @@
         const startBtn = document.getElementById('startBtn');
         const setupDiv = document.getElementById('setup');
         const status = document.getElementById('status');
-        const vrButton = document.getElementById('vrButton');
         const progressOverlay = document.getElementById('progressOverlay');
         const progressFills = document.querySelectorAll('.progressFill');
         const timeDisplays = document.querySelectorAll('.timeDisplay');
@@ -159,12 +150,10 @@
         let mode = '2d';
         let isPlaying = false;
         let videoURL = null;
-        let xrSession = null;
         let hideOverlayTimer = null;
         let currentZoom = 1.0;
-        let panOffset = 0;
         let currentZoomLevel = 4;
-        const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8];
+        const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
 
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -262,6 +251,7 @@
 
             camera = new THREE.PerspectiveCamera(105, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 0);
+            scene.add(camera);
 
             video = document.createElement('video');
             video.src = videoURL;
@@ -279,37 +269,21 @@
                     ? (video.videoWidth / 2) / video.videoHeight
                     : video.videoWidth / video.videoHeight;
 
-                const radius = 3;
-                const arcAngle = Math.PI * 0.65;
-                const height = 2.5;
-                const segments = 64;
+                const width = 6;
+                const height = width / aspect;
+                const distance = 2.5;
 
                 if (mode === '2d') {
-                    const geometry = new THREE.CylinderGeometry(radius, radius, height, segments, 1, true, -arcAngle/2, arcAngle);
-                    geometry.scale(-1, 1, 1);
-                    
-                    const uvs = geometry.attributes.uv.array;
-                    for (let i = 0; i < uvs.length; i += 2) {
-                        uvs[i] = 1 - uvs[i];
-                    }
-                    geometry.attributes.uv.needsUpdate = true;
-
+                    const geometry = new THREE.PlaneGeometry(width, height);
                     const material = new THREE.MeshBasicMaterial({
                         map: videoTexture,
                         side: THREE.DoubleSide
                     });
-                    const cylinder = new THREE.Mesh(geometry, material);
-                    scene.add(cylinder);
+                    const screen = new THREE.Mesh(geometry, material);
+                    screen.position.set(0, 0, -distance);
+                    camera.add(screen);
                 } else {
-                    const geometryL = new THREE.CylinderGeometry(radius, radius, height, segments, 1, true, -arcAngle/2, arcAngle);
-                    geometryL.scale(-1, 1, 1);
-                    
-                    const uvsL = geometryL.attributes.uv.array;
-                    for (let i = 0; i < uvsL.length; i += 2) {
-                        uvsL[i] = 1 - uvsL[i];
-                    }
-                    geometryL.attributes.uv.needsUpdate = true;
-
+                    const geometryL = new THREE.PlaneGeometry(width, height);
                     const materialL = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
                         vertexShader: `
@@ -329,19 +303,12 @@
                         `,
                         side: THREE.DoubleSide
                     });
-                    const cylinderL = new THREE.Mesh(geometryL, materialL);
-                    cylinderL.layers.set(1);
-                    scene.add(cylinderL);
+                    const screenL = new THREE.Mesh(geometryL, materialL);
+                    screenL.position.set(0, 0, -distance);
+                    screenL.layers.set(1);
+                    camera.add(screenL);
 
-                    const geometryR = new THREE.CylinderGeometry(radius, radius, height, segments, 1, true, -arcAngle/2, arcAngle);
-                    geometryR.scale(-1, 1, 1);
-                    
-                    const uvsR = geometryR.attributes.uv.array;
-                    for (let i = 0; i < uvsR.length; i += 2) {
-                        uvsR[i] = 1 - uvsR[i];
-                    }
-                    geometryR.attributes.uv.needsUpdate = true;
-
+                    const geometryR = new THREE.PlaneGeometry(width, height);
                     const materialR = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
                         vertexShader: `
@@ -361,9 +328,10 @@
                         `,
                         side: THREE.DoubleSide
                     });
-                    const cylinderR = new THREE.Mesh(geometryR, materialR);
-                    cylinderR.layers.set(2);
-                    scene.add(cylinderR);
+                    const screenR = new THREE.Mesh(geometryR, materialR);
+                    screenR.position.set(0, 0, -distance);
+                    screenR.layers.set(2);
+                    camera.add(screenR);
                 }
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -398,7 +366,6 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            if (xrSession) return;
             if (controls) controls.update();
             effect.render(scene, camera);
         }
@@ -505,19 +472,6 @@
             showOverlay();
         }
 
-        function adjustPan(degrees) {
-            panOffset += degrees;
-            showOverlay();
-        }
-
-        function centerPan() {
-            panOffset = 0;
-            if (controls && controls.resetOrientation) {
-                controls.resetOrientation();
-            }
-            showOverlay();
-        }
-
         function handleControls(e) {
             e.stopPropagation();
             const target = e.target.closest('.control-btn, .progressBar');
@@ -535,9 +489,6 @@
             else if (classList.contains('zoom-in-btn')) adjustZoom(1);
             else if (classList.contains('zoom-out-btn')) adjustZoom(-1);
             else if (classList.contains('zoom-reset-btn')) resetZoom();
-            else if (classList.contains('pan-left-btn')) adjustPan(-2);
-            else if (classList.contains('pan-center-btn')) centerPan();
-            else if (classList.contains('pan-right-btn')) adjustPan(2);
         }
 
         THREE.DeviceOrientationControls = function(camera) {
@@ -605,9 +556,7 @@
         };
 
         THREE.StereoEffect = function(renderer) {
-            const _stereo = new THREE.StereoCamera();
-            _stereo.aspect = 0.5;
-
+            const eyeSeparation = 0.064;
             const dpr = window.devicePixelRatio || 1;
             const maxTextureSize = renderer.capabilities.maxTextureSize;
             let rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), maxTextureSize);
@@ -628,7 +577,6 @@
                     k1: { value: 0.22 },
                     k2: { value: 0.18 },
                     eyeOffset: { value: 0.0 },
-                    panOffset: { value: 0.0 },
                     zoomLevel: { value: 1.0 },
                     texelSize: { value: new THREE.Vector2(1.0 / rtWidth, 1.0 / rtHeight) }
                 },
@@ -642,6 +590,8 @@
             const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
             orthoScene.add(quadMesh);
 
+            const cameraL = new THREE.PerspectiveCamera();
+            const cameraR = new THREE.PerspectiveCamera();
             const sizeVec = new THREE.Vector2();
 
             this.setSize = function(width, height) {
@@ -673,36 +623,41 @@
 
             this.render = function(scene, camera) {
                 scene.updateMatrixWorld();
-                if (camera.parent === null) camera.updateMatrixWorld();
+                camera.updateMatrixWorld();
 
-                _stereo.update(camera);
+                cameraL.copy(camera);
+                cameraR.copy(camera);
+                
+                cameraL.position.copy(camera.position);
+                cameraR.position.copy(camera.position);
+                cameraL.quaternion.copy(camera.quaternion);
+                cameraR.quaternion.copy(camera.quaternion);
+                
+                cameraL.translateX(-eyeSeparation / 2);
+                cameraR.translateX(eyeSeparation / 2);
+
+                if (mode === '3d') {
+                    cameraL.layers.set(1);
+                    cameraR.layers.set(2);
+                }
 
                 renderer.getSize(sizeVec);
                 const halfWidth = sizeVec.width * 0.5;
 
-                if (mode === '3d') {
-                    _stereo.cameraL.layers.set(1);
-                    _stereo.cameraR.layers.set(2);
-                }
-
                 renderer.setRenderTarget(renderTargetL);
                 renderer.clear();
-                renderer.render(scene, _stereo.cameraL);
+                renderer.render(scene, cameraL);
 
                 renderer.setRenderTarget(renderTargetR);
                 renderer.clear();
-                renderer.render(scene, _stereo.cameraR);
+                renderer.render(scene, cameraR);
 
                 renderer.setRenderTarget(null);
                 renderer.clear();
-
                 renderer.setScissorTest(true);
-
-                const panUVOffset = panOffset / 180.0;
 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 distortionMaterial.uniforms.eyeOffset.value = -0.20;
-                distortionMaterial.uniforms.panOffset.value = panUVOffset;
                 distortionMaterial.uniforms.zoomLevel.value = currentZoom;
                 
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
