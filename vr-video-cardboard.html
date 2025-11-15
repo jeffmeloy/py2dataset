@@ -671,6 +671,9 @@
 
         function centerPan() {
             panOffset = 0;
+            if (controls && controls.resetOrientation) {
+                controls.resetOrientation();
+            }
             showOverlay();
         }
 
@@ -703,6 +706,7 @@
             this.deviceOrientation = {};
             this.screenOrientation = 0;
             this.alphaOffset = 0;
+            this.resetQuaternion = new THREE.Quaternion();
 
             const onDeviceOrientationChangeEvent = function(event) {
                 scope.deviceOrientation = event;
@@ -723,6 +727,10 @@
                 window.removeEventListener('orientationchange', onScreenOrientationChangeEvent, false);
                 window.removeEventListener('deviceorientation', onDeviceOrientationChangeEvent, false);
                 scope.enabled = false;
+            };
+
+            this.resetOrientation = function() {
+                scope.resetQuaternion.copy(scope.camera.quaternion).invert();
             };
 
             this.update = function() {
@@ -749,6 +757,8 @@
                         );
                         scope.camera.quaternion.multiply(landscapeCorrection);
                     }
+                    
+                    scope.camera.quaternion.premultiply(scope.resetQuaternion);
                 }
             };
 
