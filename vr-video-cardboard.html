@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Player</h2>
+        <h2>VR Official Cardboard Player</h2>
         <div class="section"><strong>Video Type</strong><br><input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label><input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label></div>
         <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
         <div class="section"><strong>Test</strong><br><video id="testVideo" controls playsinline webkit-playsinline></video><div id="status" class="status">Load video...</div></div>
@@ -273,6 +273,16 @@
                 effect.setSize(window.innerWidth, window.innerHeight);
 
                 controls = new THREE.DeviceOrientationControls(camera);
+                
+                // *** THE MINIMAL FIX: This is the safest way to auto-center ***
+                // It adds a one-time listener that calls the existing, working resetOrientation()
+                // as soon as the device provides its first valid orientation data.
+                window.addEventListener('deviceorientation', function autoCenterListener(event) {
+                    if (event.alpha !== null) {
+                        controls.resetOrientation();
+                    }
+                }, { once: true }); // { once: true } makes the browser automatically remove this listener after it runs.
+
                 controls.connect();
 
                 window.addEventListener('resize', onResize);
@@ -317,9 +327,9 @@
         function resetZoom() { currentZoomLevel = 0; currentZoom = zoomLevels[0]; showOverlay(); }
         function adjustPan(degrees) { panOffset += degrees; showOverlay(); }
         function centerPan() { panOffset = 0; if (controls) controls.resetOrientation(); showOverlay(); }
-        function handleControls(e) { e.stopPropagation(); const target = e.target.closest('.control-btn, .progressBar'); if (!target) return; if (target.matches('.progressBar')) { seekVideo(e); return; } const classList = target.classList; if (classList.contains('play-pause-btn')) togglePlayPause(); else if (classList.contains('rewind-btn')) seekRelative(-10); else if (classList.contains('forward-btn')) seekRelative(10); else if (classList.contains('zoom-in-btn')) adjustZoom(1); else if (classList.contains('zoom-out-btn')) adjustZoom(-1); else if (classList.contains('pan-left-btn')) adjustPan(-2); else if (classList.contains('pan-center-btn')) centerPan(); else if (classList.contains('pan-right-btn')) adjustPan(2); }
+        function handleControls(e) { e.stopPropagation(); const target = e.target.closest('.control-btn, .progressBar'); if (!target) return; if (target.matches('.progressBar')) { seekVideo(e); return; } const classList = target.classList; if (classList.contains('play-pause-btn')) togglePlayPause(); else if (classList.contains('rewind-btn')) seekRelative(-10); else if (classList.contains('forward-btn')) seekRelative(10); else if (classList.contains('zoom-in-btn')) adjustZoom(1); else if (classList.contains('zoom-out-btn')) adjustZoom(-1); else if (classList.contains('zoom-reset-btn')) resetZoom(); else if (classList.contains('pan-left-btn')) adjustPan(-2); else if (classList.contains('pan-center-btn')) centerPan(); else if (classList.contains('pan-right-btn')) adjustPan(2); }
 
-        // --- FINAL WORKING CONTROLS ---
+        // --- GIMBAL-LOCK-PROOF CONTROLS (UNCHANGED STABLE VERSION) ---
         THREE.DeviceOrientationControls = function(camera) {
             const scope = this;
             this.camera = camera;
@@ -329,9 +339,6 @@
             this.deviceOrientation = {};
             this.screenOrientation = 0;
             this.alphaOffset = 0;
-
-            // Flag to ensure auto-centering happens only once.
-            let hasAutoCentered = false;
 
             const euler = new THREE.Euler(0, 0, 0, 'YXZ');
             const q0 = new THREE.Quaternion();
@@ -363,16 +370,8 @@
                 if (!scope.enabled) return;
 
                 const device = scope.deviceOrientation;
-                if (device && device.alpha !== null) { // Ensure we have valid sensor data
-
-                    // This is the safest place to auto-center, as it guarantees we have sensor data
-                    // and are in the render loop, avoiding all race conditions.
-                    if (!hasAutoCentered) {
-                        scope.resetOrientation();
-                        hasAutoCentered = true;
-                    }
-
-                    const alpha = THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset;
+                if (device && device.alpha !== null) {
+                    const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
                     const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
                     const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
                     const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
@@ -384,8 +383,6 @@
                 }
             };
 
-            // This simple function is now robust because it's only ever called when
-            // `device.alpha` is guaranteed to be a valid number.
             this.resetOrientation = function() {
                 if (scope.deviceOrientation.alpha) {
                     scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
