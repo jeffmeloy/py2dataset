@@ -39,61 +39,26 @@
 <body>
     <div id="setup">
         <h2>VR 3 Player</h2>
-        <div class="section">
-            <strong>Video Type</strong><br>
-            <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
-            <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label>
-        </div>
+        <div class="section"><strong>Video Type</strong><br><input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label><input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label></div>
         <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
-        <div class="section">
-            <strong>Test</strong><br>
-            <video id="testVideo" controls playsinline webkit-playsinline></video>
-            <div id="status" class="status">Load video...</div>
-        </div>
-        <div class="section">
-            <button id="startBtn" disabled>START VR</button>
-            <div style="font-size: 13px; color: #aaa; margin-top: 10px;"></div>
-        </div>
+        <div class="section"><strong>Test</strong><br><video id="testVideo" controls playsinline webkit-playsinline></video><div id="status" class="status">Load video...</div></div>
+        <div class="section"><button id="startBtn" disabled>START VR</button><div style="font-size: 13px; color: #aaa; margin-top: 10px;"></div></div>
     </div>
 
     <div id="progressOverlay">
         <div class="eye-controls">
             <div class="progressBar" data-eye="left"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls">
-                <button class="control-btn pan-left-btn">&lt;</button>
-                <button class="control-btn pan-center-btn">o</button>
-                <button class="control-btn pan-right-btn">&gt;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn rewind-btn">&lt;&lt;</button>
-                <button class="control-btn play-pause-btn">||</button>
-                <button class="control-btn forward-btn">&gt;&gt;</button>
-            </div>
-            <div class="controls" style="margin-top: 5px;">
-                <button class="control-btn zoom-out-btn">-</button>
-                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
-                <button class="control-btn zoom-in-btn">+</button>
-            </div>
+            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
+            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
+            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
         <div class="eye-controls">
             <div class="progressBar" data-eye="right"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls">
-                <button class="control-btn pan-left-btn">&lt;</button>
-                <button class="control-btn pan-center-btn">o</button>
-                <button class="control-btn pan-right-btn">&gt;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn rewind-btn">&lt;&lt;</button>
-                <button class="control-btn play-pause-btn">||</button>
-                <button class="control-btn forward-btn">&gt;&gt;</button>
-            </div>
-            <div class="controls" style="margin-top: 5px;">
-                <button class="control-btn zoom-out-btn">-</button>
-                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
-                <button class="control-btn zoom-in-btn">+</button>
-            </div>
+            <div class="controls"><button class="control-btn pan-left-btn">&lt;</button><button class="control-btn pan-center-btn">o</button><button class="control-btn pan-right-btn">&gt;</button></div>
+            <div class="controls"><button class="control-btn rewind-btn">&lt;&lt;</button><button class="control-btn play-pause-btn">||</button><button class="control-btn forward-btn">&gt;&gt;</button></div>
+            <div class="controls" style="margin-top: 5px;"><button class="control-btn zoom-out-btn">-</button><button class="control-btn zoom-reset zoom-reset-btn">Reset</button><button class="control-btn zoom-in-btn">+</button></div>
         </div>
     </div>
 
@@ -217,9 +182,6 @@
 
         async function startVR() {
             if (!videoURL) return;
-
-            // ✅ Re-read 2D/3D mode at VR start (Bug 2)
-            mode = document.querySelector('input[name="mode"]:checked').value;
             
             if (typeof DeviceOrientationEvent !== 'undefined' && 
                 typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -252,14 +214,6 @@
         }
 
         function disposeResources() {
-            // ✅ Clean up global event listeners & video events
-            window.removeEventListener('resize', onResize);
-            document.removeEventListener('click', toggleOverlay);
-            if (video) {
-                video.removeEventListener('timeupdate', updateProgress);
-            }
-            progressOverlay.removeEventListener('click', handleControls);
-
             if (videoTexture) {
                 videoTexture.dispose();
                 videoTexture = null;
@@ -447,10 +401,9 @@
             showOverlay();
         }
 
-        // ✅ Bug 1: use the actual progressBar element for seeking
-        function seekVideo(e, bar) {
+        function seekVideo(e) {
             if (!video) return;
-            const rect = bar.getBoundingClientRect();
+            const rect = e.currentTarget.getBoundingClientRect();
             const pos = (e.clientX - rect.left) / rect.width;
             video.currentTime = pos * video.duration;
             showOverlay();
@@ -544,7 +497,7 @@
             if (!target) return;
 
             if (target.matches('.progressBar')) {
-                seekVideo(e, target); // ✅ pass the actual bar element
+                seekVideo(e);
                 return;
             }
 
@@ -600,21 +553,27 @@
                 scope.enabled = false;
             };
 
+            // ✅ Updated to treat 0° as valid and recenter correctly
             this.update = function() {
                 if (!scope.enabled) return;
 
                 const device = scope.deviceOrientation;
-                if (device && device.alpha !== null) { // Ensure we have valid sensor data
 
+                // require real sensor data; alpha may be 0 but that's still valid
+                if (device && device.alpha != null) {
+
+                    // auto-center once on first valid reading
                     if (!hasAutoCentered) {
                         scope.resetOrientation();
                         hasAutoCentered = true;
                     }
 
-                    const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
-                    const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
-                    const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
-                    const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
+                    const alpha = THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset;
+                    const beta  = device.beta  != null ? THREE.MathUtils.degToRad(device.beta)  : 0;
+                    const gamma = device.gamma != null ? THREE.MathUtils.degToRad(device.gamma) : 0;
+                    const orient = scope.screenOrientation
+                        ? THREE.MathUtils.degToRad(scope.screenOrientation)
+                        : 0;
 
                     euler.set(beta, alpha, -gamma, 'YXZ');
                     scope.camera.quaternion.setFromEuler(euler);
@@ -623,7 +582,7 @@
                 }
             };
 
-            // ✅ Handle alpha === 0 correctly
+            // ✅ Updated to use alpha != null, so reset works even when alpha is 0°
             this.resetOrientation = function() {
                 if (scope.deviceOrientation && scope.deviceOrientation.alpha != null) {
                     scope.alphaOffset = -THREE.MathUtils.degToRad(scope.deviceOrientation.alpha);
@@ -635,7 +594,7 @@
             };
         };
 
-        // --- STEREO EFFECT (kept functionally identical) ---
+        // --- STEREO EFFECT (UNCHANGED FROM YOUR STABLE VERSION) ---
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera();
             _stereo.aspect = 0.5;
@@ -692,7 +651,7 @@
                 scene.updateMatrixWorld();
                 if (camera.parent === null) camera.updateMatrixWorld();
                 _stereo.update(camera);
-                renderer.getSize(sizeVec);
+                const size = renderer.getSize(sizeVec);
                 const halfWidth = sizeVec.width * 0.5;
 
                 if (mode === '3d') {
