@@ -758,7 +758,7 @@
                         scope.camera.quaternion.multiply(landscapeCorrection);
                     }
                     
-                    scope.camera.quaternion.premultiply(scope.resetQuaternion);
+                    scope.camera.quaternion.multiply(scope.resetQuaternion);
                 }
             };
 
