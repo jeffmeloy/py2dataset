@@ -707,6 +707,11 @@
             this.yawOffset = 0;
             this.pitchOffset = 0;
 
+            const yawAxis = new THREE.Vector3(0, 1, 0);
+            const pitchAxis = new THREE.Vector3(1, 0, 0);
+            const yawQuat = new THREE.Quaternion();
+            const pitchQuat = new THREE.Quaternion();
+
             const onDeviceOrientationChangeEvent = function(event) {
                 scope.deviceOrientation = event;
             };
@@ -732,7 +737,7 @@
                 const device = scope.deviceOrientation;
                 if (device && device.beta !== null) {
                     scope.yawOffset = THREE.MathUtils.degToRad(device.alpha || 0);
-                    if (Math.abs(scope.screenOrientation) === 90) {
+                    if ((scope.screenOrientation & 0x7F) === 90) {
                         scope.pitchOffset = THREE.MathUtils.degToRad(device.gamma);
                     } else {
                         scope.pitchOffset = THREE.MathUtils.degToRad(device.beta);
@@ -748,7 +753,7 @@
                 if (device && device.beta !== null) {
                     let yaw, pitch;
                     
-                    if (Math.abs(scope.screenOrientation) === 90) {
+                    if ((scope.screenOrientation & 0x7F) === 90) {
                         yaw = THREE.MathUtils.degToRad(device.alpha || 0) - scope.yawOffset;
                         pitch = THREE.MathUtils.degToRad(device.gamma) - scope.pitchOffset;
                     } else {
@@ -758,8 +763,8 @@
 
                     pitch = Math.max(-1.48, Math.min(1.48, pitch));
 
-                    const yawQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-                    const pitchQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -pitch);
+                    yawQuat.setFromAxisAngle(yawAxis, yaw);
+                    pitchQuat.setFromAxisAngle(pitchAxis, -pitch);
                     
                     scope.camera.quaternion.copy(yawQuat).multiply(pitchQuat);
                 }
@@ -776,8 +781,8 @@
 
             const dpr = window.devicePixelRatio || 1;
             const maxTextureSize = renderer.capabilities.maxTextureSize;
-            const rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), maxTextureSize);
-            const rtHeight = Math.min(Math.floor(window.innerHeight * dpr), maxTextureSize);
+            let rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), maxTextureSize);
+            let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), maxTextureSize);
             
             let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
                 minFilter: THREE.LinearFilter,
@@ -815,22 +820,24 @@
                     uniform vec2 texelSize;
                     varying vec2 vUv;
                     
+                    const float PI = 3.14159265359;
+                    const float HALF_PI = 1.57079632679;
+                    
                     vec2 distort(vec2 p) {
                         vec2 center = vec2(0.5 + eyeOffset, 0.5);
                         vec2 v = p - center;
                         float r2 = dot(v, v);
-                        float r4 = r2 * r2;
-                        float distortion = 1.0 + k1 * r2 + k2 * r4;
+                        float distortion = 1.0 + r2 * (k1 + k2 * r2);
                         return center + v * distortion;
                     }
                     
                     float lanczos2(float x) {
-                        const float PI = 3.14159265359;
                         x = abs(x);
                         if (x < 0.0001) return 1.0;
                         if (x >= 2.0) return 0.0;
                         float pix = PI * x;
-                        return (sin(pix) / pix) * (sin(pix * 0.5) / (pix * 0.5));
+                        float pix_half = HALF_PI * x;
+                        return (sin(pix) / pix) * (sin(pix_half) / pix_half);
                     }
                     
                     vec4 sampleLanczos2(vec2 uv) {
@@ -842,10 +849,11 @@
                         float weightSum = 0.0;
                         
                         for (int y = -1; y <= 2; y++) {
-                            float wy = lanczos2(float(y) - f.y);
+                            float fy = float(y) - f.y;
+                            float wy = lanczos2(fy);
                             for (int x = -1; x <= 2; x++) {
-                                float wx = lanczos2(float(x) - f.x);
-                                float weight = wx * wy;
+                                float fx = float(x) - f.x;
+                                float weight = lanczos2(fx) * wy;
                                 vec2 sampleUV = (centerFloor + vec2(float(x), float(y)) + 0.5) * texelSize;
                                 
                                 if (sampleUV.x >= 0.0 && sampleUV.x <= 1.0 && sampleUV.y >= 0.0 && sampleUV.y <= 1.0) {
@@ -860,10 +868,9 @@
                     
                     void main() {
                         vec2 distortedUV = distort(vUv);
-                        vec2 uv = distortedUV - 0.5;
-                        uv = uv / zoomLevel;
-                        uv.x = uv.x + panOffset;
-                        uv = uv + 0.5;
+                        vec2 uv = (distortedUV - 0.5) / zoomLevel;
+                        uv.x += panOffset;
+                        uv += 0.5;
                         
                         if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                             gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -875,10 +882,12 @@
             });
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
-            const quadMeshL = new THREE.Mesh(quadGeometry, distortionMaterial.clone());
-            const quadMeshR = new THREE.Mesh(quadGeometry, distortionMaterial.clone());
+            const quadMeshL = new THREE.Mesh(quadGeometry, distortionMaterial);
+            const quadMeshR = new THREE.Mesh(quadGeometry, distortionMaterial);
             const orthoScene = new THREE.Scene();
             const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            
+            const sizeVec = new THREE.Vector2();
 
             this.setSize = function(width, height) {
                 renderer.setSize(width, height);
@@ -891,18 +900,19 @@
                     renderTargetL.dispose();
                     renderTargetR.dispose();
                     
-                    renderTargetL = new THREE.WebGLRenderTarget(newRtWidth, newRtHeight, {
+                    rtWidth = newRtWidth;
+                    rtHeight = newRtHeight;
+                    
+                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
                         minFilter: THREE.LinearFilter,
                         magFilter: THREE.LinearFilter
                     });
-                    renderTargetR = new THREE.WebGLRenderTarget(newRtWidth, newRtHeight, {
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, {
                         minFilter: THREE.LinearFilter,
                         magFilter: THREE.LinearFilter
                     });
                     
-                    const newTexelSize = new THREE.Vector2(1.0 / newRtWidth, 1.0 / newRtHeight);
-                    quadMeshL.material.uniforms.texelSize.value = newTexelSize;
-                    quadMeshR.material.uniforms.texelSize.value = newTexelSize;
+                    distortionMaterial.uniforms.texelSize.value.set(1.0 / rtWidth, 1.0 / rtHeight);
                 }
             };
 
@@ -912,7 +922,8 @@
 
                 _stereo.update(camera);
 
-                const size = renderer.getSize(new THREE.Vector2());
+                renderer.getSize(sizeVec);
+                const halfWidth = sizeVec.width * 0.5;
 
                 if (mode === '3d') {
                     _stereo.cameraL.layers.set(1);
@@ -932,25 +943,25 @@
 
                 renderer.setScissorTest(true);
 
-                const panUVOffset = (panOffset / 180.0);
+                const panUVOffset = panOffset / 180.0;
 
-                quadMeshL.material.uniforms.tDiffuse.value = renderTargetL.texture;
-                quadMeshL.material.uniforms.eyeOffset.value = -0.20;
-                quadMeshL.material.uniforms.panOffset.value = panUVOffset;
-                quadMeshL.material.uniforms.zoomLevel.value = currentZoom;
+                distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
+                distortionMaterial.uniforms.eyeOffset.value = -0.20;
+                distortionMaterial.uniforms.panOffset.value = panUVOffset;
+                distortionMaterial.uniforms.zoomLevel.value = currentZoom;
+                
                 orthoScene.add(quadMeshL);
-                renderer.setScissor(0, 0, size.width / 2, size.height);
-                renderer.setViewport(0, 0, size.width / 2, size.height);
+                renderer.setScissor(0, 0, halfWidth, sizeVec.height);
+                renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
                 orthoScene.remove(quadMeshL);
 
-                quadMeshR.material.uniforms.tDiffuse.value = renderTargetR.texture;
-                quadMeshR.material.uniforms.eyeOffset.value = 0.20;
-                quadMeshR.material.uniforms.panOffset.value = panUVOffset;
-                quadMeshR.material.uniforms.zoomLevel.value = currentZoom;
+                distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
+                distortionMaterial.uniforms.eyeOffset.value = 0.20;
+                
                 orthoScene.add(quadMeshR);
-                renderer.setScissor(size.width / 2, 0, size.width / 2, size.height);
-                renderer.setViewport(size.width / 2, 0, size.width / 2, size.height);
+                renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
+                renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
                 orthoScene.remove(quadMeshR);
 
@@ -960,8 +971,7 @@
             this.dispose = function() {
                 renderTargetL.dispose();
                 renderTargetR.dispose();
-                quadMeshL.material.dispose();
-                quadMeshR.material.dispose();
+                distortionMaterial.dispose();
                 quadGeometry.dispose();
             };
         };
