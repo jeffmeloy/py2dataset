@@ -275,25 +275,19 @@
                 videoTexture.minFilter = THREE.LinearFilter;
                 videoTexture.magFilter = THREE.LinearFilter;
 
-                const aspect = mode === '3d'
-                    ? (video.videoWidth / 2) / video.videoHeight
-                    : video.videoWidth / video.videoHeight;
-
-                const width = 6;
-                const height = width / aspect;
-                const distance = 2;
+                const radius = 2.5;
+                const segments = 64;
 
                 if (mode === '2d') {
-                    const geometry = new THREE.PlaneGeometry(width, height);
+                    const geometry = new THREE.SphereGeometry(radius, segments, segments);
                     const material = new THREE.MeshBasicMaterial({
                         map: videoTexture,
-                        side: THREE.DoubleSide
+                        side: THREE.BackSide
                     });
-                    const screen = new THREE.Mesh(geometry, material);
-                    screen.position.set(0, 0, -distance);
-                    scene.add(screen);
+                    const sphere = new THREE.Mesh(geometry, material);
+                    scene.add(sphere);
                 } else {
-                    const geometryL = new THREE.PlaneGeometry(width, height);
+                    const geometryL = new THREE.SphereGeometry(radius, segments, segments);
                     const materialL = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
                         vertexShader: `
@@ -311,14 +305,13 @@
                                 gl_FragColor = texture2D(tex, uv);
                             }
                         `,
-                        side: THREE.DoubleSide
+                        side: THREE.BackSide
                     });
-                    const screenL = new THREE.Mesh(geometryL, materialL);
-                    screenL.position.set(0, 0, -distance);
-                    screenL.layers.set(1);
-                    scene.add(screenL);
+                    const sphereL = new THREE.Mesh(geometryL, materialL);
+                    sphereL.layers.set(1);
+                    scene.add(sphereL);
 
-                    const geometryR = new THREE.PlaneGeometry(width, height);
+                    const geometryR = new THREE.SphereGeometry(radius, segments, segments);
                     const materialR = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
                         vertexShader: `
@@ -336,12 +329,11 @@
                                 gl_FragColor = texture2D(tex, uv);
                             }
                         `,
-                        side: THREE.DoubleSide
+                        side: THREE.BackSide
                     });
-                    const screenR = new THREE.Mesh(geometryR, materialR);
-                    screenR.position.set(0, 0, -distance);
-                    screenR.layers.set(2);
-                    scene.add(screenR);
+                    const sphereR = new THREE.Mesh(geometryR, materialR);
+                    sphereR.layers.set(2);
+                    scene.add(sphereR);
                 }
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -561,7 +553,7 @@
                 if (device) {
                     const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) + scope.alphaOffset : 0;
                     const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
-                    const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
+                    const gamma = device.gamma ? THREE.MathUtils.degToRad(gamma) : 0;
                     const orient = scope.screenOrientation ? THREE.MathUtils.degToRad(scope.screenOrientation) : 0;
 
                     euler.set(beta, alpha, -gamma, 'YXZ');
