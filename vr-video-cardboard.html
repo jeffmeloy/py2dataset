@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video 2 Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -192,6 +192,8 @@
         let hideOverlayTimer = null, currentZoomLevel = 4;
         let manualPanX = 0, manualPanY = 0;
         let headYaw = 0, headPitch = 0, yawOffset = 0, pitchOffset = 0;
+        let lastUpdateTime = 0, lastYaw = 0, lastPitch = 0;
+        let angularVelocity = 0;
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
 
         fileInput.addEventListener('change', handleFileSelect);
@@ -570,6 +572,9 @@
             this.update = function() {
                 if (!this.enabled) return;
 
+                const now = Date.now();
+                if (now - lastUpdateTime < 33) return;
+
                 const device = this.deviceOrientation;
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
                     const isLandscape = Math.abs(this.screenOrientation) === 90;
@@ -586,8 +591,20 @@
                         }, 800);
                     }
 
-                    headYaw = currentYaw;
-                    headPitch = currentPitch;
+                    const yawDiff = Math.abs(currentYaw - lastYaw);
+                    const pitchDiff = Math.abs(currentPitch - lastPitch);
+                    
+                    if (yawDiff > 0.009 || pitchDiff > 0.009) {
+                        const dt = (now - lastUpdateTime) / 1000;
+                        angularVelocity = dt > 0 ? (yawDiff + pitchDiff) / dt : 0;
+                        
+                        headYaw = currentYaw;
+                        headPitch = currentPitch;
+                        lastYaw = currentYaw;
+                        lastPitch = currentPitch;
+                    }
+                    
+                    lastUpdateTime = now;
                 }
             };
         }
@@ -620,6 +637,8 @@
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
+
+            let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
             const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
@@ -677,11 +696,25 @@
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
                 
-                distortionMaterial.uniforms.headYawOffset.value = yawUV;
-                distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
+                const currentZoom = zoomLevels[currentZoomLevel];
+                const isMovingFast = angularVelocity > 1.5;
+                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
+                
+                if (Math.abs(yawUV - cachedYawUV) > 0.001) {
+                    distortionMaterial.uniforms.headYawOffset.value = yawUV;
+                    cachedYawUV = yawUV;
+                }
+                if (Math.abs(pitchUV - cachedPitchUV) > 0.001) {
+                    distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
+                    cachedPitchUV = pitchUV;
+                }
+                if (Math.abs(effectiveZoom - cachedZoom) > 0.001) {
+                    distortionMaterial.uniforms.zoomLevel.value = effectiveZoom;
+                    cachedZoom = effectiveZoom;
+                }
+                
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
-                distortionMaterial.uniforms.zoomLevel.value = zoomLevels[currentZoomLevel];
                 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 distortionMaterial.uniforms.eyeOffset.value = -0.25;
