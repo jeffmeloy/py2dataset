@@ -1,3 +1,4 @@
+review this html file:
 <!DOCTYPE html>
 <html>
 <head>
@@ -38,7 +39,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video c Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -107,6 +108,8 @@
         uniform float k1;
         uniform float k2;
         uniform float eyeOffset;
+        uniform float headYawOffset;
+        uniform float headPitchOffset;
         uniform float manualPanOffset;
         uniform float manualTiltOffset;
         uniform float zoomLevel;
@@ -161,8 +164,8 @@
         void main() {
             vec2 distortedUV = distort(vUv);
             vec2 uv = (distortedUV - 0.5) / zoomLevel;
-            uv.x += manualPanOffset;
-            uv.y += manualTiltOffset;
+            uv.x += headYawOffset + manualPanOffset;
+            uv.y += headPitchOffset + manualTiltOffset;
             uv += 0.5;
             
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -184,11 +187,14 @@
         const timeDisplays = document.querySelectorAll('.timeDisplay');
         const playPauseBtns = document.querySelectorAll('.play-pause-btn');
 
-        let camera, scene, renderer, effect, cameraParent;
+        let camera, scene, renderer, effect;
         let video, videoTexture, orientationTracker;
         let mode = '2d', isPlaying = false, videoURL = null;
         let hideOverlayTimer = null, currentZoomLevel = 4;
         let manualPanX = 0, manualPanY = 0;
+        let headYaw = 0, headPitch = 0, yawOffset = 0, pitchOffset = 0;
+        let lastUpdateTime = 0, lastYaw = 0, lastPitch = 0;
+        let angularVelocity = 0;
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
 
         fileInput.addEventListener('change', handleFileSelect);
@@ -283,12 +289,9 @@
         function initVR() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x000000);
-            
-            cameraParent = new THREE.Object3D();
-            scene.add(cameraParent);
 
             camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
-            cameraParent.add(camera);
+            camera.position.set(0, 0, 0);
 
             video = document.createElement('video');
             video.src = videoURL;
@@ -309,9 +312,6 @@
                 const width = 6;
                 const height = width / aspect;
                 const distance = 2.5;
-                const videoScreen = new THREE.Object3D();
-                videoScreen.position.set(0, 0, -distance);
-                camera.add(videoScreen);
 
                 if (mode === '2d') {
                     const geometry = new THREE.PlaneGeometry(width, height);
@@ -319,8 +319,10 @@
                         map: videoTexture,
                         side: THREE.DoubleSide
                     });
-                    const screenMesh = new THREE.Mesh(geometry, material);
-                    videoScreen.add(screenMesh);
+                    const screen = new THREE.Mesh(geometry, material);
+                    screen.position.set(0, 0, -distance);
+                    camera.add(screen);
+                    scene.add(camera);
                 } else {
                     const geometryL = new THREE.PlaneGeometry(width, height);
                     const materialL = new THREE.ShaderMaterial({
@@ -343,8 +345,9 @@
                         side: THREE.DoubleSide
                     });
                     const screenL = new THREE.Mesh(geometryL, materialL);
+                    screenL.position.set(0, 0, -distance);
                     screenL.layers.set(1);
-                    videoScreen.add(screenL);
+                    camera.add(screenL);
 
                     const geometryR = new THREE.PlaneGeometry(width, height);
                     const materialR = new THREE.ShaderMaterial({
@@ -367,8 +370,10 @@
                         side: THREE.DoubleSide
                     });
                     const screenR = new THREE.Mesh(geometryR, materialR);
+                    screenR.position.set(0, 0, -distance);
                     screenR.layers.set(2);
-                    videoScreen.add(screenR);
+                    camera.add(screenR);
+                    scene.add(camera);
                 }
 
                 renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -403,7 +408,7 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            orientationTracker.update();
+            if (orientationTracker) orientationTracker.update();
             effect.render(scene, camera);
         }
 
@@ -509,7 +514,8 @@
         function centerPan() {
             manualPanX = 0;
             manualPanY = 0;
-            if (orientationTracker) orientationTracker.recenter();
+            yawOffset = headYaw;
+            pitchOffset = headPitch;
             showOverlay();
         }
 
@@ -535,18 +541,12 @@
             else if (classList.contains('pan-right-btn')) adjustPan(1);
         }
 
-        // =================== START: REVISED OrientationTracker ===================
         function OrientationTracker() {
-            this.enabled = false;
             this.deviceOrientation = {};
             this.screenOrientation = 0;
-
-            const euler = new THREE.Euler(0, 0, 0, 'YXZ');
-            const q0 = new THREE.Quaternion();
-            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -90 degrees around X-axis
-            const zee = new THREE.Vector3(0, 0, 1);
-            
-            let orientationOffset = new THREE.Quaternion();
+            this.enabled = false;
+            this.autoCenterTimer = null;
+            this.firstReadingTime = null;
 
             const onDeviceOrientationChangeEvent = (event) => {
                 this.deviceOrientation = event;
@@ -556,42 +556,59 @@
                 this.screenOrientation = window.orientation || 0;
             };
 
-            this.recenter = function() {
-                const alpha = this.deviceOrientation.alpha ? THREE.MathUtils.degToRad(this.deviceOrientation.alpha) : 0;
-                const e = new THREE.Euler(0, alpha, 0, 'YXZ');
-                orientationOffset.setFromEuler(e).invert();
-            };
-
             this.connect = function() {
                 onScreenOrientationChangeEvent();
-                window.addEventListener('orientationchange', onScreenOrientationChangeEvent, false);
-                window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent, false);
+                window.addEventListener('orientationchange', onScreenOrientationChangeEvent);
+                window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent);
                 this.enabled = true;
-                setTimeout(() => this.recenter(), 500); // Auto-recenter shortly after start
             };
 
             this.disconnect = function() {
-                window.removeEventListener('orientationchange', onScreenOrientationChangeEvent, false);
-                window.removeEventListener('deviceorientation', onDeviceOrientationChangeEvent, false);
+                window.removeEventListener('orientationchange', onScreenOrientationChangeEvent);
+                window.removeEventListener('deviceorientation', onDeviceOrientationChangeEvent);
                 this.enabled = false;
+                if (this.autoCenterTimer) clearTimeout(this.autoCenterTimer);
             };
 
             this.update = function() {
-                if (!this.enabled || !this.deviceOrientation) return;
+                if (!this.enabled) return;
 
-                const alpha = this.deviceOrientation.alpha ? THREE.MathUtils.degToRad(this.deviceOrientation.alpha) : 0;
-                const beta = this.deviceOrientation.beta ? THREE.MathUtils.degToRad(this.deviceOrientation.beta) : 0;
-                const gamma = this.deviceOrientation.gamma ? THREE.MathUtils.degToRad(this.deviceOrientation.gamma) : 0;
-                const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
+                const now = Date.now();
+                if (now - lastUpdateTime < 33) return;
 
-                euler.set(beta, alpha, -gamma, 'YXZ');
-                camera.quaternion.setFromEuler(euler);
-                camera.quaternion.multiply(q1);
-                camera.quaternion.multiply(q0.setFromAxisAngle(zee, -orient));
-                camera.quaternion.multiply(orientationOffset);
+                const device = this.deviceOrientation;
+                if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
+                    const isLandscape = Math.abs(this.screenOrientation) === 90;
+                    const currentYaw = THREE.MathUtils.degToRad(device.alpha);
+                    const currentPitch = isLandscape 
+                        ? THREE.MathUtils.degToRad(device.gamma)
+                        : THREE.MathUtils.degToRad(device.beta);
+
+                    if (!this.firstReadingTime) {
+                        this.firstReadingTime = Date.now();
+                        this.autoCenterTimer = setTimeout(() => {
+                            yawOffset = headYaw;
+                            pitchOffset = headPitch;
+                        }, 800);
+                    }
+
+                    const yawDiff = Math.abs(currentYaw - lastYaw);
+                    const pitchDiff = Math.abs(currentPitch - lastPitch);
+                    
+                    if (yawDiff > 0.009 || pitchDiff > 0.009) {
+                        const dt = (now - lastUpdateTime) / 1000;
+                        angularVelocity = dt > 0 ? (yawDiff + pitchDiff) / dt : 0;
+                        
+                        headYaw = currentYaw;
+                        headPitch = currentPitch;
+                        lastYaw = currentYaw;
+                        lastPitch = currentPitch;
+                    }
+                    
+                    lastUpdateTime = now;
+                }
             };
         }
-        // =================== END: REVISED OrientationTracker ===================
 
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera();
@@ -611,6 +628,8 @@
                     k1: { value: 0.22 },
                     k2: { value: 0.18 },
                     eyeOffset: { value: 0.0 },
+                    headYawOffset: { value: 0.0 },
+                    headPitchOffset: { value: 0.0 },
                     manualPanOffset: { value: 0.0 },
                     manualTiltOffset: { value: 0.0 },
                     zoomLevel: { value: 1.0 },
@@ -619,6 +638,8 @@
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
+
+            let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
             const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
@@ -668,16 +689,33 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // =================== START: REVISED RENDER LOGIC ===================
-                // Head tracking is now handled by the camera's quaternion.
-                // We only need to pass zoom and manual pan offsets to the shader.
+                let yawDelta = THREE.MathUtils.euclideanModulo(headYaw - yawOffset + Math.PI, 2 * Math.PI) - Math.PI;
+                const yawUV = -yawDelta * 0.7;
+                
+                let pitchDelta = headPitch - pitchOffset;
+                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
+                const pitchUV = -pitchDelta * 0.8;
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
-                distortionMaterial.uniforms.zoomLevel.value = currentZoom;
+                const isMovingFast = angularVelocity > 1.5;
+                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
+                
+                if (Math.abs(yawUV - cachedYawUV) > 0.001) {
+                    distortionMaterial.uniforms.headYawOffset.value = yawUV;
+                    cachedYawUV = yawUV;
+                }
+                if (Math.abs(pitchUV - cachedPitchUV) > 0.001) {
+                    distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
+                    cachedPitchUV = pitchUV;
+                }
+                if (Math.abs(effectiveZoom - cachedZoom) > 0.001) {
+                    distortionMaterial.uniforms.zoomLevel.value = effectiveZoom;
+                    cachedZoom = effectiveZoom;
+                }
+                
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
-                // =================== END: REVISED RENDER LOGIC ===================
-
+                
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 distortionMaterial.uniforms.eyeOffset.value = -0.25;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
