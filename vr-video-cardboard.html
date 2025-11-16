@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video 3 Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -301,10 +301,7 @@
             
             video.addEventListener('loadeddata', function() {
                 videoTexture = new THREE.VideoTexture(video);
-
-                // *** THE ONLY CHANGE IS HERE: ENABLE MIPMAPPING ***
-                // Use the highest quality mipmapping (trilinear filtering) to reduce stutter on fast motion.
-                videoTexture.minFilter = THREE.LinearMipmapLinearFilter;
+                videoTexture.minFilter = THREE.LinearFilter;
                 videoTexture.magFilter = THREE.LinearFilter;
 
                 const aspect = mode === '3d'
@@ -701,7 +698,10 @@
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
-                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
+
+                // *** THE ONLY CHANGE IS HERE ***
+                // Aggressively clamp the zoom during fast motion to improve texture cache performance.
+                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 0.8) : currentZoom;
                 
                 if (Math.abs(yawUV - cachedYawUV) > 0.001) {
                     distortionMaterial.uniforms.headYawOffset.value = yawUV;
