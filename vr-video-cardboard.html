@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video w Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -195,7 +195,7 @@
         let lastUpdateTime = 0, lastYaw = 0, lastPitch = 0;
         let angularVelocity = 0;
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
-        let lastUIUpdateTime = 0; // MODIFICATION: Added variable to track UI updates
+        let lastUIUpdateTime = 0;
 
         fileInput.addEventListener('change', handleFileSelect);
         startBtn.addEventListener('click', startVR);
@@ -389,7 +389,6 @@
 
                 window.addEventListener('resize', onResize);
                 document.addEventListener('click', toggleOverlay);
-                // MODIFICATION: Removed 'timeupdate' event listener. The update is now handled in the animate() loop.
                 progressOverlay.addEventListener('click', handleControls);
 
                 showOverlay();
@@ -409,7 +408,6 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // MODIFICATION: Throttle UI updates to run every 250ms
             const now = performance.now();
             if (video && !video.paused && now - lastUIUpdateTime > 250) {
                 updateProgress();
@@ -586,11 +584,11 @@
 
                 const device = this.deviceOrientation;
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
-                    const isLandscape = Math.abs(this.screenOrientation) === 90;
+                    // MODIFICATION: Removed the unreliable isLandscape check. Since the screen
+                    // is locked to landscape, we can safely assume the landscape logic should always run.
+                    // This prevents a race condition where the tracker initializes before the orientation lock is complete.
                     const currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                    const currentPitch = isLandscape 
-                        ? THREE.MathUtils.degToRad(device.gamma)
-                        : THREE.MathUtils.degToRad(device.beta);
+                    const currentPitch = THREE.MathUtils.degToRad(device.gamma);
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = Date.now();
