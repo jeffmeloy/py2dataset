@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video 3 Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -195,6 +195,7 @@
         let lastUpdateTime = 0, lastYaw = 0, lastPitch = 0;
         let angularVelocity = 0;
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
+        let lastUIUpdateTime = 0; // MODIFICATION: Added variable to track UI updates
 
         fileInput.addEventListener('change', handleFileSelect);
         startBtn.addEventListener('click', startVR);
@@ -388,7 +389,7 @@
 
                 window.addEventListener('resize', onResize);
                 document.addEventListener('click', toggleOverlay);
-                video.addEventListener('timeupdate', updateProgress);
+                // MODIFICATION: Removed 'timeupdate' event listener. The update is now handled in the animate() loop.
                 progressOverlay.addEventListener('click', handleControls);
 
                 showOverlay();
@@ -407,6 +408,14 @@
 
         function animate() {
             requestAnimationFrame(animate);
+
+            // MODIFICATION: Throttle UI updates to run every 250ms
+            const now = performance.now();
+            if (video && !video.paused && now - lastUIUpdateTime > 250) {
+                updateProgress();
+                lastUIUpdateTime = now;
+            }
+
             if (orientationTracker) orientationTracker.update();
             effect.render(scene, camera);
         }
@@ -451,7 +460,7 @@
         }
 
         function updateProgress() {
-            if (!video) return;
+            if (!video || !video.duration) return;
             const percent = (video.currentTime / video.duration) * 100;
             progressFills.forEach(fill => {
                 fill.style.width = percent + '%';
@@ -637,9 +646,8 @@
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
-            
-            // *** THE ONLY CHANGE IS HERE: SMOOTHING LOGIC ***
-            let displayZoom = 1.0; // The smoothed zoom value that will be passed to the shader
+
+            let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
             const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
@@ -697,17 +705,25 @@
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
                 
-                // *** THE ONLY CHANGE IS HERE: SMOOTHING LOGIC ***
+                const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
-                const targetZoom = isMovingFast ? Math.min(zoomLevels[currentZoomLevel], 0.8) : zoomLevels[currentZoomLevel];
-                // Smoothly interpolate the displayZoom towards the targetZoom
-                displayZoom = THREE.MathUtils.lerp(displayZoom, targetZoom, 0.1);
+                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
                 
-                distortionMaterial.uniforms.headYawOffset.value = yawUV;
-                distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
+                if (Math.abs(yawUV - cachedYawUV) > 0.001) {
+                    distortionMaterial.uniforms.headYawOffset.value = yawUV;
+                    cachedYawUV = yawUV;
+                }
+                if (Math.abs(pitchUV - cachedPitchUV) > 0.001) {
+                    distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
+                    cachedPitchUV = pitchUV;
+                }
+                if (Math.abs(effectiveZoom - cachedZoom) > 0.001) {
+                    distortionMaterial.uniforms.zoomLevel.value = effectiveZoom;
+                    cachedZoom = effectiveZoom;
+                }
+                
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
-                distortionMaterial.uniforms.zoomLevel.value = displayZoom; // Use the smoothed value
                 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 distortionMaterial.uniforms.eyeOffset.value = -0.25;
