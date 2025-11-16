@@ -1,4 +1,3 @@
-review this html file:
 <!DOCTYPE html>
 <html>
 <head>
@@ -39,7 +38,7 @@ review this html file:
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video d Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -689,11 +688,13 @@ review this html file:
                 renderer.clear();
                 renderer.setScissorTest(true);
 
+                // Wrap yaw into [-π, π]
                 let yawDelta = THREE.MathUtils.euclideanModulo(headYaw - yawOffset + Math.PI, 2 * Math.PI) - Math.PI;
                 const yawUV = -yawDelta * 0.7;
-                
-                let pitchDelta = headPitch - pitchOffset;
-                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
+
+                // Wrap pitch into [-π, π] before clamping to [-π/2, π/2]
+                let pitchDelta = THREE.MathUtils.euclideanModulo(headPitch - pitchOffset + Math.PI, 2 * Math.PI) - Math.PI;
+                pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
