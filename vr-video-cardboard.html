@@ -570,14 +570,20 @@
 
                 const device = this.deviceOrientation;
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
+                    const isLandscape = Math.abs(this.screenOrientation) === 90;
+                    const currentYaw = THREE.MathUtils.degToRad(device.alpha);
+                    const currentPitch = isLandscape 
+                        ? THREE.MathUtils.degToRad(device.gamma)
+                        : THREE.MathUtils.degToRad(device.beta);
+
                     if (!this.hasAutoCentered) {
-                        yawOffset = THREE.MathUtils.degToRad(device.alpha);
-                        pitchOffset = THREE.MathUtils.degToRad(device.beta);
+                        yawOffset = currentYaw;
+                        pitchOffset = currentPitch;
                         this.hasAutoCentered = true;
                     }
 
-                    headYaw = THREE.MathUtils.degToRad(device.alpha);
-                    headPitch = THREE.MathUtils.degToRad(device.beta);
+                    headYaw = currentYaw;
+                    headPitch = currentPitch;
                 }
             };
         }
@@ -659,8 +665,16 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                const yawUV = (headYaw - yawOffset) * 0.7;
-                const pitchUV = (headPitch - pitchOffset) * -0.7;
+                // Normalize angle differences to handle wraparound
+                let yawDelta = headYaw - yawOffset;
+                yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
+                
+                let pitchDelta = headPitch - pitchOffset;
+                pitchDelta = ((pitchDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
+                
+                // Convert to UV space with inverted direction (looking left shows left content)
+                const yawUV = -yawDelta * 0.7;
+                const pitchUV = -pitchDelta * 0.7;
                 
                 distortionMaterial.uniforms.headYawOffset.value = yawUV;
                 distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
