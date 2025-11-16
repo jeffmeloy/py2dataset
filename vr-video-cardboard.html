@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video 3 Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -637,8 +637,9 @@
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
-
-            let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
+            
+            // *** THE ONLY CHANGE IS HERE: SMOOTHING LOGIC ***
+            let displayZoom = 1.0; // The smoothed zoom value that will be passed to the shader
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
             const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
@@ -696,28 +697,17 @@
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
                 
-                const currentZoom = zoomLevels[currentZoomLevel];
+                // *** THE ONLY CHANGE IS HERE: SMOOTHING LOGIC ***
                 const isMovingFast = angularVelocity > 1.5;
-
-                // *** THE ONLY CHANGE IS HERE ***
-                // Aggressively clamp the zoom during fast motion to improve texture cache performance.
-                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 0.8) : currentZoom;
+                const targetZoom = isMovingFast ? Math.min(zoomLevels[currentZoomLevel], 0.8) : zoomLevels[currentZoomLevel];
+                // Smoothly interpolate the displayZoom towards the targetZoom
+                displayZoom = THREE.MathUtils.lerp(displayZoom, targetZoom, 0.1);
                 
-                if (Math.abs(yawUV - cachedYawUV) > 0.001) {
-                    distortionMaterial.uniforms.headYawOffset.value = yawUV;
-                    cachedYawUV = yawUV;
-                }
-                if (Math.abs(pitchUV - cachedPitchUV) > 0.001) {
-                    distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
-                    cachedPitchUV = pitchUV;
-                }
-                if (Math.abs(effectiveZoom - cachedZoom) > 0.001) {
-                    distortionMaterial.uniforms.zoomLevel.value = effectiveZoom;
-                    cachedZoom = effectiveZoom;
-                }
-                
+                distortionMaterial.uniforms.headYawOffset.value = yawUV;
+                distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
+                distortionMaterial.uniforms.zoomLevel.value = displayZoom; // Use the smoothed value
                 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 distortionMaterial.uniforms.eyeOffset.value = -0.25;
