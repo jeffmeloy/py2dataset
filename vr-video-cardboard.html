@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video 1 Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -542,7 +542,8 @@
             this.deviceOrientation = {};
             this.screenOrientation = 0;
             this.enabled = false;
-            this.hasAutoCentered = false;
+            this.autoCenterTimer = null;
+            this.firstReadingTime = null;
 
             const onDeviceOrientationChangeEvent = (event) => {
                 this.deviceOrientation = event;
@@ -563,6 +564,7 @@
                 window.removeEventListener('orientationchange', onScreenOrientationChangeEvent);
                 window.removeEventListener('deviceorientation', onDeviceOrientationChangeEvent);
                 this.enabled = false;
+                if (this.autoCenterTimer) clearTimeout(this.autoCenterTimer);
             };
 
             this.update = function() {
@@ -576,10 +578,12 @@
                         ? THREE.MathUtils.degToRad(device.gamma)
                         : THREE.MathUtils.degToRad(device.beta);
 
-                    if (!this.hasAutoCentered) {
-                        yawOffset = currentYaw;
-                        pitchOffset = currentPitch;
-                        this.hasAutoCentered = true;
+                    if (!this.firstReadingTime) {
+                        this.firstReadingTime = Date.now();
+                        this.autoCenterTimer = setTimeout(() => {
+                            yawOffset = headYaw;
+                            pitchOffset = headPitch;
+                        }, 800);
                     }
 
                     headYaw = currentYaw;
@@ -665,16 +669,15 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // Normalize angle differences to handle wraparound
+                // Yaw: circular axis, normalize to [-π, π] and apply standard sensitivity
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
-                
-                let pitchDelta = headPitch - pitchOffset;
-                pitchDelta = ((pitchDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
-                
-                // Convert to UV space with inverted direction (looking left shows left content)
                 const yawUV = -yawDelta * 0.7;
-                const pitchUV = -pitchDelta * 0.7;
+                
+                // Pitch: bounded axis [-π/2, π/2], no wraparound, lower sensitivity
+                let pitchDelta = headPitch - pitchOffset;
+                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
+                const pitchUV = pitchDelta * 0.4;
                 
                 distortionMaterial.uniforms.headYawOffset.value = yawUV;
                 distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
