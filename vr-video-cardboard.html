@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video 1 Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -669,15 +669,13 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // Yaw: circular axis, normalize to [-π, π] and apply standard sensitivity
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
                 const yawUV = -yawDelta * 0.7;
                 
-                // Pitch: bounded axis [-π/2, π/2], no wraparound, lower sensitivity
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
-                const pitchUV = pitchDelta * 0.4;
+                const pitchUV = -pitchDelta * 0.8;
                 
                 distortionMaterial.uniforms.headYawOffset.value = yawUV;
                 distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
