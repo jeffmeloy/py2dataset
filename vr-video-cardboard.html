@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video k Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -691,10 +691,27 @@
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
                 const yawUV = -yawDelta * 0.7;
-                
+
+                // Existing code:
                 let pitchDelta = headPitch - pitchOffset;
-                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
-                const pitchUV = -pitchDelta * 0.8;
+                // keep clamping to [-90°, 90°] in radians
+                pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
+
+                // NEW mapping: non-linear and clamped
+                const maxPitchShift = 0.4;  // maximum up/down shift in UV space
+
+                // Use sin() so motion compresses near ±90° (feels nicer and safer)
+                const normalized = Math.sin(pitchDelta);  // -1 .. 1
+                let pitchUV = -normalized * maxPitchShift; // -0.4 .. 0.4
+
+                if (Math.abs(pitchUV - cachedPitchUV) > 0.001) {
+                    distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
+                    cachedPitchUV = pitchUV;
+                }
+                
+                //let pitchDelta = headPitch - pitchOffset;
+                //pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
+                //const pitchUV = -pitchDelta * 0.8;
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
