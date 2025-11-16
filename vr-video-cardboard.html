@@ -577,11 +577,18 @@
 
                 const device = this.deviceOrientation;
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
+                    // =================== START: REVISED CODE ===================
                     const isLandscape = Math.abs(this.screenOrientation) === 90;
                     const currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                    const currentPitch = isLandscape 
-                        ? THREE.MathUtils.degToRad(device.gamma)
-                        : THREE.MathUtils.degToRad(device.beta);
+
+                    let pitchDegrees = device.beta; // Default to portrait mode's beta value
+                    if (isLandscape) {
+                        // In landscape, gamma is the pitch. We must check the orientation's
+                        // sign to handle both landscape-primary (90) and landscape-secondary (-90).
+                        pitchDegrees = (this.screenOrientation > 0) ? device.gamma : -device.gamma;
+                    }
+                    const currentPitch = THREE.MathUtils.degToRad(pitchDegrees);
+                    // =================== END: REVISED CODE =====================
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = Date.now();
