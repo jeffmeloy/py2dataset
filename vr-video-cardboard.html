@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video g Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -166,11 +166,12 @@
             uv.x += headYawOffset + manualPanOffset;
             uv.y += headPitchOffset + manualTiltOffset;
             uv += 0.5;
-
-            // Clamp into valid range so we don't go black when math overshoots
-            uv = clamp(uv, vec2(0.0, 0.0), vec2(1.0, 1.0));
             
-            gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            } else {
+                gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
+            }
         }
     </script>
 
@@ -687,14 +688,10 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // Yaw: wrap into [-π, π] using euclideanModulo
-                let yawDelta = THREE.MathUtils.euclideanModulo(
-                    headYaw - yawOffset + Math.PI,
-                    2 * Math.PI
-                ) - Math.PI;
+                let yawDelta = headYaw - yawOffset;
+                yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
                 const yawUV = -yawDelta * 0.7;
                 
-                // Pitch: basic clamp to keep within a sane range
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
