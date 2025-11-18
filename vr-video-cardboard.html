@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <title>VR Video Player</title>
     <meta charset="UTF-8">
@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video s Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -161,11 +161,21 @@
         }
         
         void main() {
+            // Per-eye center (matches distort())
+            vec2 eyeCenter = vec2(0.5 + eyeOffset, 0.5);
+
+            // Apply lens distortion first
             vec2 distortedUV = distort(vUv);
-            vec2 uv = (distortedUV - 0.5) / zoomLevel;
+
+            // Zoom around the *eye center*, not the global 0.5
+            vec2 uv = (distortedUV - eyeCenter) / zoomLevel;
+
+            // Apply head + manual offsets
             uv.x += headYawOffset + manualPanOffset;
             uv.y += headPitchOffset + manualTiltOffset;
-            uv += 0.5;
+
+            // Move back into full UV space for this eye
+            uv += eyeCenter;
             
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                 gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -436,9 +446,9 @@
             showOverlay();
         }
 
-        function seekVideo(e) {
+        function seekVideo(e, barEl) {
             if (!video) return;
-            const rect = e.currentTarget.getBoundingClientRect();
+            const rect = barEl.getBoundingClientRect();
             const pos = (e.clientX - rect.left) / rect.width;
             video.currentTime = pos * video.duration;
             showOverlay();
@@ -524,7 +534,7 @@
             if (!target) return;
 
             if (target.matches('.progressBar')) {
-                seekVideo(e);
+                seekVideo(e, target);
                 return;
             }
 
