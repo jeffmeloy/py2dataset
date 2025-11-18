@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video 2 Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -608,14 +608,11 @@
                 if (dtMs < 16) return;
 
                 const device = this.deviceOrientation;
-                if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
-                    const isLandscape = Math.abs(this.screenOrientation) === 90;
-
-                    let currentYaw = THREE.MathUtils.degToRad(device.alpha || 0);
-
-                    const currentPitch = isLandscape
-                        ? THREE.MathUtils.degToRad(device.gamma || 0)
-                        : THREE.MathUtils.degToRad(device.beta || 0);
+                if (device && device.alpha !== null && device.beta !== null) {
+                    // Phone is always landscape relative to the face:
+                    // alpha -> yaw, beta -> pitch
+                    const currentYaw   = THREE.MathUtils.degToRad(device.alpha || 0);
+                    const currentPitch = THREE.MathUtils.degToRad(device.beta   || 0);
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = now;
@@ -641,9 +638,10 @@
                     }
 
                     if (yawDiffAbs > minAngle || pitchDiffAbs > minAngle) {
-                        headYaw = headYaw + rawYawDiff;
-                        headPitch = currentPitch;
-                        lastYaw = currentYaw;
+                        // Integrate both yaw and pitch for smoothness
+                        headYaw   += rawYawDiff;
+                        headPitch += (currentPitch - lastPitch);
+                        lastYaw   = currentYaw;
                         lastPitch = currentPitch;
                     }
 
@@ -742,16 +740,14 @@
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
 
-                // Yaw: faster (about 2x compared to previous 0.18)
-                let yawUV = -yawDelta * 0.35;
+                // Increase gain (~2x compared to your previous values)
+                let yawUV   = -yawDelta  * 0.70;  // was 0.35
+                let pitchUV = -pitchDelta * 0.12; // was 0.06
 
-                // Pitch: very gentle to avoid cropping when looking up/down
-                let pitchUV = -pitchDelta * 0.06;
-
-                // Clamp offsets to keep sampling safely inside the texture
-                const maxYawOffset = 0.28;
-                const maxPitchOffset = 0.12;
-                yawUV = Math.max(-maxYawOffset, Math.min(maxYawOffset, yawUV));
+                // Clamp offsets to keep sampling safely inside the texture, but allow more travel
+                const maxYawOffset   = 0.40; // was 0.28
+                const maxPitchOffset = 0.18; // was 0.12
+                yawUV   = Math.max(-maxYawOffset,   Math.min(maxYawOffset,   yawUV));
                 pitchUV = Math.max(-maxPitchOffset, Math.min(maxPitchOffset, pitchUV));
 
                 // ---- Zoom purely controlled by user ----
