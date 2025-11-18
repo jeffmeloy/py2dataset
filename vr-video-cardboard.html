@@ -188,36 +188,52 @@
 
         let camera, scene, renderer, effect;
         let video, videoTexture, orientationTracker;
-        let mode = '2d', isPlaying = false, videoURL = null;
-        let hideOverlayTimer = null, currentZoomLevel = 4;
+        let mode = '2d';
+        let isPlaying = false;
+        let videoURL = null;
+        let hideOverlayTimer = null;
+        let currentZoomLevel = 4;
         let manualPanX = 0, manualPanY = 0;
         let headYaw = 0, headPitch = 0, yawOffset = 0, pitchOffset = 0;
         let lastUpdateTime = 0, lastYaw = 0, lastPitch = 0;
         let angularVelocity = 0;
-        const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
+
+        const zoomLevels = [
+            0.2, 0.4, 0.6, 0.8,
+            1.0, 1.2, 1.4, 1.6,
+            1.8, 2.0, 2.2, 2.4,
+            2.6, 2.8, 3.0, 3.2,
+            3.4, 3.6, 3.8, 4.0
+        ];
 
         fileInput.addEventListener('change', handleFileSelect);
         startBtn.addEventListener('click', startVR);
-        
+
         function handleFileSelect(e) {
             const file = e.target.files[0];
             if (!file) return;
+
             if (videoURL) URL.revokeObjectURL(videoURL);
             videoURL = URL.createObjectURL(file);
             testVideo.src = videoURL;
-            mode = document.querySelector('input[name="mode"]:checked').value;
+
             testVideo.addEventListener('loadedmetadata', function() {
                 status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
                 status.className = 'status success';
                 startBtn.disabled = false;
             }, { once: true });
+
             testVideo.load();
         }
 
         async function startVR() {
             if (!videoURL) return;
-            
-            if (typeof DeviceOrientationEvent !== 'undefined' && 
+
+            // Read mode at start so user can change radio after file select
+            const selectedMode = document.querySelector('input[name="mode"]:checked');
+            mode = selectedMode ? selectedMode.value : '2d';
+
+            if (typeof DeviceOrientationEvent !== 'undefined' &&
                 typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
                     const permission = await DeviceOrientationEvent.requestPermission();
@@ -235,11 +251,11 @@
             } else if (elem.webkitRequestFullscreen) {
                 elem.webkitRequestFullscreen();
             }
-            
+
             if (screen.orientation && screen.orientation.lock) {
                 screen.orientation.lock('landscape').catch(() => {});
             }
-            
+
             setTimeout(() => {
                 setupDiv.classList.add('hidden');
                 disposeResources();
@@ -298,7 +314,7 @@
             video.muted = false;
             video.playsinline = true;
             video.setAttribute('webkit-playsinline', '');
-            
+
             video.addEventListener('loadeddata', function() {
                 videoTexture = new THREE.VideoTexture(video);
                 videoTexture.minFilter = THREE.LinearFilter;
@@ -436,30 +452,35 @@
             showOverlay();
         }
 
-        function seekVideo(e) {
-            if (!video) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            video.currentTime = pos * video.duration;
+        function seekVideo(barElem, clientX) {
+            if (!video || !barElem) return;
+            const rect = barElem.getBoundingClientRect();
+            const pos = (clientX - rect.left) / rect.width;
+            const clampedPos = Math.max(0, Math.min(1, pos));
+            video.currentTime = clampedPos * video.duration;
             showOverlay();
         }
 
         function seekRelative(seconds) {
             if (!video) return;
-            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
+            const targetTime = video.currentTime + seconds;
+            video.currentTime = Math.max(0, Math.min(video.duration, targetTime));
             showOverlay();
         }
 
         function updateProgress() {
-            if (!video) return;
+            if (!video || !isFinite(video.duration) || video.duration <= 0) return;
+
             const percent = (video.currentTime / video.duration) * 100;
             progressFills.forEach(fill => {
                 fill.style.width = percent + '%';
             });
+
             const currentMin = Math.floor(video.currentTime / 60);
             const currentSec = Math.floor(video.currentTime % 60);
             const durationMin = Math.floor(video.duration / 60);
             const durationSec = Math.floor(video.duration % 60);
+
             const timeText = `${currentMin}:${currentSec.toString().padStart(2, '0')} / ${durationMin}:${durationSec.toString().padStart(2, '0')}`;
             timeDisplays.forEach(display => {
                 display.textContent = timeText;
@@ -523,8 +544,8 @@
             const target = e.target.closest('.control-btn, .progressBar');
             if (!target) return;
 
-            if (target.matches('.progressBar')) {
-                seekVideo(e);
+            if (target.classList.contains('progressBar')) {
+                seekVideo(target, e.clientX);
                 return;
             }
 
@@ -552,7 +573,12 @@
             };
 
             const onScreenOrientationChangeEvent = () => {
-                this.screenOrientation = window.orientation || 0;
+                // basic fallback if screen.orientation is not available
+                if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+                    this.screenOrientation = window.screen.orientation.angle;
+                } else {
+                    this.screenOrientation = window.orientation || 0;
+                }
             };
 
             this.connect = function() {
@@ -573,37 +599,57 @@
                 if (!this.enabled) return;
 
                 const now = Date.now();
-                if (now - lastUpdateTime < 33) return;
+                const dtMs = now - lastUpdateTime;
+                const dt = dtMs / 1000;
+
+                // lightweight throttle
+                if (dtMs < 16) return;
 
                 const device = this.deviceOrientation;
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
                     const isLandscape = Math.abs(this.screenOrientation) === 90;
-                    const currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                    const currentPitch = isLandscape 
-                        ? THREE.MathUtils.degToRad(device.gamma)
-                        : THREE.MathUtils.degToRad(device.beta);
+
+                    // Yaw from alpha
+                    let currentYaw = THREE.MathUtils.degToRad(device.alpha || 0);
+
+                    // Pitch depending on orientation
+                    const currentPitch = isLandscape
+                        ? THREE.MathUtils.degToRad(device.gamma || 0)
+                        : THREE.MathUtils.degToRad(device.beta || 0);
 
                     if (!this.firstReadingTime) {
-                        this.firstReadingTime = Date.now();
+                        this.firstReadingTime = now;
                         this.autoCenterTimer = setTimeout(() => {
                             yawOffset = headYaw;
                             pitchOffset = headPitch;
                         }, 800);
                     }
 
-                    const yawDiff = Math.abs(currentYaw - lastYaw);
-                    const pitchDiff = Math.abs(currentPitch - lastPitch);
-                    
-                    if (yawDiff > 0.009 || pitchDiff > 0.009) {
-                        const dt = (now - lastUpdateTime) / 1000;
-                        angularVelocity = dt > 0 ? (yawDiff + pitchDiff) / dt : 0;
-                        
-                        headYaw = currentYaw;
+                    // Wrap yaw diff into [-PI, PI] to avoid large jumps
+                    let rawYawDiff = currentYaw - lastYaw;
+                    rawYawDiff = ((rawYawDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                    const yawDiffAbs = Math.abs(rawYawDiff);
+                    const pitchDiffAbs = Math.abs(currentPitch - lastPitch);
+
+                    const minAngle = 0.002; // small deadzone for jitter
+                    const deltaAngle = yawDiffAbs + pitchDiffAbs;
+
+                    if (dt > 0) {
+                        const instantaneousVel = deltaAngle / dt;
+                        // exponential smoothing to allow decay
+                        const smoothing = 0.8;
+                        angularVelocity = smoothing * angularVelocity + (1 - smoothing) * instantaneousVel;
+                        if (angularVelocity < 0.01) angularVelocity = 0; // tiny cleanup
+                    }
+
+                    // Only update head orientation if above deadzone to reduce jitter
+                    if (yawDiffAbs > minAngle || pitchDiffAbs > minAngle) {
+                        headYaw = headYaw + rawYawDiff;
                         headPitch = currentPitch;
                         lastYaw = currentYaw;
                         lastPitch = currentPitch;
                     }
-                    
+
                     lastUpdateTime = now;
                 }
             };
@@ -638,7 +684,9 @@
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
 
-            let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
+            let cachedYawUV = 0;
+            let cachedPitchUV = 0;
+            let cachedZoom = 1.0;
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
             const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
@@ -653,6 +701,7 @@
                 const newDpr = window.devicePixelRatio || 1;
                 const newRtWidth = Math.min(Math.floor(width * newDpr / 2), maxTextureSize);
                 const newRtHeight = Math.min(Math.floor(height * newDpr), maxTextureSize);
+
                 if (newRtWidth !== rtWidth || newRtHeight !== rtHeight) {
                     renderTargetL.dispose();
                     renderTargetR.dispose();
@@ -693,7 +742,7 @@
                 const yawUV = -yawDelta * 0.7;
                 
                 let pitchDelta = headPitch - pitchOffset;
-                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
+                pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
