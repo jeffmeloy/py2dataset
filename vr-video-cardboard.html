@@ -705,7 +705,7 @@
                     rtWidth = newRtWidth;
                     rtHeight = newRtHeight;
                     renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, newRtHeight);
                     distortionMaterial.uniforms.texelSize.value.set(1.0 / rtWidth, 1.0 / rtHeight);
                 }
             };
@@ -735,21 +735,24 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // ---- Head rotation -> UV offsets (gentle + clamped) ----
+                // ---- Head rotation -> UV offsets ----
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
 
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
 
-                // Smaller mapping factor so head motion doesn't fling the image around
-                let yawUV = -yawDelta * 0.18;
-                let pitchUV = -pitchDelta * 0.18;
+                // Yaw: faster (about 2x compared to previous 0.18)
+                let yawUV = -yawDelta * 0.35;
 
-                // Clamp so we never pan far enough to "fall off" the texture
-                const maxOffset = 0.2;
-                yawUV = Math.max(-maxOffset, Math.min(maxOffset, yawUV));
-                pitchUV = Math.max(-maxOffset, Math.min(maxOffset, pitchUV));
+                // Pitch: very gentle to avoid cropping when looking up/down
+                let pitchUV = -pitchDelta * 0.06;
+
+                // Clamp offsets to keep sampling safely inside the texture
+                const maxYawOffset = 0.28;
+                const maxPitchOffset = 0.12;
+                yawUV = Math.max(-maxYawOffset, Math.min(maxYawOffset, yawUV));
+                pitchUV = Math.max(-maxPitchOffset, Math.min(maxPitchOffset, pitchUV));
 
                 // ---- Zoom purely controlled by user ----
                 const currentZoom = zoomLevels[currentZoomLevel];
