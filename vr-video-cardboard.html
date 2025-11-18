@@ -119,7 +119,9 @@
         const float HALF_PI = 1.57079632679;
         
         vec2 distort(vec2 p) {
-            vec2 center = vec2(0.5 + eyeOffset, 0.5);
+            // Each eye is rendered into its own full-sized texture,
+            // so the lens center is simply the middle of that texture.
+            vec2 center = vec2(0.5, 0.5);
             vec2 v = p - center;
             float r2 = dot(v, v);
             float distortion = 1.0 + r2 * (k1 + k2 * r2);
@@ -229,7 +231,6 @@
         async function startVR() {
             if (!videoURL) return;
 
-            // Read mode at start so user can change radio after file select
             const selectedMode = document.querySelector('input[name="mode"]:checked');
             mode = selectedMode ? selectedMode.value : '2d';
 
@@ -324,9 +325,12 @@
                     ? (video.videoWidth / 2) / video.videoHeight
                     : video.videoWidth / video.videoHeight;
 
-                const width = 6;
-                const height = width / aspect;
+                // Size the virtual screen so it fits comfortably inside the FOV
                 const distance = 2.5;
+                const fovRad = THREE.MathUtils.degToRad(camera.fov);
+                const maxWidth = 2 * distance * Math.tan(fovRad / 2);
+                const width = maxWidth * 0.9; // 90% of visible width
+                const height = width / aspect;
 
                 if (mode === '2d') {
                     const geometry = new THREE.PlaneGeometry(width, height);
@@ -573,7 +577,6 @@
             };
 
             const onScreenOrientationChangeEvent = () => {
-                // basic fallback if screen.orientation is not available
                 if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
                     this.screenOrientation = window.screen.orientation.angle;
                 } else {
@@ -602,17 +605,14 @@
                 const dtMs = now - lastUpdateTime;
                 const dt = dtMs / 1000;
 
-                // lightweight throttle
                 if (dtMs < 16) return;
 
                 const device = this.deviceOrientation;
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
                     const isLandscape = Math.abs(this.screenOrientation) === 90;
 
-                    // Yaw from alpha
                     let currentYaw = THREE.MathUtils.degToRad(device.alpha || 0);
 
-                    // Pitch depending on orientation
                     const currentPitch = isLandscape
                         ? THREE.MathUtils.degToRad(device.gamma || 0)
                         : THREE.MathUtils.degToRad(device.beta || 0);
@@ -625,24 +625,21 @@
                         }, 800);
                     }
 
-                    // Wrap yaw diff into [-PI, PI] to avoid large jumps
                     let rawYawDiff = currentYaw - lastYaw;
                     rawYawDiff = ((rawYawDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
                     const yawDiffAbs = Math.abs(rawYawDiff);
                     const pitchDiffAbs = Math.abs(currentPitch - lastPitch);
 
-                    const minAngle = 0.002; // small deadzone for jitter
+                    const minAngle = 0.002;
                     const deltaAngle = yawDiffAbs + pitchDiffAbs;
 
                     if (dt > 0) {
                         const instantaneousVel = deltaAngle / dt;
-                        // exponential smoothing to allow decay
                         const smoothing = 0.8;
                         angularVelocity = smoothing * angularVelocity + (1 - smoothing) * instantaneousVel;
-                        if (angularVelocity < 0.01) angularVelocity = 0; // tiny cleanup
+                        if (angularVelocity < 0.01) angularVelocity = 0;
                     }
 
-                    // Only update head orientation if above deadzone to reduce jitter
                     if (yawDiffAbs > minAngle || pitchDiffAbs > minAngle) {
                         headYaw = headYaw + rawYawDiff;
                         headPitch = currentPitch;
@@ -737,14 +734,20 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
+                // Map head rotation -> UV offsets, scaled + clamped
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
-                const yawUV = -yawDelta * 0.7;
-                
+
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
-                const pitchUV = -pitchDelta * 0.8;
-                
+
+                let yawUV = -yawDelta * 0.3;
+                let pitchUV = -pitchDelta * 0.3;
+
+                const maxOffset = 0.4; // keep some margin so we don't scroll off texture
+                yawUV = Math.max(-maxOffset, Math.min(maxOffset, yawUV));
+                pitchUV = Math.max(-maxOffset, Math.min(maxOffset, pitchUV));
+
                 const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
                 const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
@@ -766,13 +769,13 @@
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
                 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
-                distortionMaterial.uniforms.eyeOffset.value = -0.25;
+                distortionMaterial.uniforms.eyeOffset.value = 0.0;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
-                distortionMaterial.uniforms.eyeOffset.value = 0.25;
+                distortionMaterial.uniforms.eyeOffset.value = 0.0;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
