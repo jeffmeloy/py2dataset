@@ -119,9 +119,7 @@
         const float HALF_PI = 1.57079632679;
         
         vec2 distort(vec2 p) {
-            // Each eye is rendered into its own full-sized texture,
-            // so the lens center is simply the middle of that texture.
-            vec2 center = vec2(0.5, 0.5);
+            vec2 center = vec2(0.5 + eyeOffset, 0.5);
             vec2 v = p - center;
             float r2 = dot(v, v);
             float distortion = 1.0 + r2 * (k1 + k2 * r2);
@@ -190,51 +188,36 @@
 
         let camera, scene, renderer, effect;
         let video, videoTexture, orientationTracker;
-        let mode = '2d';
-        let isPlaying = false;
-        let videoURL = null;
-        let hideOverlayTimer = null;
-        let currentZoomLevel = 4;
+        let mode = '2d', isPlaying = false, videoURL = null;
+        let hideOverlayTimer = null, currentZoomLevel = 4;
         let manualPanX = 0, manualPanY = 0;
         let headYaw = 0, headPitch = 0, yawOffset = 0, pitchOffset = 0;
         let lastUpdateTime = 0, lastYaw = 0, lastPitch = 0;
         let angularVelocity = 0;
-
-        const zoomLevels = [
-            0.2, 0.4, 0.6, 0.8,
-            1.0, 1.2, 1.4, 1.6,
-            1.8, 2.0, 2.2, 2.4,
-            2.6, 2.8, 3.0, 3.2,
-            3.4, 3.6, 3.8, 4.0
-        ];
+        const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
 
         fileInput.addEventListener('change', handleFileSelect);
         startBtn.addEventListener('click', startVR);
-
+        
         function handleFileSelect(e) {
             const file = e.target.files[0];
             if (!file) return;
-
             if (videoURL) URL.revokeObjectURL(videoURL);
             videoURL = URL.createObjectURL(file);
             testVideo.src = videoURL;
-
+            mode = document.querySelector('input[name="mode"]:checked').value;
             testVideo.addEventListener('loadedmetadata', function() {
                 status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
                 status.className = 'status success';
                 startBtn.disabled = false;
             }, { once: true });
-
             testVideo.load();
         }
 
         async function startVR() {
             if (!videoURL) return;
-
-            const selectedMode = document.querySelector('input[name="mode"]:checked');
-            mode = selectedMode ? selectedMode.value : '2d';
-
-            if (typeof DeviceOrientationEvent !== 'undefined' &&
+            
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
                 typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
                     const permission = await DeviceOrientationEvent.requestPermission();
@@ -252,11 +235,11 @@
             } else if (elem.webkitRequestFullscreen) {
                 elem.webkitRequestFullscreen();
             }
-
+            
             if (screen.orientation && screen.orientation.lock) {
                 screen.orientation.lock('landscape').catch(() => {});
             }
-
+            
             setTimeout(() => {
                 setupDiv.classList.add('hidden');
                 disposeResources();
@@ -315,7 +298,7 @@
             video.muted = false;
             video.playsinline = true;
             video.setAttribute('webkit-playsinline', '');
-
+            
             video.addEventListener('loadeddata', function() {
                 videoTexture = new THREE.VideoTexture(video);
                 videoTexture.minFilter = THREE.LinearFilter;
@@ -325,12 +308,9 @@
                     ? (video.videoWidth / 2) / video.videoHeight
                     : video.videoWidth / video.videoHeight;
 
-                // Size the virtual screen so it fits comfortably inside the FOV
-                const distance = 2.5;
-                const fovRad = THREE.MathUtils.degToRad(camera.fov);
-                const maxWidth = 2 * distance * Math.tan(fovRad / 2);
-                const width = maxWidth * 0.9; // 90% of visible width
+                const width = 6;
                 const height = width / aspect;
+                const distance = 2.5;
 
                 if (mode === '2d') {
                     const geometry = new THREE.PlaneGeometry(width, height);
@@ -456,35 +436,30 @@
             showOverlay();
         }
 
-        function seekVideo(barElem, clientX) {
-            if (!video || !barElem) return;
-            const rect = barElem.getBoundingClientRect();
-            const pos = (clientX - rect.left) / rect.width;
-            const clampedPos = Math.max(0, Math.min(1, pos));
-            video.currentTime = clampedPos * video.duration;
+        function seekVideo(e) {
+            if (!video) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            video.currentTime = pos * video.duration;
             showOverlay();
         }
 
         function seekRelative(seconds) {
             if (!video) return;
-            const targetTime = video.currentTime + seconds;
-            video.currentTime = Math.max(0, Math.min(video.duration, targetTime));
+            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
             showOverlay();
         }
 
         function updateProgress() {
-            if (!video || !isFinite(video.duration) || video.duration <= 0) return;
-
+            if (!video) return;
             const percent = (video.currentTime / video.duration) * 100;
             progressFills.forEach(fill => {
                 fill.style.width = percent + '%';
             });
-
             const currentMin = Math.floor(video.currentTime / 60);
             const currentSec = Math.floor(video.currentTime % 60);
             const durationMin = Math.floor(video.duration / 60);
             const durationSec = Math.floor(video.duration % 60);
-
             const timeText = `${currentMin}:${currentSec.toString().padStart(2, '0')} / ${durationMin}:${durationSec.toString().padStart(2, '0')}`;
             timeDisplays.forEach(display => {
                 display.textContent = timeText;
@@ -548,8 +523,8 @@
             const target = e.target.closest('.control-btn, .progressBar');
             if (!target) return;
 
-            if (target.classList.contains('progressBar')) {
-                seekVideo(target, e.clientX);
+            if (target.matches('.progressBar')) {
+                seekVideo(e);
                 return;
             }
 
@@ -577,11 +552,7 @@
             };
 
             const onScreenOrientationChangeEvent = () => {
-                if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
-                    this.screenOrientation = window.screen.orientation.angle;
-                } else {
-                    this.screenOrientation = window.orientation || 0;
-                }
+                this.screenOrientation = window.orientation || 0;
             };
 
             this.connect = function() {
@@ -602,49 +573,37 @@
                 if (!this.enabled) return;
 
                 const now = Date.now();
-                const dtMs = now - lastUpdateTime;
-                const dt = dtMs / 1000;
-
-                if (dtMs < 16) return;
+                if (now - lastUpdateTime < 33) return;
 
                 const device = this.deviceOrientation;
-                if (device && device.alpha !== null && device.beta !== null) {
-                    // Phone is always landscape relative to the face:
-                    // alpha -> yaw, beta -> pitch
-                    const currentYaw   = THREE.MathUtils.degToRad(device.alpha || 0);
-                    const currentPitch = THREE.MathUtils.degToRad(device.beta   || 0);
+                if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
+                    const isLandscape = Math.abs(this.screenOrientation) === 90;
+                    const currentYaw = THREE.MathUtils.degToRad(device.alpha);
+                    const currentPitch = isLandscape 
+                        ? THREE.MathUtils.degToRad(device.gamma)
+                        : THREE.MathUtils.degToRad(device.beta);
 
                     if (!this.firstReadingTime) {
-                        this.firstReadingTime = now;
+                        this.firstReadingTime = Date.now();
                         this.autoCenterTimer = setTimeout(() => {
                             yawOffset = headYaw;
                             pitchOffset = headPitch;
                         }, 800);
                     }
 
-                    let rawYawDiff = currentYaw - lastYaw;
-                    rawYawDiff = ((rawYawDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
-                    const yawDiffAbs = Math.abs(rawYawDiff);
-                    const pitchDiffAbs = Math.abs(currentPitch - lastPitch);
-
-                    const minAngle = 0.002;
-                    const deltaAngle = yawDiffAbs + pitchDiffAbs;
-
-                    if (dt > 0) {
-                        const instantaneousVel = deltaAngle / dt;
-                        const smoothing = 0.8;
-                        angularVelocity = smoothing * angularVelocity + (1 - smoothing) * instantaneousVel;
-                        if (angularVelocity < 0.01) angularVelocity = 0;
-                    }
-
-                    if (yawDiffAbs > minAngle || pitchDiffAbs > minAngle) {
-                        // Integrate both yaw and pitch for smoothness
-                        headYaw   += rawYawDiff;
-                        headPitch += (currentPitch - lastPitch);
-                        lastYaw   = currentYaw;
+                    const yawDiff = Math.abs(currentYaw - lastYaw);
+                    const pitchDiff = Math.abs(currentPitch - lastPitch);
+                    
+                    if (yawDiff > 0.009 || pitchDiff > 0.009) {
+                        const dt = (now - lastUpdateTime) / 1000;
+                        angularVelocity = dt > 0 ? (yawDiff + pitchDiff) / dt : 0;
+                        
+                        headYaw = currentYaw;
+                        headPitch = currentPitch;
+                        lastYaw = currentYaw;
                         lastPitch = currentPitch;
                     }
-
+                    
                     lastUpdateTime = now;
                 }
             };
@@ -679,9 +638,7 @@
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
 
-            let cachedYawUV = 0;
-            let cachedPitchUV = 0;
-            let cachedZoom = 1.0;
+            let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
 
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
             const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
@@ -696,14 +653,13 @@
                 const newDpr = window.devicePixelRatio || 1;
                 const newRtWidth = Math.min(Math.floor(width * newDpr / 2), maxTextureSize);
                 const newRtHeight = Math.min(Math.floor(height * newDpr), maxTextureSize);
-
                 if (newRtWidth !== rtWidth || newRtHeight !== rtHeight) {
                     renderTargetL.dispose();
                     renderTargetR.dispose();
                     rtWidth = newRtWidth;
                     rtHeight = newRtHeight;
                     renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, newRtHeight);
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
                     distortionMaterial.uniforms.texelSize.value.set(1.0 / rtWidth, 1.0 / rtHeight);
                 }
             };
@@ -720,7 +676,6 @@
                     _stereo.cameraR.layers.set(2);
                 }
 
-                // Render each eye into its own render target
                 renderer.setRenderTarget(renderTargetL);
                 renderer.clear();
                 renderer.render(scene, _stereo.cameraL);
@@ -733,27 +688,18 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // ---- Head rotation -> UV offsets ----
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
-
+                const yawUV = -yawDelta * 0.7;
+                
                 let pitchDelta = headPitch - pitchOffset;
-                pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
-
-                // Increase gain (~2x compared to your previous values)
-                let yawUV   = -yawDelta  * 0.70;  // was 0.35
-                let pitchUV = -pitchDelta * 0.12; // was 0.06
-
-                // Clamp offsets to keep sampling safely inside the texture, but allow more travel
-                const maxYawOffset   = 0.40; // was 0.28
-                const maxPitchOffset = 0.18; // was 0.12
-                yawUV   = Math.max(-maxYawOffset,   Math.min(maxYawOffset,   yawUV));
-                pitchUV = Math.max(-maxPitchOffset, Math.min(maxPitchOffset, pitchUV));
-
-                // ---- Zoom purely controlled by user ----
+                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
+                const pitchUV = -pitchDelta * 0.8;
+                
                 const currentZoom = zoomLevels[currentZoomLevel];
-                const effectiveZoom = currentZoom;
-
+                const isMovingFast = angularVelocity > 1.5;
+                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
+                
                 if (Math.abs(yawUV - cachedYawUV) > 0.001) {
                     distortionMaterial.uniforms.headYawOffset.value = yawUV;
                     cachedYawUV = yawUV;
@@ -770,16 +716,14 @@
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
                 
-                // ---- Left eye ----
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
-                distortionMaterial.uniforms.eyeOffset.value = 0.0;
+                distortionMaterial.uniforms.eyeOffset.value = -0.25;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
-                // ---- Right eye ----
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
-                distortionMaterial.uniforms.eyeOffset.value = 0.0;
+                distortionMaterial.uniforms.eyeOffset.value = 0.25;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
