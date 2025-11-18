@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video 2 Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -722,6 +722,7 @@
                     _stereo.cameraR.layers.set(2);
                 }
 
+                // Render each eye into its own render target
                 renderer.setRenderTarget(renderTargetL);
                 renderer.clear();
                 renderer.render(scene, _stereo.cameraL);
@@ -734,24 +735,26 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // Map head rotation -> UV offsets, scaled + clamped
+                // ---- Head rotation -> UV offsets (gentle + clamped) ----
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
 
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchDelta));
 
-                let yawUV = -yawDelta * 0.3;
-                let pitchUV = -pitchDelta * 0.3;
+                // Smaller mapping factor so head motion doesn't fling the image around
+                let yawUV = -yawDelta * 0.18;
+                let pitchUV = -pitchDelta * 0.18;
 
-                const maxOffset = 0.4; // keep some margin so we don't scroll off texture
+                // Clamp so we never pan far enough to "fall off" the texture
+                const maxOffset = 0.2;
                 yawUV = Math.max(-maxOffset, Math.min(maxOffset, yawUV));
                 pitchUV = Math.max(-maxOffset, Math.min(maxOffset, pitchUV));
 
+                // ---- Zoom purely controlled by user ----
                 const currentZoom = zoomLevels[currentZoomLevel];
-                const isMovingFast = angularVelocity > 1.5;
-                const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
-                
+                const effectiveZoom = currentZoom;
+
                 if (Math.abs(yawUV - cachedYawUV) > 0.001) {
                     distortionMaterial.uniforms.headYawOffset.value = yawUV;
                     cachedYawUV = yawUV;
@@ -768,12 +771,14 @@
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
                 
+                // ---- Left eye ----
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 distortionMaterial.uniforms.eyeOffset.value = 0.0;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
+                // ---- Right eye ----
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 distortionMaterial.uniforms.eyeOffset.value = 0.0;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
