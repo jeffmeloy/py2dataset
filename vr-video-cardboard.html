@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video j Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -106,7 +106,7 @@
         uniform sampler2D tDiffuse;
         uniform float k1;
         uniform float k2;
-        uniform float eyeOffset;          // kept for API compatibility but no longer used for centering
+        uniform float eyeOffset;
         uniform float headYawOffset;
         uniform float headPitchOffset;
         uniform float manualPanOffset;
@@ -118,7 +118,6 @@
         const float PI = 3.14159265359;
         const float HALF_PI = 1.57079632679;
         
-        // Barrel distortion around the CENTER of the current half (0.5, 0.5)
         vec2 distort(vec2 p) {
             vec2 center = vec2(0.5, 0.5);
             vec2 v = p - center;
@@ -162,27 +161,13 @@
         }
         
         void main() {
-            // Per-eye center is simply the center of this render (half-screen): (0.5, 0.5)
             vec2 eyeCenter = vec2(0.5, 0.5);
-
-            // Apply lens distortion
             vec2 distortedUV = distort(vUv);
-
-            // Zoom around the center of this half
             vec2 uv = (distortedUV - eyeCenter) / zoomLevel;
-
-            // Apply head + manual offsets
             uv.x += headYawOffset + manualPanOffset;
             uv.y += headPitchOffset + manualTiltOffset;
-
-            // Move back into full UV space for this half
             uv += eyeCenter;
-            
-            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-            } else {
-                gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
-            }
+            gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
         }
     </script>
 
@@ -590,9 +575,13 @@
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
                     const isLandscape = Math.abs(this.screenOrientation) === 90;
                     const currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                    const currentPitch = isLandscape 
+                    let currentPitch = isLandscape 
                         ? THREE.MathUtils.degToRad(device.gamma)
                         : THREE.MathUtils.degToRad(device.beta);
+
+                    if (Math.abs(currentPitch - lastPitch) > Math.PI) {
+                        currentPitch += (currentPitch < lastPitch) ? 2 * Math.PI : -2 * Math.PI;
+                    }
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = Date.now();
@@ -637,7 +626,7 @@
                     tDiffuse: { value: null },
                     k1: { value: 0.22 },
                     k2: { value: 0.18 },
-                    eyeOffset: { value: 0.0 },  // no longer used for centering
+                    eyeOffset: { value: 0.0 },
                     headYawOffset: { value: 0.0 },
                     headPitchOffset: { value: 0.0 },
                     manualPanOffset: { value: 0.0 },
@@ -727,13 +716,11 @@
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
                 
-                // LEFT eye
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
-                // RIGHT eye
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
