@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - Aspect Fixed</title>
+    <title>VR Player</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -40,12 +40,10 @@
         
         .eye-ui { width: 50%; display: flex; flex-direction: column; align-items: center; padding: 0 10px; box-sizing: border-box; }
         
-        /* SEEK BAR */
         .bar-track { width: 95%; height: 40px; display: flex; align-items: center; cursor: pointer; margin-bottom: 5px; }
         .bar-bg { width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; position: relative; overflow: hidden; pointer-events: none; }
         .bar-fill { height: 100%; background: #007BFF; width: 0%; pointer-events: none; }
         
-        /* BUTTONS */
         .row { display: flex; gap: 15px; margin-bottom: 15px; }
         .btn-icon { 
             width: 60px; height: 60px; border-radius: 50%; 
@@ -62,7 +60,7 @@
 
 <div id="setup">
     <div class="setup-box">
-        <h2>OnePlus 13 VR</h2>
+        <h2>VR PLAYER</h2>
         <div class="radio-group">
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
             <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -116,11 +114,12 @@
     uniform float panX;
     uniform float panY;
     uniform float zoom;
-    uniform float videoScaleY; // Aspect Ratio Fix
+    uniform float aspectFix; // Ratio to fix squash
+    uniform float eyeAspect; // Ratio of the screen itself
     uniform vec2 texelSize;
     varying vec2 vUv;
 
-    // Bicubic Sampling
+    // Bicubic for quality
     vec4 textureBicubic(sampler2D tex, vec2 uv) {
         vec2 texSize = 1.0 / texelSize;
         vec2 tc = uv * texSize - 0.5;
@@ -146,26 +145,36 @@
     vec2 distort(vec2 p) {
         vec2 center = vec2(0.5, 0.5);
         vec2 v = p - center;
-        // Minimal distortion for now to prevent edge cropping
+        
+        // 1. Normalize to square space for circular distortion
+        v.x *= eyeAspect;
+        
         float r2 = dot(v, v);
         float distortion = 1.0 + r2 * (k1 + k2 * r2);
-        return center + v * distortion;
+        v *= distortion;
+        
+        // 2. Return to rectangular space
+        v.x /= eyeAspect;
+        
+        return center + v;
     }
 
     void main() {
         vec2 center = vec2(0.5, 0.5);
         
-        // 1. Distort
+        // Apply Lens Distortion
         vec2 uv = distort(vUv);
         
-        // 2. Apply Zoom & Pan
+        // Apply Zoom & Pan
         uv = (uv - center) / zoom;
         uv.x += yaw + panX;
         uv.y += pitch + panY;
         
-        // 3. Apply Aspect Ratio Correction (Scale Y)
-        // This unsquishes the video vertically by scaling texture coordinates up
-        uv.y *= videoScaleY;
+        // Apply Aspect Ratio Fix
+        // If aspectFix > 1 (Video wider than screen), we divide Y to stretch height (Fix Squish)
+        // or multiply X to compress width.
+        // To fix "Fat/Squished" we divide Y to make it taller.
+        uv.y /= aspectFix; 
         
         uv += center;
 
@@ -178,7 +187,7 @@
 </script>
 
 <script>
-    // --- UI Initialization ---
+    // --- UI ---
     const el = (id) => document.getElementById(id);
     const tmpl = el('uiTemplate').content;
     el('uiL').appendChild(tmpl.cloneNode(true));
@@ -213,9 +222,9 @@
     // --- Engine ---
     let renderer, scene, camera, effect, tracker;
     
-    // Zoom Logic: Start more zoomed out (0.7) to prevent cropping
-    let zIdx = 4; 
-    const zLvls = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0];
+    // Zoom starts smaller to prevent cropping on load
+    let zIdx = 3; 
+    const zLvls = [0.5, 0.6, 0.7, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2];
     
     let pan = {x:0, y:0}, head = {y:0, p:0}, offset = {y:0, p:0};
 
@@ -261,7 +270,8 @@
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.MeshBasicMaterial({map:videoTex}));
                 m.position.z = -2.5; camera.add(m);
             } else {
-                camera.add(mkEye(1,0.0)); camera.add(mkEye(2,0.5));
+                camera.add(mkEye(1,0.0)); 
+                camera.add(mkEye(2,0.5));
             }
             scene.add(camera);
 
@@ -284,24 +294,21 @@
         const _s = new THREE.StereoCamera(); _s.aspect = 0.5;
         const dpr = window.devicePixelRatio;
         
-        // Aspect Ratio Calculation
-        // Video Aspect Ratio
-        const vidW = activeVRVideo.videoWidth;
-        const vidH = activeVRVideo.videoHeight;
-        const vidAspect = (mode === '3d' ? vidW/2 : vidW) / vidH;
-
-        // Eye Aspect Ratio (Screen)
+        // 1. Eye Aspect Ratio (The physical shape of half the screen)
         const eyeW = window.innerWidth / 2;
         const eyeH = window.innerHeight;
-        const eyeAspect = eyeW / eyeH;
+        const eyeAspect = eyeW / eyeH; // ~1.1 on OP13
 
-        // Correction Factor: If video is wider than screen, we need to scale Y up (zoom out Y)
-        // to prevent it from being squeezed.
-        let scaleY = vidAspect / eyeAspect;
-        
-        // If the result is < 1 (video taller than screen), we might need to scale X instead,
-        // but generally for landscape video on phone, video is wider.
-        if(scaleY < 1.0) scaleY = 1.0; // Prevent distortion if video fits naturally
+        // 2. Video Aspect Ratio
+        const vidW = activeVRVideo.videoWidth;
+        const vidH = activeVRVideo.videoHeight;
+        const vidAspect = (mode === '3d' ? vidW/2 : vidW) / vidH; // ~1.77 for 16:9
+
+        // 3. Correction Factor
+        // If we map 0-1 UV directly, 16:9 gets squashed into 1.1:1
+        // We need to expand the Y axis to unsquash it.
+        // If video is 1.77 and screen is 1.1, video is 1.6x wider than screen relative to height.
+        const aspectFix = vidAspect / eyeAspect;
 
         const w = Math.min(window.innerWidth*dpr/2, 4096); 
         const h = Math.min(window.innerHeight*dpr, 4096);
@@ -313,11 +320,11 @@
         const mat = new THREE.ShaderMaterial({
             uniforms: { 
                 tDiffuse:{value:null}, 
-                k1:{value:0.10}, // Low distortion to minimize cropping
-                k2:{value:0.05}, 
+                k1:{value:0.15}, k2:{value:0.05}, 
                 yaw:{value:0}, pitch:{value:0}, panX:{value:0}, panY:{value:0}, zoom:{value:1},
                 texelSize:{value: new THREE.Vector2(1.0/w, 1.0/h)},
-                videoScaleY: { value: scaleY }
+                eyeAspect: { value: eyeAspect },
+                aspectFix: { value: aspectFix } // Pass the FIX to shader
             },
             vertexShader: el('vert').textContent,
             fragmentShader: el('frag').textContent
@@ -328,9 +335,12 @@
         sceneQ.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), mat));
 
         window.addEventListener('resize', () => {
+            const newW = window.innerWidth / 2;
+            const newH = window.innerHeight;
+            const newEyeAspect = newW / newH;
+            mat.uniforms.eyeAspect.value = newEyeAspect;
+            mat.uniforms.aspectFix.value = vidAspect / newEyeAspect;
             ren.setSize(window.innerWidth, window.innerHeight);
-            const newEyeAspect = (window.innerWidth/2) / window.innerHeight;
-            mat.uniforms.videoScaleY.value = vidAspect / newEyeAspect;
         });
 
         this.render = (scn, cam) => {
@@ -386,7 +396,6 @@
         }
     }
 
-    // --- Controls ---
     const ui = el('overlay');
     let fadeT;
     const showUI = () => { ui.classList.add('visible'); ui.classList.remove('fading'); clearTimeout(fadeT); fadeT = setTimeout(hideUI, 3000); };
