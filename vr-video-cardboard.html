@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player</title>
+    <title>VR Video Player - Fixed Pitch</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Video G Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -114,7 +114,6 @@
         uniform float zoomLevel;
         uniform vec2 texelSize;
         varying vec2 vUv;
-
         const float PI = 3.14159265359;
         const float HALF_PI = 1.57079632679;
 
@@ -141,7 +140,6 @@
             vec2 f = center - centerFloor;
             vec4 color = vec4(0.0);
             float weightSum = 0.0;
-
             for (int y = -1; y <= 2; y++) {
                 float fy = float(y) - f.y;
                 float wy = lanczos2(fy);
@@ -205,6 +203,7 @@
             videoURL = URL.createObjectURL(file);
             testVideo.src = videoURL;
             mode = document.querySelector('input[name="mode"]:checked').value;
+
             testVideo.addEventListener('loadedmetadata', function() {
                 status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
                 status.className = 'status success';
@@ -215,6 +214,7 @@
 
         async function startVR() {
             if (!videoURL) return;
+
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
                     const permission = await DeviceOrientationEvent.requestPermission();
@@ -225,15 +225,18 @@
                     console.error('Error requesting orientation permission:', error);
                 }
             }
+
             const elem = document.documentElement;
             if (elem.requestFullscreen) {
                 elem.requestFullscreen();
             } else if (elem.webkitRequestFullscreen) {
                 elem.webkitRequestFullscreen();
             }
+
             if (screen.orientation && screen.orientation.lock) {
                 screen.orientation.lock('landscape').catch(() => {});
             }
+
             setTimeout(() => {
                 setupDiv.classList.add('hidden');
                 disposeResources();
@@ -242,24 +245,10 @@
         }
 
         function disposeResources() {
-            if (videoTexture) {
-                videoTexture.dispose();
-                videoTexture = null;
-            }
-            if (video) {
-                video.pause();
-                video.src = '';
-                video.load();
-                video = null;
-            }
-            if (orientationTracker) {
-                orientationTracker.disconnect();
-                orientationTracker = null;
-            }
-            if (effect && effect.dispose) {
-                effect.dispose();
-                effect = null;
-            }
+            if (videoTexture) { videoTexture.dispose(); videoTexture = null; }
+            if (video) { video.pause(); video.src = ''; video.load(); video = null; }
+            if (orientationTracker) { orientationTracker.disconnect(); orientationTracker = null; }
+            if (effect && effect.dispose) { effect.dispose(); effect = null; }
             if (renderer) {
                 renderer.dispose();
                 if (renderer.domElement && renderer.domElement.parentNode) {
@@ -313,21 +302,8 @@
                     const geometryL = new THREE.PlaneGeometry(width, height);
                     const materialL = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
-                        vertexShader: `
-                            varying vec2 vUv;
-                            void main() {
-                                vUv = uv;
-                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                            }
-                        `,
-                        fragmentShader: `
-                            uniform sampler2D tex;
-                            varying vec2 vUv;
-                            void main() {
-                                vec2 uv = vec2(vUv.x * 0.5, vUv.y);
-                                gl_FragColor = texture2D(tex, uv);
-                            }
-                        `,
+                        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                        fragmentShader: `uniform sampler2D tex; varying vec2 vUv; void main() { vec2 uv = vec2(vUv.x * 0.5, vUv.y); gl_FragColor = texture2D(tex, uv); }`,
                         side: THREE.DoubleSide
                     });
                     const screenL = new THREE.Mesh(geometryL, materialL);
@@ -338,21 +314,8 @@
                     const geometryR = new THREE.PlaneGeometry(width, height);
                     const materialR = new THREE.ShaderMaterial({
                         uniforms: { tex: { value: videoTexture } },
-                        vertexShader: `
-                            varying vec2 vUv;
-                            void main() {
-                                vUv = uv;
-                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                            }
-                        `,
-                        fragmentShader: `
-                            uniform sampler2D tex;
-                            varying vec2 vUv;
-                            void main() {
-                                vec2 uv = vec2(vUv.x * 0.5 + 0.5, vUv.y);
-                                gl_FragColor = texture2D(tex, uv);
-                            }
-                        `,
+                        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                        fragmentShader: `uniform sampler2D tex; varying vec2 vUv; void main() { vec2 uv = vec2(vUv.x * 0.5 + 0.5, vUv.y); gl_FragColor = texture2D(tex, uv); }`,
                         side: THREE.DoubleSide
                     });
                     const screenR = new THREE.Mesh(geometryR, materialR);
@@ -387,7 +350,6 @@
                     console.error('Error playing video:', err);
                 });
             });
-
             video.load();
         }
 
@@ -404,20 +366,13 @@
         }
 
         function updatePlayPauseButtons() {
-            playPauseBtns.forEach(btn => {
-                btn.textContent = isPlaying ? '||' : '>';
-            });
+            playPauseBtns.forEach(btn => { btn.textContent = isPlaying ? '||' : '>'; });
         }
 
         function togglePlayPause() {
             if (!video) return;
-            if (isPlaying) {
-                video.pause();
-                isPlaying = false;
-            } else {
-                video.play();
-                isPlaying = true;
-            }
+            if (isPlaying) { video.pause(); isPlaying = false; }
+            else { video.play(); isPlaying = true; }
             updatePlayPauseButtons();
             showOverlay();
         }
@@ -439,57 +394,40 @@
         function updateProgress() {
             if (!video) return;
             const percent = (video.currentTime / video.duration) * 100;
-            progressFills.forEach(fill => {
-                fill.style.width = percent + '%';
-            });
+            progressFills.forEach(fill => { fill.style.width = percent + '%'; });
             const currentMin = Math.floor(video.currentTime / 60);
             const currentSec = Math.floor(video.currentTime % 60);
             const durationMin = Math.floor(video.duration / 60);
             const durationSec = Math.floor(video.duration % 60);
             const timeText = `${currentMin}:${currentSec.toString().padStart(2, '0')} / ${durationMin}:${durationSec.toString().padStart(2, '0')}`;
-            timeDisplays.forEach(display => {
-                display.textContent = timeText;
-            });
+            timeDisplays.forEach(display => { display.textContent = timeText; });
         }
 
         function toggleOverlay(e) {
             if (e.target.closest('#progressOverlay')) return;
-            if (progressOverlay.classList.contains('visible')) {
-                hideOverlay();
-            } else {
-                showOverlay();
-            }
+            if (progressOverlay.classList.contains('visible')) { hideOverlay(); }
+            else { showOverlay(); }
         }
 
         function showOverlay() {
             progressOverlay.classList.add('visible');
             progressOverlay.classList.remove('fading');
             if (hideOverlayTimer) clearTimeout(hideOverlayTimer);
-            hideOverlayTimer = setTimeout(() => {
-                if (isPlaying) hideOverlay();
-            }, 3000);
+            hideOverlayTimer = setTimeout(() => { if (isPlaying) hideOverlay(); }, 3000);
         }
 
         function hideOverlay() {
             progressOverlay.classList.add('fading');
-            setTimeout(() => {
-                progressOverlay.classList.remove('visible');
-            }, 300);
+            setTimeout(() => { progressOverlay.classList.remove('visible'); }, 300);
         }
 
         function adjustZoom(direction) {
-            if (direction > 0) {
-                currentZoomLevel = Math.min(zoomLevels.length - 1, currentZoomLevel + 1);
-            } else {
-                currentZoomLevel = Math.max(0, currentZoomLevel - 1);
-            }
+            if (direction > 0) { currentZoomLevel = Math.min(zoomLevels.length - 1, currentZoomLevel + 1); }
+            else { currentZoomLevel = Math.max(0, currentZoomLevel - 1); }
             showOverlay();
         }
 
-        function resetZoom() {
-            currentZoomLevel = 4;
-            showOverlay();
-        }
+        function resetZoom() { currentZoomLevel = 4; showOverlay(); }
 
         function adjustPan(dx) {
             manualPanX += dx * 0.05;
@@ -508,12 +446,7 @@
             e.stopPropagation();
             const target = e.target.closest('.control-btn, .progressBar');
             if (!target) return;
-
-            if (target.matches('.progressBar')) {
-                seekVideo(e, target);
-                return;
-            }
-
+            if (target.matches('.progressBar')) { seekVideo(e, target); return; }
             const classList = target.classList;
             if (classList.contains('play-pause-btn')) togglePlayPause();
             else if (classList.contains('rewind-btn')) seekRelative(-10);
@@ -526,12 +459,23 @@
             else if (classList.contains('pan-right-btn')) adjustPan(1);
         }
 
+        // ==========================================
+        // FIXED ORIENTATION TRACKER (QUATERNION)
+        // ==========================================
         function OrientationTracker() {
             this.deviceOrientation = {};
             this.screenOrientation = 0;
             this.enabled = false;
             this.autoCenterTimer = null;
             this.firstReadingTime = null;
+
+            // Reuse objects to prevent garbage collection issues
+            const _euler = new THREE.Euler();
+            const _q1 = new THREE.Quaternion();
+            const _q0 = new THREE.Quaternion();
+            const _zAxis = new THREE.Vector3(0, 0, 1);
+            const _lookVector = new THREE.Vector3(0, 0, -1); // Camera looking down -Z
+            const _v = new THREE.Vector3();
 
             const onDeviceOrientationChangeEvent = (event) => {
                 this.deviceOrientation = event;
@@ -557,46 +501,60 @@
 
             this.update = function() {
                 if (!this.enabled) return;
-
                 const now = Date.now();
-                if (now - lastUpdateTime < 33) return;
+                if (now - lastUpdateTime < 16) return; // ~60fps cap
 
                 const device = this.deviceOrientation;
+
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
-                    const isLandscape = Math.abs(this.screenOrientation) === 90;
-                    const isRightLandscape = this.screenOrientation === 90;
+                    const alpha = THREE.MathUtils.degToRad(device.alpha); // Z
+                    const beta = THREE.MathUtils.degToRad(device.beta);   // X
+                    const gamma = THREE.MathUtils.degToRad(device.gamma); // Y
+                    const orient = THREE.MathUtils.degToRad(this.screenOrientation);
 
-                    let currentYaw, currentPitch;
+                    // Convert Euler angles to Quaternion (YXZ order handles device orientation standard)
+                    _euler.set(beta, alpha, -gamma, 'YXZ');
+                    _q1.setFromEuler(_euler);
 
-                    if (isLandscape) {
-                        currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                        const betaRad = THREE.MathUtils.degToRad(device.beta);
-                        currentPitch = isRightLandscape ? -betaRad : betaRad;
-                    } else {
-                        currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                        currentPitch = THREE.MathUtils.degToRad(device.beta);
-                    }
+                    // Adjust for screen orientation (Landscape/Portrait)
+                    _q0.setFromAxisAngle(_zAxis, -orient);
+                    _q1.multiply(_q0);
+
+                    // Calculate where the camera is looking
+                    _v.copy(_lookVector).applyQuaternion(_q1);
+
+                    // Extract Pitch (elevation angle from horizon)
+                    // This avoids the 90-degree singularity flip found in raw Euler angles
+                    const currentPitch = Math.asin(_v.y);
+
+                    // Extract Yaw (compass heading)
+                    const currentYaw = Math.atan2(_v.x, -_v.z);
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = Date.now();
+                        // Auto-center shortly after start
                         this.autoCenterTimer = setTimeout(() => {
                             yawOffset = headYaw;
                             pitchOffset = headPitch;
                         }, 800);
+                        lastYaw = currentYaw;
+                        lastPitch = currentPitch;
+                        headYaw = currentYaw;
+                        headPitch = currentPitch;
                     }
 
                     const yawDiff = Math.abs(currentYaw - lastYaw);
                     const pitchDiff = Math.abs(currentPitch - lastPitch);
 
-                    if (yawDiff > 0.009 || pitchDiff > 0.009) {
+                    if (yawDiff > 0.001 || pitchDiff > 0.001) {
                         const dt = (now - lastUpdateTime) / 1000;
                         angularVelocity = dt > 0 ? (yawDiff + pitchDiff) / dt : 0;
+
                         headYaw = currentYaw;
                         headPitch = currentPitch;
                         lastYaw = currentYaw;
                         lastPitch = currentPitch;
                     }
-
                     lastUpdateTime = now;
                 }
             };
@@ -605,9 +563,9 @@
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera();
             _stereo.aspect = 0.5;
-
             const dpr = window.devicePixelRatio || 1;
             const maxTextureSize = renderer.capabilities.maxTextureSize;
+
             let rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), maxTextureSize);
             let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), maxTextureSize);
 
@@ -632,13 +590,11 @@
             });
 
             let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
-
             const quadGeometry = new THREE.PlaneGeometry(2, 2);
             const quadMesh = new THREE.Mesh(quadGeometry, distortionMaterial);
             const orthoScene = new THREE.Scene();
             const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
             orthoScene.add(quadMesh);
-
             const sizeVec = new THREE.Vector2();
 
             this.setSize = function(width, height) {
@@ -662,7 +618,6 @@
                 scene.updateMatrixWorld();
                 if (camera.parent === null) camera.updateMatrixWorld();
                 _stereo.update(camera);
-
                 renderer.getSize(sizeVec);
                 const halfWidth = sizeVec.width * 0.5;
 
@@ -683,11 +638,14 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
+                // Calculate Deltas from the Stable Quaternion-based Yaw/Pitch
                 let yawDelta = headYaw - yawOffset;
+                // Normalize yaw to -PI to PI
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
                 const yawUV = -yawDelta * 0.7;
 
                 let pitchDelta = headPitch - pitchOffset;
+                // Clamp pitch to avoid flipping over
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
 
@@ -699,12 +657,10 @@
                     distortionMaterial.uniforms.headYawOffset.value = yawUV;
                     cachedYawUV = yawUV;
                 }
-
                 if (Math.abs(pitchUV - cachedPitchUV) > 0.001) {
                     distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
                     cachedPitchUV = pitchUV;
                 }
-
                 if (Math.abs(effectiveZoom - cachedZoom) > 0.001) {
                     distortionMaterial.uniforms.zoomLevel.value = effectiveZoom;
                     cachedZoom = effectiveZoom;
@@ -713,11 +669,13 @@
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
 
+                // LEFT eye
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
 
+                // RIGHT eye
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
