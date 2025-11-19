@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - Fixed Pitch</title>
+    <title>VR Video Player - Fixed Quaternion</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video G Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -106,7 +106,6 @@
         uniform sampler2D tDiffuse;
         uniform float k1;
         uniform float k2;
-        uniform float eyeOffset;
         uniform float headYawOffset;
         uniform float headPitchOffset;
         uniform float manualPanOffset;
@@ -469,12 +468,16 @@
             this.autoCenterTimer = null;
             this.firstReadingTime = null;
 
-            // Reuse objects to prevent garbage collection issues
+            // Reusable Three.js objects
             const _euler = new THREE.Euler();
-            const _q1 = new THREE.Quaternion();
+            const _deviceQ = new THREE.Quaternion();
             const _q0 = new THREE.Quaternion();
-            const _zAxis = new THREE.Vector3(0, 0, 1);
-            const _lookVector = new THREE.Vector3(0, 0, -1); // Camera looking down -Z
+            
+            // -PI/2 rotation around the x-axis to align device with camera forward
+            const _q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); 
+            
+            const _zee = new THREE.Vector3(0, 0, 1);
+            const _lookVector = new THREE.Vector3(0, 0, -1);
             const _v = new THREE.Vector3();
 
             const onDeviceOrientationChangeEvent = (event) => {
@@ -482,7 +485,12 @@
             };
 
             const onScreenOrientationChangeEvent = () => {
-                this.screenOrientation = window.orientation || 0;
+                // Modern API with fallback
+                if (screen.orientation && typeof screen.orientation.angle === 'number') {
+                    this.screenOrientation = screen.orientation.angle;
+                } else {
+                    this.screenOrientation = window.orientation || 0;
+                }
             };
 
             this.connect = function() {
@@ -502,37 +510,38 @@
             this.update = function() {
                 if (!this.enabled) return;
                 const now = Date.now();
-                if (now - lastUpdateTime < 16) return; // ~60fps cap
+                if (now - lastUpdateTime < 16) return;
 
                 const device = this.deviceOrientation;
 
-                if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
-                    const alpha = THREE.MathUtils.degToRad(device.alpha); // Z
-                    const beta = THREE.MathUtils.degToRad(device.beta);   // X
-                    const gamma = THREE.MathUtils.degToRad(device.gamma); // Y
-                    const orient = THREE.MathUtils.degToRad(this.screenOrientation);
+                // Check if we have data (alpha can be null on some desktops)
+                if (device && device.alpha !== null) {
+                    const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) : 0; // Z
+                    const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;   // X
+                    const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0; // Y
+                    const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
 
-                    // Convert Euler angles to Quaternion (YXZ order handles device orientation standard)
+                    // 1. Convert Device Euler to Quaternion
+                    // 'YXZ' is the standard convention for device orientation mapping in Three.js
                     _euler.set(beta, alpha, -gamma, 'YXZ');
-                    _q1.setFromEuler(_euler);
+                    _deviceQ.setFromEuler(_euler);
 
-                    // Adjust for screen orientation (Landscape/Portrait)
-                    _q0.setFromAxisAngle(_zAxis, -orient);
-                    _q1.multiply(_q0);
+                    // 2. Apply Camera Adjustment (rotate -90 deg on X)
+                    _deviceQ.multiply(_q1); 
 
-                    // Calculate where the camera is looking
-                    _v.copy(_lookVector).applyQuaternion(_q1);
+                    // 3. Apply Screen Orientation Adjustment (rotate around Z)
+                    _deviceQ.multiply(_q0.setFromAxisAngle(_zee, -orient));
 
-                    // Extract Pitch (elevation angle from horizon)
-                    // This avoids the 90-degree singularity flip found in raw Euler angles
+                    // 4. Extract Look Vector (where is the camera pointing?)
+                    _v.copy(_lookVector).applyQuaternion(_deviceQ);
+
+                    // 5. Calculate Pitch (Elevation) and Yaw (Heading) from the vector
+                    // asin limits pitch to -90 to +90, avoiding the singularity flip
                     const currentPitch = Math.asin(_v.y);
-
-                    // Extract Yaw (compass heading)
                     const currentYaw = Math.atan2(_v.x, -_v.z);
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = Date.now();
-                        // Auto-center shortly after start
                         this.autoCenterTimer = setTimeout(() => {
                             yawOffset = headYaw;
                             pitchOffset = headPitch;
@@ -577,7 +586,6 @@
                     tDiffuse: { value: null },
                     k1: { value: 0.22 },
                     k2: { value: 0.18 },
-                    eyeOffset: { value: 0.0 },
                     headYawOffset: { value: 0.0 },
                     headPitchOffset: { value: 0.0 },
                     manualPanOffset: { value: 0.0 },
@@ -638,14 +646,11 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                // Calculate Deltas from the Stable Quaternion-based Yaw/Pitch
                 let yawDelta = headYaw - yawOffset;
-                // Normalize yaw to -PI to PI
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
                 const yawUV = -yawDelta * 0.7;
 
                 let pitchDelta = headPitch - pitchOffset;
-                // Clamp pitch to avoid flipping over
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
                 const pitchUV = -pitchDelta * 0.8;
 
