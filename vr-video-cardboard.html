@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - Fixed Quaternion</title>
+    <title>VR Video Player - Fixed Tilt</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video Player</h2>
+        <h2>VR Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -514,7 +514,7 @@
 
                 const device = this.deviceOrientation;
 
-                // Check if we have data (alpha can be null on some desktops)
+                // Check if we have data
                 if (device && device.alpha !== null) {
                     const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) : 0; // Z
                     const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;   // X
@@ -522,7 +522,6 @@
                     const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
 
                     // 1. Convert Device Euler to Quaternion
-                    // 'YXZ' is the standard convention for device orientation mapping in Three.js
                     _euler.set(beta, alpha, -gamma, 'YXZ');
                     _deviceQ.setFromEuler(_euler);
 
@@ -532,11 +531,10 @@
                     // 3. Apply Screen Orientation Adjustment (rotate around Z)
                     _deviceQ.multiply(_q0.setFromAxisAngle(_zee, -orient));
 
-                    // 4. Extract Look Vector (where is the camera pointing?)
+                    // 4. Extract Look Vector
                     _v.copy(_lookVector).applyQuaternion(_deviceQ);
 
-                    // 5. Calculate Pitch (Elevation) and Yaw (Heading) from the vector
-                    // asin limits pitch to -90 to +90, avoiding the singularity flip
+                    // 5. Calculate Pitch and Yaw
                     const currentPitch = Math.asin(_v.y);
                     const currentYaw = Math.atan2(_v.x, -_v.z);
 
@@ -652,7 +650,9 @@
 
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
-                const pitchUV = -pitchDelta * 0.8;
+                
+                // FIXED: Removed the negative sign here to correct inverted tilt
+                const pitchUV = pitchDelta * 0.8;
 
                 const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
