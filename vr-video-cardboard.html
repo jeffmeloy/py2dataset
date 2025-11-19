@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - Fixed Controls</title>
+    <title>VR Player - OP13 Aspect Fix</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -40,15 +40,13 @@
         
         .eye-ui { width: 50%; display: flex; flex-direction: column; align-items: center; padding: 0 10px; box-sizing: border-box; }
         
-        /* SEEK BAR */
-        .bar-track { width: 95%; height: 30px; /* Taller hit area */ display: flex; align-items: center; cursor: pointer; margin-bottom: 5px; }
+        .bar-track { width: 95%; height: 30px; display: flex; align-items: center; cursor: pointer; margin-bottom: 5px; }
         .bar-bg { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; overflow: hidden; pointer-events: none; }
         .bar-fill { height: 100%; background: #007BFF; width: 0%; pointer-events: none; }
         
-        /* BUTTONS */
         .row { display: flex; gap: 12px; margin-bottom: 10px; }
         .btn-icon { 
-            width: 55px; height: 55px; border-radius: 50%; /* Larger touch targets */
+            width: 55px; height: 55px; border-radius: 50%; 
             background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.1); 
             color: white; font-size: 20px; display: flex; align-items: center; justify-content: center; 
             backdrop-filter: blur(5px); cursor: pointer;
@@ -80,9 +78,7 @@
 </div>
 
 <template id="uiTemplate">
-    <div class="bar-track">
-        <div class="bar-bg"><div class="bar-fill"></div></div>
-    </div>
+    <div class="bar-track"><div class="bar-bg"><div class="bar-fill"></div></div></div>
     <div class="row">
         <button class="btn-icon pan-l">&larr;</button>
         <button class="btn-icon pan-c">⦾</button>
@@ -116,10 +112,10 @@
     uniform float panX;
     uniform float panY;
     uniform float zoom;
+    uniform float eyeAspect; // NEW: Fixes the vertical crunching
     uniform vec2 texelSize;
     varying vec2 vUv;
 
-    // High quality bicubic sampling
     vec4 textureBicubic(sampler2D tex, vec2 uv) {
         vec2 texSize = 1.0 / texelSize;
         vec2 tc = uv * texSize - 0.5;
@@ -145,13 +141,23 @@
     vec2 distort(vec2 p) {
         vec2 center = vec2(0.5, 0.5);
         vec2 v = p - center;
+        
+        // Aspect Ratio Correction: Treat the space as square based on physical screen dimensions
+        v.x *= eyeAspect; 
+        
         float r2 = dot(v, v);
-        return center + v * (1.0 + r2 * (k1 + k2 * r2));
+        float distortion = 1.0 + r2 * (k1 + k2 * r2);
+        
+        v *= distortion;
+        v.x /= eyeAspect; // Return to rectangular space
+        
+        return center + v;
     }
 
     void main() {
         vec2 center = vec2(0.5, 0.5);
         vec2 uv = distort(vUv);
+        
         uv = (uv - center) / zoom;
         uv.x += yaw + panX;
         uv.y += pitch + panY;
@@ -172,12 +178,9 @@
     el('uiL').appendChild(tmpl.cloneNode(true));
     el('uiR').appendChild(tmpl.cloneNode(true));
 
-    // --- Setup Variables ---
-    let videoURL = null;
-    let activeVRVideo = null;
-    let isPlaying = false;
+    // --- Setup ---
+    let videoURL = null, activeVRVideo = null, isPlaying = false;
 
-    // Setup Handlers
     el('fIn').onchange = (e) => {
         const f = e.target.files[0]; if(!f) return;
         el('fLbl').textContent = f.name;
@@ -191,20 +194,17 @@
     el('goBtn').onclick = async () => {
         el('testVideo').pause(); 
         const mode = document.querySelector('input[name="mode"]:checked').value;
-        
         if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
             try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
         }
-        
         const d = document.documentElement;
         if(d.requestFullscreen) d.requestFullscreen();
         screen.orientation?.lock('landscape').catch(()=>{});
-        
         el('setup').classList.add('hidden');
         init3D(mode);
     };
 
-    // --- 3D Engine Vars ---
+    // --- Engine ---
     let renderer, scene, camera, effect, tracker;
     let zIdx = 4; 
     const zLvls = [0.2,0.4,0.6,0.8, 1.0, 1.25,1.5,1.75,2.0,2.5,3.0,4.0];
@@ -212,6 +212,7 @@
 
     function init3D(mode) {
         scene = new THREE.Scene();
+        // 100 FOV for Wearility
         camera = new THREE.PerspectiveCamera(100, window.innerWidth/window.innerHeight, 0.1, 100);
         
         activeVRVideo = document.createElement('video');
@@ -236,6 +237,7 @@
             
             document.body.appendChild(renderer.domElement);
 
+            // Geometry Setup
             const aspect = mode==='3d' ? (activeVRVideo.videoWidth/2)/activeVRVideo.videoHeight : activeVRVideo.videoWidth/activeVRVideo.videoHeight;
             const h = 6/aspect;
 
@@ -252,8 +254,7 @@
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.MeshBasicMaterial({map:videoTex}));
                 m.position.z = -2.5; camera.add(m);
             } else {
-                camera.add(mkEye(1,0.0)); 
-                camera.add(mkEye(2,0.5));
+                camera.add(mkEye(1,0.0)); camera.add(mkEye(2,0.5));
             }
             scene.add(camera);
 
@@ -272,19 +273,18 @@
         if(effect) effect.render(scene, camera);
     }
 
-    // --- Stereo Logic ---
     function StereoEffect(ren, mode) {
         const _s = new THREE.StereoCamera(); _s.aspect = 0.5;
         const dpr = window.devicePixelRatio;
+        
+        // Calculate active Aspect Ratio of one eye for correction
+        // OP13 is ~3168 wide, half is 1584. Height is 1440. Ratio ~1.1
+        const eyeAspect = (window.innerWidth / 2) / window.innerHeight;
+
         const w = Math.min(window.innerWidth*dpr/2, 4096); 
         const h = Math.min(window.innerHeight*dpr, 4096);
 
-        const rtConf = { 
-            minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, 
-            format: THREE.RGBFormat, generateMipmaps: false, 
-            depthBuffer: false, stencilBuffer: false 
-        };
-        
+        const rtConf = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBFormat, generateMipmaps: false, depthBuffer: false, stencilBuffer: false };
         const rtL = new THREE.WebGLRenderTarget(w, h, rtConf);
         const rtR = new THREE.WebGLRenderTarget(w, h, rtConf);
 
@@ -292,7 +292,8 @@
             uniforms: { 
                 tDiffuse:{value:null}, k1:{value:0.22}, k2:{value:0.18}, 
                 yaw:{value:0}, pitch:{value:0}, panX:{value:0}, panY:{value:0}, zoom:{value:1},
-                texelSize:{value: new THREE.Vector2(1.0/w, 1.0/h)}
+                texelSize:{value: new THREE.Vector2(1.0/w, 1.0/h)},
+                eyeAspect: { value: eyeAspect } // Pass aspect to shader
             },
             vertexShader: el('vert').textContent,
             fragmentShader: el('frag').textContent
@@ -301,6 +302,13 @@
         const sceneQ = new THREE.Scene();
         const camQ = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
         sceneQ.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), mat));
+
+        // Handle resize to update aspect ratio
+        window.addEventListener('resize', () => {
+            const newAspect = (window.innerWidth / 2) / window.innerHeight;
+            mat.uniforms.eyeAspect.value = newAspect;
+            ren.setSize(window.innerWidth, window.innerHeight);
+        });
 
         this.render = (scn, cam) => {
             scn.updateMatrixWorld(); _s.update(cam);
@@ -337,12 +345,10 @@
         const euler = new THREE.Euler(), q = new THREE.Quaternion(), qCam = new THREE.Quaternion();
         const qScr = new THREE.Quaternion(), zAx = new THREE.Vector3(0,0,1), vec = new THREE.Vector3(0,0,-1);
         qCam.setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI/2);
-        
         let dev = {}, scr = 0, init = false, timer;
         const onD = (e) => dev = e;
         const onS = () => scr = (screen.orientation?.angle || window.orientation || 0) * (Math.PI/180);
         this.start = () => { onS(); window.addEventListener('orientationchange', onS); window.addEventListener('deviceorientation', onD); };
-        
         this.update = () => {
             if(!dev.alpha) return;
             const a = THREE.MathUtils.degToRad(dev.alpha), b = THREE.MathUtils.degToRad(dev.beta), g = THREE.MathUtils.degToRad(dev.gamma);
@@ -350,48 +356,28 @@
             q.setFromEuler(euler); q.multiply(qCam); q.multiply(qScr.setFromAxisAngle(zAx, -scr));
             const v = vec.clone().applyQuaternion(q);
             const p = Math.asin(v.y), y = Math.atan2(v.x, -v.z);
-            
             if(!init) { 
-                init = true; 
-                clearTimeout(timer); timer = setTimeout(() => { offset.y=head.y; offset.p=head.p; }, 500);
+                init = true; clearTimeout(timer); timer = setTimeout(() => { offset.y=head.y; offset.p=head.p; }, 500);
                 head.y = y; head.p = p;
-            } else {
-                head.y = y; head.p = p;
-            }
+            } else { head.y = y; head.p = p; }
         }
     }
 
-    // --- Controls ---
+    // --- Control Helpers ---
     const ui = el('overlay');
     let fadeT;
     const showUI = () => { ui.classList.add('visible'); ui.classList.remove('fading'); clearTimeout(fadeT); fadeT = setTimeout(hideUI, 3000); };
     const hideUI = () => { if(isPlaying) { ui.classList.add('fading'); setTimeout(()=>ui.classList.remove('visible'), 200); } };
-    
-    document.addEventListener('click', (e) => { 
-        if(e.target.closest('.eye-ui')) return; 
-        if(ui.classList.contains('visible')) hideUI(); else showUI(); 
-    });
+    document.addEventListener('click', (e) => { if(e.target.closest('.eye-ui')) return; if(ui.classList.contains('visible')) hideUI(); else showUI(); });
 
-    // Helper to bind touch and click safely
     const bind = (sel, fn) => {
         document.querySelectorAll(sel).forEach(b => {
-            const handler = (e) => {
-                e.preventDefault(); e.stopPropagation();
-                if(!activeVRVideo) return;
-                fn(b, e);
-                showUI();
-            };
-            b.onclick = handler;
-            b.ontouchend = handler;
+            const handler = (e) => { e.preventDefault(); e.stopPropagation(); if(!activeVRVideo) return; fn(b, e); showUI(); };
+            b.onclick = handler; b.ontouchend = handler;
         });
     };
 
-    bind('.pp', () => { 
-        if(isPlaying) activeVRVideo.pause(); else activeVRVideo.play(); 
-        isPlaying = !isPlaying; 
-        document.querySelectorAll('.pp').forEach(x => x.textContent = isPlaying ? '||' : '▶');
-    });
-    
+    bind('.pp', () => { if(isPlaying) activeVRVideo.pause(); else activeVRVideo.play(); isPlaying = !isPlaying; document.querySelectorAll('.pp').forEach(x => x.textContent = isPlaying ? '||' : '▶'); });
     bind('.rew', () => activeVRVideo.currentTime = Math.max(0, activeVRVideo.currentTime - 10));
     bind('.fwd', () => activeVRVideo.currentTime = Math.min(activeVRVideo.duration, activeVRVideo.currentTime + 10));
     bind('.zoom-in', () => zIdx = Math.min(zLvls.length-1, zIdx+1));
@@ -401,15 +387,10 @@
     bind('.pan-r', () => pan.x += 0.05);
     bind('.pan-c', () => { pan.x=0; pan.y=0; offset.y=head.y; offset.p=head.p; });
 
-    // Seek Bar Logic
     bind('.bar-track', (b, e) => {
         const rect = b.getBoundingClientRect();
-        // Handle touch or mouse coordinate
         const cx = (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0].clientX : e.clientX;
-        if(cx !== undefined) {
-            const pos = (cx - rect.left) / rect.width;
-            activeVRVideo.currentTime = pos * activeVRVideo.duration;
-        }
+        if(cx !== undefined) activeVRVideo.currentTime = ((cx - rect.left) / rect.width) * activeVRVideo.duration;
     });
     
     setInterval(() => {
@@ -417,7 +398,6 @@
         const p = (activeVRVideo.currentTime / activeVRVideo.duration) * 100;
         document.querySelectorAll('.bar-fill').forEach(f => f.style.width = p+'%');
     }, 200);
-
 </script>
 </body>
 </html>
