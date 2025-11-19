@@ -1,670 +1,423 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - Optimized</title>
+    <title>VR Player - Fixed Controls</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen">
     <meta name="theme-color" content="#000000">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #000; color: white; }
-        /* UI Styles */
-        #setup { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000; background: #1a1a1a; padding: 20px; overflow-y: auto; }
-        #setup.hidden { display: none; }
-        .section { background: rgba(255,255,255,0.1); padding: 15px; margin: 10px 0; border-radius: 8px; }
+        body { margin: 0; overflow: hidden; background: #000; color: white; font-family: system-ui, -apple-system, sans-serif; user-select: none; -webkit-user-select: none; }
         
-        /* Buttons & Inputs */
-        button { background: #007BFF; color: white; border: none; padding: 15px; font-size: 18px; border-radius: 5px; cursor: pointer; margin: 5px 0; width: 100%; }
-        button:active { background: #0056b3; }
-        button:disabled { background: #555; }
-        input[type="file"] { width: 100%; padding: 10px; background: white; color: black; border-radius: 5px; margin: 10px 0; }
-        input[type="radio"] { margin: 10px 5px; }
-        label { margin-right: 15px; }
+        /* SETUP UI */
+        #setup { position: fixed; inset: 0; z-index: 10000; background: #121212; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        #setup.hidden { display: none !important; }
+        .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
         
-        #testVideo { width: 100%; max-width: 400px; background: #000; margin: 10px 0; }
-        .status { padding: 10px; margin: 10px 0; background: #000; border-radius: 5px; }
-        .success { color: #4CAF50; }
+        h2 { margin: 0; text-align: center; color: #fff; text-transform: uppercase; letter-spacing: 1px; font-size: 18px; }
+        .radio-group { display: flex; background: #2c2c2c; border-radius: 8px; padding: 4px; }
+        .radio-group label { flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; color: #888; font-weight: 600; transition: 0.2s; }
+        .radio-group input:checked + label { background: #007BFF; color: white; }
         
-        /* Overlay Controls */
-        #progressOverlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.8); padding: 15px; display: none; z-index: 998; transition: opacity 0.3s; }
-        #progressOverlay.visible { display: flex; }
-        #progressOverlay.fading { opacity: 0; }
-        .eye-controls { width: 50%; display: flex; flex-direction: column; align-items: center; padding: 0 10px; }
-        .progressBar { width: 100%; height: 12px; background: rgba(255,255,255,0.3); border-radius: 6px; cursor: pointer; margin-bottom: 10px; position: relative; }
-        .progressFill { height: 100%; background: #007BFF; border-radius: 6px; width: 0%; pointer-events: none; }
-        .timeDisplay { text-align: center; font-size: 16px; color: white; margin-bottom: 8px; }
+        .file-btn { background: #333; color: #ddd; padding: 16px; border-radius: 8px; text-align: center; font-weight: 600; border: 1px dashed #555; cursor: pointer; display: block; }
+        .preview { background: #000; border-radius: 8px; height: 220px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; overflow: hidden; position: relative; }
+        #testVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
+        #testVideo.active { display: block; }
         
-        .controls { display: flex; justify-content: center; gap: 15px; margin-top: 5px; }
-        .control-btn { background: rgba(255,255,255,0.2); border: none; color: white; width: 45px; height: 45px; border-radius: 50%; font-size: 18px; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
-        .control-btn:active { background: rgba(255,255,255,0.4); }
-        .zoom-reset { width: auto; padding: 0 15px; font-size: 14px; border-radius: 20px; }
+        .btn-main { background: #007BFF; color: white; border: none; padding: 16px; font-size: 16px; font-weight: bold; border-radius: 8px; width: 100%; text-transform: uppercase; letter-spacing: 1px; }
+        .btn-main:disabled { background: #333; color: #555; }
+
+        /* VR OVERLAY */
+        #overlay { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background: linear-gradient(to top, rgba(0,0,0,0.95), transparent); 
+            padding: 40px 0 20px 0; display: none; z-index: 9999; 
+            transition: opacity 0.2s; 
+        }
+        #overlay.visible { display: flex; }
+        #overlay.fading { opacity: 0; pointer-events: none; }
+        
+        .eye-ui { width: 50%; display: flex; flex-direction: column; align-items: center; padding: 0 10px; box-sizing: border-box; }
+        
+        /* SEEK BAR */
+        .bar-track { width: 95%; height: 30px; /* Taller hit area */ display: flex; align-items: center; cursor: pointer; margin-bottom: 5px; }
+        .bar-bg { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; overflow: hidden; pointer-events: none; }
+        .bar-fill { height: 100%; background: #007BFF; width: 0%; pointer-events: none; }
+        
+        /* BUTTONS */
+        .row { display: flex; gap: 12px; margin-bottom: 10px; }
+        .btn-icon { 
+            width: 55px; height: 55px; border-radius: 50%; /* Larger touch targets */
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.1); 
+            color: white; font-size: 20px; display: flex; align-items: center; justify-content: center; 
+            backdrop-filter: blur(5px); cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn-icon:active { background: rgba(0,123,255,0.8); transform: scale(0.95); }
+        .btn-pill { height: 40px; padding: 0 20px; border-radius: 20px; background: rgba(255,255,255,0.15); border: none; color: white; font-weight: bold; backdrop-filter: blur(5px); }
     </style>
 </head>
 <body>
-    <!-- Setup Screen -->
-    <div id="setup">
-        <h2>VR Video Player</h2>
-        <div class="section">
-            <strong>Video Type</strong><br>
+
+<div id="setup">
+    <div class="setup-box">
+        <h2>OnePlus 13 VR</h2>
+        <div class="radio-group">
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
-            <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">SBS 3D</label>
+            <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
         </div>
-        <div class="section"><strong>Select Video</strong><br><input type="file" id="fileInput" accept="video/*"></div>
-        <div class="section">
-            <strong>Test</strong><br>
-            <video id="testVideo" controls playsinline webkit-playsinline></video>
-            <div id="status" class="status">Load video...</div>
-        </div>
-        <div class="section"><button id="startBtn" disabled>START VR</button></div>
+        <label for="fIn" class="file-btn" id="fLbl">Select Video</label>
+        <input type="file" id="fIn" accept="video/*" style="display:none">
+        <div class="preview"><span id="pTxt" style="color:#555">No Video</span><video id="testVideo" controls playsinline></video></div>
+        <button id="goBtn" class="btn-main" disabled>Enter VR</button>
     </div>
+</div>
 
-    <!-- In-VR Controls Overlay -->
-    <div id="progressOverlay">
-        <!-- Left Eye UI -->
-        <div class="eye-controls">
-            <div class="progressBar"><div class="progressFill"></div></div>
-            <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls">
-                <button class="control-btn pan-left-btn">&larr;</button>
-                <button class="control-btn pan-center-btn">o</button>
-                <button class="control-btn pan-right-btn">&rarr;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn rewind-btn">&lt;&lt;</button>
-                <button class="control-btn play-pause-btn">||</button>
-                <button class="control-btn forward-btn">&gt;&gt;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn zoom-out-btn">-</button>
-                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
-                <button class="control-btn zoom-in-btn">+</button>
-            </div>
-        </div>
-        <!-- Right Eye UI (Duplicate) -->
-        <div class="eye-controls">
-            <div class="progressBar"><div class="progressFill"></div></div>
-            <div class="timeDisplay">0:00 / 0:00</div>
-            <div class="controls">
-                <button class="control-btn pan-left-btn">&larr;</button>
-                <button class="control-btn pan-center-btn">o</button>
-                <button class="control-btn pan-right-btn">&rarr;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn rewind-btn">&lt;&lt;</button>
-                <button class="control-btn play-pause-btn">||</button>
-                <button class="control-btn forward-btn">&gt;&gt;</button>
-            </div>
-            <div class="controls">
-                <button class="control-btn zoom-out-btn">-</button>
-                <button class="control-btn zoom-reset zoom-reset-btn">Reset</button>
-                <button class="control-btn zoom-in-btn">+</button>
-            </div>
-        </div>
+<div id="overlay">
+    <div class="eye-ui" id="uiL"></div>
+    <div class="eye-ui" id="uiR"></div>
+</div>
+
+<template id="uiTemplate">
+    <div class="bar-track">
+        <div class="bar-bg"><div class="bar-fill"></div></div>
     </div>
+    <div class="row">
+        <button class="btn-icon pan-l">&larr;</button>
+        <button class="btn-icon pan-c">⦾</button>
+        <button class="btn-icon pan-r">&rarr;</button>
+    </div>
+    <div class="row">
+        <button class="btn-icon rew">↺</button>
+        <button class="btn-icon pp">▶</button>
+        <button class="btn-icon fwd">↻</button>
+    </div>
+    <div class="row">
+        <button class="btn-icon zoom-out">-</button>
+        <button class="btn-pill zr">ZOOM</button>
+        <button class="btn-icon zoom-in">+</button>
+    </div>
+</template>
 
-    <!-- Shaders -->
-    <script id="vertexShader" type="x-shader/x-vertex">
-        varying vec2 vUv;
-        void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+<script id="vert" type="x-shader/x-vertex">
+    precision highp float;
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+</script>
+
+<script id="frag" type="x-shader/x-fragment">
+    precision highp float;
+    uniform sampler2D tDiffuse;
+    uniform float k1;
+    uniform float k2;
+    uniform float yaw;
+    uniform float pitch;
+    uniform float panX;
+    uniform float panY;
+    uniform float zoom;
+    uniform vec2 texelSize;
+    varying vec2 vUv;
+
+    // High quality bicubic sampling
+    vec4 textureBicubic(sampler2D tex, vec2 uv) {
+        vec2 texSize = 1.0 / texelSize;
+        vec2 tc = uv * texSize - 0.5;
+        vec2 frac = fract(tc);
+        vec2 base = floor(tc);
+        vec2 w0 = frac * (-0.5 + frac * (1.0 - 0.5 * frac));
+        vec2 w1 = 1.0 + frac * frac * (-2.5 + 1.5 * frac);
+        vec2 w2 = frac * (0.5 + frac * (2.0 - 1.5 * frac));
+        vec2 w3 = frac * frac * (-0.5 + 0.5 * frac);
+        vec2 s0 = w0 + w1;
+        vec2 s1 = w2 + w3;
+        vec2 f0 = w1 / s0;
+        vec2 f1 = w3 / s1;
+        vec2 t0 = (base - 1.0 + f0) * texelSize;
+        vec2 t1 = (base + 1.0 + f1) * texelSize;
+        return mix(
+            mix(texture2D(tex, vec2(t0.x, t0.y)), texture2D(tex, vec2(t1.x, t0.y)), s1.x / (s0.x + s1.x)),
+            mix(texture2D(tex, vec2(t0.x, t1.y)), texture2D(tex, vec2(t1.x, t1.y)), s1.x / (s0.x + s1.x)),
+            s1.y / (s0.y + s1.y)
+        );
+    }
+
+    vec2 distort(vec2 p) {
+        vec2 center = vec2(0.5, 0.5);
+        vec2 v = p - center;
+        float r2 = dot(v, v);
+        return center + v * (1.0 + r2 * (k1 + k2 * r2));
+    }
+
+    void main() {
+        vec2 center = vec2(0.5, 0.5);
+        vec2 uv = distort(vUv);
+        uv = (uv - center) / zoom;
+        uv.x += yaw + panX;
+        uv.y += pitch + panY;
+        uv += center;
+
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        } else {
+            gl_FragColor = textureBicubic(tDiffuse, uv);
         }
-    </script>
+    }
+</script>
 
-    <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
-        uniform sampler2D tDiffuse;
-        uniform float k1;
-        uniform float k2;
-        uniform float headYawOffset;
-        uniform float headPitchOffset;
-        uniform float manualPanOffset;
-        uniform float manualTiltOffset;
-        uniform float zoomLevel;
-        varying vec2 vUv;
+<script>
+    // --- UI Initialization ---
+    const el = (id) => document.getElementById(id);
+    const tmpl = el('uiTemplate').content;
+    el('uiL').appendChild(tmpl.cloneNode(true));
+    el('uiR').appendChild(tmpl.cloneNode(true));
 
-        // Simple Barrel Distortion
-        vec2 distort(vec2 p) {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 v = p - center;
-            float r2 = dot(v, v);
-            float distortion = 1.0 + r2 * (k1 + k2 * r2);
-            return center + v * distortion;
-        }
+    // --- Setup Variables ---
+    let videoURL = null;
+    let activeVRVideo = null;
+    let isPlaying = false;
 
-        void main() {
-            vec2 eyeCenter = vec2(0.5, 0.5);
-            
-            // 1. Apply Lens Distortion
-            vec2 distortedUV = distort(vUv);
-            
-            // 2. Apply Zoom (Scaling around center)
-            vec2 uv = (distortedUV - eyeCenter) / zoomLevel;
-            
-            // 3. Apply Pan/Tilt Offsets
-            uv.x += headYawOffset + manualPanOffset;
-            uv.y += headPitchOffset + manualTiltOffset;
-            
-            // 4. Re-center
-            uv += eyeCenter;
+    // Setup Handlers
+    el('fIn').onchange = (e) => {
+        const f = e.target.files[0]; if(!f) return;
+        el('fLbl').textContent = f.name;
+        if(videoURL) URL.revokeObjectURL(videoURL);
+        videoURL = URL.createObjectURL(f);
+        const v = el('testVideo');
+        v.src = videoURL; v.style.display='block'; el('pTxt').style.display='none';
+        v.onloadedmetadata = () => el('goBtn').disabled = false;
+    };
 
-            // 5. Texture Lookup (Hard edge clamping)
-            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-            } else {
-                // Standard texture2D is fast and hardware optimized
-                gl_FragColor = texture2D(tDiffuse, uv);
-            }
-        }
-    </script>
-
-    <script>
-        // --- DOM Elements ---
-        const fileInput = document.getElementById('fileInput');
-        const testVideo = document.getElementById('testVideo');
-        const startBtn = document.getElementById('startBtn');
-        const setupDiv = document.getElementById('setup');
-        const status = document.getElementById('status');
-        const progressOverlay = document.getElementById('progressOverlay');
-        const progressFills = document.querySelectorAll('.progressFill');
-        const timeDisplays = document.querySelectorAll('.timeDisplay');
-        const playPauseBtns = document.querySelectorAll('.play-pause-btn');
-
-        // --- Global State ---
-        let camera, scene, renderer, effect;
-        let video, videoTexture, orientationTracker;
-        let mode = '2d', isPlaying = false, videoURL = null;
-        let hideOverlayTimer = null;
-        let currentZoomIndex = 4; // Default to 1.0x (index 4)
+    el('goBtn').onclick = async () => {
+        el('testVideo').pause(); 
+        const mode = document.querySelector('input[name="mode"]:checked').value;
         
-        // Offsets
-        let manualPanX = 0, manualPanY = 0;
-        let headYaw = 0, headPitch = 0, yawOffset = 0, pitchOffset = 0;
-        let lastUpdateTime = 0;
-
-        // Zoom increments
-        const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
-
-        // --- Event Listeners ---
-        fileInput.addEventListener('change', handleFileSelect);
-        startBtn.addEventListener('click', startVR);
-
-        function handleFileSelect(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            if (videoURL) URL.revokeObjectURL(videoURL);
-            videoURL = URL.createObjectURL(file);
-            testVideo.src = videoURL;
-            mode = document.querySelector('input[name="mode"]:checked').value;
-
-            testVideo.addEventListener('loadedmetadata', function() {
-                status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
-                status.className = 'status success';
-                startBtn.disabled = false;
-            }, { once: true });
-            testVideo.load();
+        if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+            try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
         }
+        
+        const d = document.documentElement;
+        if(d.requestFullscreen) d.requestFullscreen();
+        screen.orientation?.lock('landscape').catch(()=>{});
+        
+        el('setup').classList.add('hidden');
+        init3D(mode);
+    };
 
-        async function startVR() {
-            if (!videoURL) return;
+    // --- 3D Engine Vars ---
+    let renderer, scene, camera, effect, tracker;
+    let zIdx = 4; 
+    const zLvls = [0.2,0.4,0.6,0.8, 1.0, 1.25,1.5,1.75,2.0,2.5,3.0,4.0];
+    let pan = {x:0, y:0}, head = {y:0, p:0}, offset = {y:0, p:0};
 
-            // Request Orientation Permission (iOS 13+)
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission !== 'granted') alert('Permission denied. Head tracking will not work.');
-                } catch (error) { console.error(error); }
-            }
+    function init3D(mode) {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(100, window.innerWidth/window.innerHeight, 0.1, 100);
+        
+        activeVRVideo = document.createElement('video');
+        activeVRVideo.src = videoURL;
+        activeVRVideo.loop = false;
+        activeVRVideo.playsInline = true;
+        activeVRVideo.setAttribute('webkit-playsinline', '');
 
-            // Fullscreen
-            const elem = document.documentElement;
-            if (elem.requestFullscreen) elem.requestFullscreen();
-            else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-
-            // Lock Orientation
-            if (screen.orientation && screen.orientation.lock) {
-                screen.orientation.lock('landscape').catch(() => {});
-            }
-
-            // Start Engine
-            setTimeout(() => {
-                setupDiv.classList.add('hidden');
-                disposeResources();
-                initVR();
-            }, 100);
-        }
-
-        function disposeResources() {
-            if (videoTexture) { videoTexture.dispose(); videoTexture = null; }
-            if (video) { video.pause(); video.src = ''; video.load(); video = null; }
-            if (orientationTracker) { orientationTracker.disconnect(); orientationTracker = null; }
-            if (effect && effect.dispose) { effect.dispose(); effect = null; }
-            if (renderer) {
-                renderer.dispose();
-                if (renderer.domElement && renderer.domElement.parentNode) {
-                    renderer.domElement.parentNode.removeChild(renderer.domElement);
-                }
-                renderer = null;
-            }
-            scene = null;
-        }
-
-        function initVR() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 0, 0);
-
-            video = document.createElement('video');
-            video.src = videoURL;
-            video.loop = false;
-            video.muted = false;
-            video.playsinline = true;
-            video.setAttribute('webkit-playsinline', '');
-
-            video.addEventListener('loadeddata', function() {
-                videoTexture = new THREE.VideoTexture(video);
-                videoTexture.minFilter = THREE.LinearFilter;
-                videoTexture.magFilter = THREE.LinearFilter;
-                videoTexture.generateMipmaps = false; // Optimization: Video textures change every frame
-
-                const aspect = mode === '3d' ? (video.videoWidth / 2) / video.videoHeight : video.videoWidth / video.videoHeight;
-                const width = 6;
-                const height = width / aspect;
-                const distance = 2.5;
-
-                // Create Screen Geometry
-                if (mode === '2d') {
-                    const geometry = new THREE.PlaneGeometry(width, height);
-                    const material = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
-                    const screenMesh = new THREE.Mesh(geometry, material);
-                    screenMesh.position.z = -distance;
-                    camera.add(screenMesh);
-                    scene.add(camera);
-                } else {
-                    // 3D SBS Setup
-                    const geometry = new THREE.PlaneGeometry(width, height);
-                    
-                    // Left Eye Material
-                    const matL = new THREE.ShaderMaterial({
-                        uniforms: { tex: { value: videoTexture } },
-                        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-                        fragmentShader: `uniform sampler2D tex; varying vec2 vUv; void main() { gl_FragColor = texture2D(tex, vec2(vUv.x * 0.5, vUv.y)); }`,
-                        side: THREE.DoubleSide
-                    });
-                    const screenL = new THREE.Mesh(geometry, matL);
-                    screenL.position.z = -distance;
-                    screenL.layers.set(1); // Left Layer
-                    camera.add(screenL);
-
-                    // Right Eye Material
-                    const matR = new THREE.ShaderMaterial({
-                        uniforms: { tex: { value: videoTexture } },
-                        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-                        fragmentShader: `uniform sampler2D tex; varying vec2 vUv; void main() { gl_FragColor = texture2D(tex, vec2(vUv.x * 0.5 + 0.5, vUv.y)); }`,
-                        side: THREE.DoubleSide
-                    });
-                    const screenR = new THREE.Mesh(geometry, matR);
-                    screenR.position.z = -distance;
-                    screenR.layers.set(2); // Right Layer
-                    camera.add(screenR);
-                    scene.add(camera);
-                }
-
-                renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-                // optimization: Cap pixel ratio to 2.0 for very high density screens to save battery/fps
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                document.body.appendChild(renderer.domElement);
-
-                effect = new THREE.StereoEffect(renderer);
-                effect.setSize(window.innerWidth, window.innerHeight);
-
-                orientationTracker = new OrientationTracker();
-                orientationTracker.connect();
-
-                window.addEventListener('resize', onResize);
-                document.addEventListener('click', toggleOverlay);
-                video.addEventListener('timeupdate', updateProgress);
-                progressOverlay.addEventListener('click', handleControls);
-
-                showOverlay();
-                video.play().then(() => {
-                    isPlaying = true;
-                    updatePlayPauseButtons();
-                    animate();
-                }).catch(err => console.error(err));
-            });
-            video.load();
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            if (orientationTracker) orientationTracker.update();
-            if (effect) effect.render(scene, camera);
-        }
-
-        function onResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            effect.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        // --- Controls & UI Logic ---
-        function updatePlayPauseButtons() {
-            playPauseBtns.forEach(btn => { btn.textContent = isPlaying ? '||' : '>'; });
-        }
-
-        function togglePlayPause() {
-            if (!video) return;
-            if (isPlaying) { video.pause(); isPlaying = false; }
-            else { video.play(); isPlaying = true; }
-            updatePlayPauseButtons();
-            showOverlay();
-        }
-
-        function seekVideo(e, barEl) {
-            if (!video) return;
-            const rect = barEl.getBoundingClientRect();
-            const pos = (e.clientX - rect.left) / rect.width;
-            video.currentTime = pos * video.duration;
-            showOverlay();
-        }
-
-        function seekRelative(seconds) {
-            if (!video) return;
-            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
-            showOverlay();
-        }
-
-        function updateProgress() {
-            if (!video) return;
-            const percent = (video.currentTime / video.duration) * 100;
-            progressFills.forEach(fill => { fill.style.width = percent + '%'; });
+        activeVRVideo.onloadeddata = () => {
+            const videoTex = new THREE.VideoTexture(activeVRVideo);
+            videoTex.format = THREE.RGBFormat;
+            videoTex.minFilter = THREE.LinearFilter;
+            videoTex.magFilter = THREE.LinearFilter;
+            videoTex.generateMipmaps = false;
             
-            const cur = video.currentTime;
-            const dur = video.duration || 0;
-            const format = (t) => {
-                const m = Math.floor(t / 60);
-                const s = Math.floor(t % 60).toString().padStart(2, '0');
-                return `${m}:${s}`;
-            };
-            const timeText = `${format(cur)} / ${format(dur)}`;
-            timeDisplays.forEach(display => { display.textContent = timeText; });
-        }
-
-        function toggleOverlay(e) {
-            if (e.target.closest('#progressOverlay')) return;
-            if (progressOverlay.classList.contains('visible')) hideOverlay();
-            else showOverlay();
-        }
-
-        function showOverlay() {
-            progressOverlay.classList.add('visible');
-            progressOverlay.classList.remove('fading');
-            if (hideOverlayTimer) clearTimeout(hideOverlayTimer);
-            hideOverlayTimer = setTimeout(() => { if (isPlaying) hideOverlay(); }, 3000);
-        }
-
-        function hideOverlay() {
-            progressOverlay.classList.add('fading');
-            setTimeout(() => { progressOverlay.classList.remove('visible'); }, 300);
-        }
-
-        function adjustZoom(direction) {
-            if (direction > 0) currentZoomIndex = Math.min(zoomLevels.length - 1, currentZoomIndex + 1);
-            else currentZoomIndex = Math.max(0, currentZoomIndex - 1);
-            showOverlay();
-        }
-
-        function resetZoom() { currentZoomIndex = 4; showOverlay(); } // Index 4 is 1.0x
-
-        function adjustPan(dx) { manualPanX += dx * 0.05; showOverlay(); }
-
-        function centerPan() {
-            manualPanX = 0;
-            manualPanY = 0;
-            // Reset head tracking center
-            yawOffset = headYaw;
-            pitchOffset = headPitch;
-            showOverlay();
-        }
-
-        function handleControls(e) {
-            e.stopPropagation();
-            const target = e.target.closest('.control-btn, .progressBar');
-            if (!target) return;
-            if (target.matches('.progressBar')) { seekVideo(e, target); return; }
+            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
             
-            const cl = target.classList;
-            if (cl.contains('play-pause-btn')) togglePlayPause();
-            else if (cl.contains('rewind-btn')) seekRelative(-10);
-            else if (cl.contains('forward-btn')) seekRelative(10);
-            else if (cl.contains('zoom-in-btn')) adjustZoom(1);
-            else if (cl.contains('zoom-out-btn')) adjustZoom(-1);
-            else if (cl.contains('zoom-reset-btn')) resetZoom();
-            else if (cl.contains('pan-left-btn')) adjustPan(-1);
-            else if (cl.contains('pan-center-btn')) centerPan();
-            else if (cl.contains('pan-right-btn')) adjustPan(1);
-        }
-
-        // ==========================================
-        // OPTIMIZED ORIENTATION TRACKER (QUATERNION)
-        // ==========================================
-        function OrientationTracker() {
-            this.deviceOrientation = {};
-            this.screenOrientation = 0;
-            this.enabled = false;
-            this.autoCenterTimer = null;
-            this.firstReadingTime = null;
-
-            // Pre-allocate Math objects to avoid Garbage Collection stutter
-            const _euler = new THREE.Euler();
-            const _deviceQ = new THREE.Quaternion();
-            const _q0 = new THREE.Quaternion();
-            const _q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -90 X-axis
-            const _zee = new THREE.Vector3(0, 0, 1);
-            const _lookVector = new THREE.Vector3(0, 0, -1);
-            const _v = new THREE.Vector3();
-
-            const onDeviceOrientationChangeEvent = (event) => { this.deviceOrientation = event; };
-            const onScreenOrientationChangeEvent = () => {
-                this.screenOrientation = (screen.orientation && typeof screen.orientation.angle === 'number') 
-                    ? screen.orientation.angle : (window.orientation || 0);
-            };
-
-            this.connect = function() {
-                onScreenOrientationChangeEvent();
-                window.addEventListener('orientationchange', onScreenOrientationChangeEvent);
-                window.addEventListener('deviceorientation', onDeviceOrientationChangeEvent);
-                this.enabled = true;
-            };
-
-            this.disconnect = function() {
-                window.removeEventListener('orientationchange', onScreenOrientationChangeEvent);
-                window.removeEventListener('deviceorientation', onDeviceOrientationChangeEvent);
-                this.enabled = false;
-                if (this.autoCenterTimer) clearTimeout(this.autoCenterTimer);
-            };
-
-            this.update = function() {
-                if (!this.enabled) return;
-                
-                // Throttle updates slightly to 60fps (approx 16ms)
-                const now = Date.now();
-                if (now - lastUpdateTime < 16) return; 
-
-                const device = this.deviceOrientation;
-                if (!device || device.alpha === null) return;
-
-                const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) : 0;
-                const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
-                const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
-                const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
-
-                // Math: Euler -> Quaternion -> Rotate Frame -> Extract Look Vector
-                _euler.set(beta, alpha, -gamma, 'YXZ');
-                _deviceQ.setFromEuler(_euler);
-                _deviceQ.multiply(_q1); 
-                _deviceQ.multiply(_q0.setFromAxisAngle(_zee, -orient));
-                _v.copy(_lookVector).applyQuaternion(_deviceQ);
-
-                const currentPitch = Math.asin(_v.y);
-                const currentYaw = Math.atan2(_v.x, -_v.z);
-
-                // Initialize / Auto-center
-                if (!this.firstReadingTime) {
-                    this.firstReadingTime = Date.now();
-                    this.autoCenterTimer = setTimeout(() => {
-                        yawOffset = headYaw;
-                        pitchOffset = headPitch;
-                    }, 800);
-                    headYaw = currentYaw;
-                    headPitch = currentPitch;
-                } else {
-                    headYaw = currentYaw;
-                    headPitch = currentPitch;
-                }
-                lastUpdateTime = now;
-            };
-        }
-
-        // ==========================================
-        // OPTIMIZED STEREO EFFECT
-        // ==========================================
-        THREE.StereoEffect = function(renderer) {
-            const _stereo = new THREE.StereoCamera();
-            _stereo.aspect = 0.5;
-            const dpr = window.devicePixelRatio || 1;
-            const maxTextureSize = renderer.capabilities.maxTextureSize;
-
-            // Optimization: Don't render insanely high resolutions on 4K phones
-            // Cap rendering width to reasonable limits (e.g., 2048px per eye max)
-            let rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), 2048);
-            let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), 2048);
-
-            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-
-            const distortionMaterial = new THREE.ShaderMaterial({
-                uniforms: {
-                    tDiffuse: { value: null },
-                    k1: { value: 0.22 },
-                    k2: { value: 0.18 },
-                    headYawOffset: { value: 0.0 },
-                    headPitchOffset: { value: 0.0 },
-                    manualPanOffset: { value: 0.0 },
-                    manualTiltOffset: { value: 0.0 },
-                    zoomLevel: { value: 1.0 }
-                },
-                vertexShader: document.getElementById('vertexShader').textContent,
-                fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
-            });
-
-            // Cache for change detection
-            let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
+            const maxAniso = renderer.capabilities.getMaxAnisotropy();
+            if(maxAniso > 1) videoTex.anisotropy = maxAniso;
             
-            // Scene for post-processing
-            const quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), distortionMaterial);
-            const orthoScene = new THREE.Scene();
-            const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-            orthoScene.add(quadMesh);
-            const sizeVec = new THREE.Vector2();
+            document.body.appendChild(renderer.domElement);
 
-            this.setSize = function(width, height) {
-                renderer.setSize(width, height);
-                const dpr = window.devicePixelRatio || 1;
-                const newW = Math.min(Math.floor(width * dpr / 2), 2048);
-                const newH = Math.min(Math.floor(height * dpr), 2048);
+            const aspect = mode==='3d' ? (activeVRVideo.videoWidth/2)/activeVRVideo.videoHeight : activeVRVideo.videoWidth/activeVRVideo.videoHeight;
+            const h = 6/aspect;
 
-                if (newW !== rtWidth || newH !== rtHeight) {
-                    renderTargetL.dispose();
-                    renderTargetR.dispose();
-                    rtWidth = newW;
-                    rtHeight = newH;
-                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight);
-                }
+            const mkEye = (l, off) => {
+                const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.ShaderMaterial({
+                    uniforms: { t:{value:videoTex} },
+                    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+                    fragmentShader: `precision highp float; uniform sampler2D t; varying vec2 vUv; void main() { gl_FragColor = texture2D(t, vec2(vUv.x*0.5+${off}, vUv.y)); }`
+                }));
+                m.position.z = -2.5; m.layers.set(l); return m;
             };
+            
+            if(mode==='2d') {
+                const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.MeshBasicMaterial({map:videoTex}));
+                m.position.z = -2.5; camera.add(m);
+            } else {
+                camera.add(mkEye(1,0.0)); 
+                camera.add(mkEye(2,0.5));
+            }
+            scene.add(camera);
 
-            this.render = function(scene, camera) {
-                scene.updateMatrixWorld();
-                if (camera.parent === null) camera.updateMatrixWorld();
-                _stereo.update(camera);
-                renderer.getSize(sizeVec);
-                const halfWidth = sizeVec.width * 0.5;
+            effect = new StereoEffect(renderer, mode);
+            tracker = new Tracker(); tracker.start();
 
-                if (mode === '3d') {
-                    _stereo.cameraL.layers.set(1);
-                    _stereo.cameraR.layers.set(2);
-                }
-
-                // 1. Render Left Scene to Texture
-                renderer.setRenderTarget(renderTargetL);
-                renderer.clear();
-                renderer.render(scene, _stereo.cameraL);
-
-                // 2. Render Right Scene to Texture
-                renderer.setRenderTarget(renderTargetR);
-                renderer.clear();
-                renderer.render(scene, _stereo.cameraR);
-
-                // 3. Render Distorted Output to Screen
-                renderer.setRenderTarget(null);
-                renderer.clear();
-                renderer.setScissorTest(true);
-
-                // Calculate Offsets
-                let yawDelta = headYaw - yawOffset;
-                yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
-                const yawUV = -yawDelta * 0.7;
-
-                let pitchDelta = headPitch - pitchOffset;
-                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
-                const pitchUV = pitchDelta * 0.8; // Fixed Tilt Direction
-
-                const currentZoom = zoomLevels[currentZoomIndex];
-
-                // Optimization: Only update GPU uniforms if values changed significantly
-                if (Math.abs(yawUV - cachedYawUV) > 0.0001) {
-                    distortionMaterial.uniforms.headYawOffset.value = yawUV;
-                    cachedYawUV = yawUV;
-                }
-                if (Math.abs(pitchUV - cachedPitchUV) > 0.0001) {
-                    distortionMaterial.uniforms.headPitchOffset.value = pitchUV;
-                    cachedPitchUV = pitchUV;
-                }
-                if (currentZoom !== cachedZoom) {
-                    distortionMaterial.uniforms.zoomLevel.value = currentZoom;
-                    cachedZoom = currentZoom;
-                }
-
-                distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
-                distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
-
-                // Draw Left
-                distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
-                renderer.setScissor(0, 0, halfWidth, sizeVec.height);
-                renderer.setViewport(0, 0, halfWidth, sizeVec.height);
-                renderer.render(orthoScene, orthoCamera);
-
-                // Draw Right
-                distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
-                renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height);
-                renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
-                renderer.render(orthoScene, orthoCamera);
-
-                renderer.setScissorTest(false);
-            };
-
-            this.dispose = function() {
-                renderTargetL.dispose();
-                renderTargetR.dispose();
-                distortionMaterial.dispose();
-                quadMesh.geometry.dispose();
-            };
+            activeVRVideo.play(); 
+            isPlaying = true;
+            animate();
         };
-    </script>
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if(tracker) tracker.update();
+        if(effect) effect.render(scene, camera);
+    }
+
+    // --- Stereo Logic ---
+    function StereoEffect(ren, mode) {
+        const _s = new THREE.StereoCamera(); _s.aspect = 0.5;
+        const dpr = window.devicePixelRatio;
+        const w = Math.min(window.innerWidth*dpr/2, 4096); 
+        const h = Math.min(window.innerHeight*dpr, 4096);
+
+        const rtConf = { 
+            minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, 
+            format: THREE.RGBFormat, generateMipmaps: false, 
+            depthBuffer: false, stencilBuffer: false 
+        };
+        
+        const rtL = new THREE.WebGLRenderTarget(w, h, rtConf);
+        const rtR = new THREE.WebGLRenderTarget(w, h, rtConf);
+
+        const mat = new THREE.ShaderMaterial({
+            uniforms: { 
+                tDiffuse:{value:null}, k1:{value:0.22}, k2:{value:0.18}, 
+                yaw:{value:0}, pitch:{value:0}, panX:{value:0}, panY:{value:0}, zoom:{value:1},
+                texelSize:{value: new THREE.Vector2(1.0/w, 1.0/h)}
+            },
+            vertexShader: el('vert').textContent,
+            fragmentShader: el('frag').textContent
+        });
+        
+        const sceneQ = new THREE.Scene();
+        const camQ = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+        sceneQ.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), mat));
+
+        this.render = (scn, cam) => {
+            scn.updateMatrixWorld(); _s.update(cam);
+            if(mode==='3d') { _s.cameraL.layers.set(1); _s.cameraR.layers.set(2); }
+
+            ren.setRenderTarget(rtL); ren.clear(); ren.render(scn, _s.cameraL);
+            ren.setRenderTarget(rtR); ren.clear(); ren.render(scn, _s.cameraR);
+            ren.setRenderTarget(null);
+
+            let yd = ((head.y - offset.y + Math.PI) % (2*Math.PI)) - Math.PI;
+            let pd = Math.max(-1.57, Math.min(1.57, head.p - offset.p));
+
+            mat.uniforms.yaw.value = -yd * 0.7;
+            mat.uniforms.pitch.value = pd * 0.8;
+            mat.uniforms.panX.value = pan.x;
+            mat.uniforms.panY.value = pan.y;
+            mat.uniforms.zoom.value = zLvls[zIdx];
+
+            ren.setScissorTest(true);
+            const sz = ren.getSize(new THREE.Vector2());
+            
+            mat.uniforms.tDiffuse.value = rtL.texture;
+            ren.setScissor(0,0,sz.width/2,sz.height); ren.setViewport(0,0,sz.width/2,sz.height);
+            ren.render(sceneQ, camQ);
+
+            mat.uniforms.tDiffuse.value = rtR.texture;
+            ren.setScissor(sz.width/2,0,sz.width/2,sz.height); ren.setViewport(sz.width/2,0,sz.width/2,sz.height);
+            ren.render(sceneQ, camQ);
+            ren.setScissorTest(false);
+        }
+    }
+
+    function Tracker() {
+        const euler = new THREE.Euler(), q = new THREE.Quaternion(), qCam = new THREE.Quaternion();
+        const qScr = new THREE.Quaternion(), zAx = new THREE.Vector3(0,0,1), vec = new THREE.Vector3(0,0,-1);
+        qCam.setFromAxisAngle(new THREE.Vector3(1,0,0), -Math.PI/2);
+        
+        let dev = {}, scr = 0, init = false, timer;
+        const onD = (e) => dev = e;
+        const onS = () => scr = (screen.orientation?.angle || window.orientation || 0) * (Math.PI/180);
+        this.start = () => { onS(); window.addEventListener('orientationchange', onS); window.addEventListener('deviceorientation', onD); };
+        
+        this.update = () => {
+            if(!dev.alpha) return;
+            const a = THREE.MathUtils.degToRad(dev.alpha), b = THREE.MathUtils.degToRad(dev.beta), g = THREE.MathUtils.degToRad(dev.gamma);
+            euler.set(b, a, -g, 'YXZ');
+            q.setFromEuler(euler); q.multiply(qCam); q.multiply(qScr.setFromAxisAngle(zAx, -scr));
+            const v = vec.clone().applyQuaternion(q);
+            const p = Math.asin(v.y), y = Math.atan2(v.x, -v.z);
+            
+            if(!init) { 
+                init = true; 
+                clearTimeout(timer); timer = setTimeout(() => { offset.y=head.y; offset.p=head.p; }, 500);
+                head.y = y; head.p = p;
+            } else {
+                head.y = y; head.p = p;
+            }
+        }
+    }
+
+    // --- Controls ---
+    const ui = el('overlay');
+    let fadeT;
+    const showUI = () => { ui.classList.add('visible'); ui.classList.remove('fading'); clearTimeout(fadeT); fadeT = setTimeout(hideUI, 3000); };
+    const hideUI = () => { if(isPlaying) { ui.classList.add('fading'); setTimeout(()=>ui.classList.remove('visible'), 200); } };
+    
+    document.addEventListener('click', (e) => { 
+        if(e.target.closest('.eye-ui')) return; 
+        if(ui.classList.contains('visible')) hideUI(); else showUI(); 
+    });
+
+    // Helper to bind touch and click safely
+    const bind = (sel, fn) => {
+        document.querySelectorAll(sel).forEach(b => {
+            const handler = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                if(!activeVRVideo) return;
+                fn(b, e);
+                showUI();
+            };
+            b.onclick = handler;
+            b.ontouchend = handler;
+        });
+    };
+
+    bind('.pp', () => { 
+        if(isPlaying) activeVRVideo.pause(); else activeVRVideo.play(); 
+        isPlaying = !isPlaying; 
+        document.querySelectorAll('.pp').forEach(x => x.textContent = isPlaying ? '||' : '▶');
+    });
+    
+    bind('.rew', () => activeVRVideo.currentTime = Math.max(0, activeVRVideo.currentTime - 10));
+    bind('.fwd', () => activeVRVideo.currentTime = Math.min(activeVRVideo.duration, activeVRVideo.currentTime + 10));
+    bind('.zoom-in', () => zIdx = Math.min(zLvls.length-1, zIdx+1));
+    bind('.zoom-out', () => zIdx = Math.max(0, zIdx-1));
+    bind('.zr', () => zIdx = 4);
+    bind('.pan-l', () => pan.x -= 0.05);
+    bind('.pan-r', () => pan.x += 0.05);
+    bind('.pan-c', () => { pan.x=0; pan.y=0; offset.y=head.y; offset.p=head.p; });
+
+    // Seek Bar Logic
+    bind('.bar-track', (b, e) => {
+        const rect = b.getBoundingClientRect();
+        // Handle touch or mouse coordinate
+        const cx = (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0].clientX : e.clientX;
+        if(cx !== undefined) {
+            const pos = (cx - rect.left) / rect.width;
+            activeVRVideo.currentTime = pos * activeVRVideo.duration;
+        }
+    });
+    
+    setInterval(() => {
+        if(!activeVRVideo) return;
+        const p = (activeVRVideo.currentTime / activeVRVideo.duration) * 100;
+        document.querySelectorAll('.bar-fill').forEach(f => f.style.width = p+'%');
+    }, 200);
+
+</script>
 </body>
 </html>
