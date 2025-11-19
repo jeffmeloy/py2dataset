@@ -1,45 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - Aspect Corrected</title>
+    <title>VR Player - Aspect & Crop Fix</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#000000">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
+        /* CORE STYLES */
         body { margin: 0; overflow: hidden; background: #000; color: white; font-family: system-ui, -apple-system, sans-serif; user-select: none; -webkit-user-select: none; }
+        
+        /* SETUP SCREEN */
         #setup { position: fixed; inset: 0; z-index: 10000; background: #121212; display: flex; align-items: center; justify-content: center; padding: 20px; }
         #setup.hidden { display: none !important; }
         .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
+        
         h2 { margin: 0; text-align: center; color: #fff; text-transform: uppercase; letter-spacing: 1px; font-size: 18px; }
+        
         .radio-group { display: flex; background: #2c2c2c; border-radius: 8px; padding: 4px; }
         .radio-group label { flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; color: #888; font-weight: 600; transition: 0.2s; }
         .radio-group input:checked + label { background: #007BFF; color: white; }
+        
         .file-btn { background: #333; color: #ddd; padding: 16px; border-radius: 8px; text-align: center; font-weight: 600; border: 1px dashed #555; cursor: pointer; display: block; }
+        
         .preview { background: #000; border-radius: 8px; height: 220px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; overflow: hidden; position: relative; }
         #testVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
         #testVideo.active { display: block; }
+        
         .btn-main { background: #007BFF; color: white; border: none; padding: 16px; font-size: 16px; font-weight: bold; border-radius: 8px; width: 100%; text-transform: uppercase; letter-spacing: 1px; }
         .btn-main:disabled { background: #333; color: #555; }
-        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.95), transparent); padding: 40px 0 20px 0; display: none; z-index: 9999; transition: opacity 0.2s; }
+
+        /* VR OVERLAY CONTROLS */
+        #overlay { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background: linear-gradient(to top, rgba(0,0,0,0.95), transparent); 
+            padding: 40px 0 20px 0; display: none; z-index: 9999; 
+            transition: opacity 0.2s; 
+        }
         #overlay.visible { display: flex; }
         #overlay.fading { opacity: 0; pointer-events: none; }
+        
         .eye-ui { width: 50%; display: flex; flex-direction: column; align-items: center; padding: 0 10px; box-sizing: border-box; }
-        .bar-track { width: 95%; height: 30px; display: flex; align-items: center; cursor: pointer; margin-bottom: 5px; }
-        .bar-bg { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; overflow: hidden; pointer-events: none; }
+        
+        /* SEEK BAR */
+        .bar-track { width: 95%; height: 40px; display: flex; align-items: center; cursor: pointer; margin-bottom: 5px; }
+        .bar-bg { width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; position: relative; overflow: hidden; pointer-events: none; }
         .bar-fill { height: 100%; background: #007BFF; width: 0%; pointer-events: none; }
-        .row { display: flex; gap: 12px; margin-bottom: 10px; }
-        .btn-icon { width: 55px; height: 55px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 20px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        
+        /* BUTTONS */
+        .row { display: flex; gap: 15px; margin-bottom: 15px; }
+        .btn-icon { 
+            width: 60px; height: 60px; border-radius: 50%; 
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.1); 
+            color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; 
+            backdrop-filter: blur(5px); cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
         .btn-icon:active { background: rgba(0,123,255,0.8); transform: scale(0.95); }
-        .btn-pill { height: 40px; padding: 0 20px; border-radius: 20px; background: rgba(255,255,255,0.15); border: none; color: white; font-weight: bold; backdrop-filter: blur(5px); }
+        .btn-pill { height: 44px; padding: 0 24px; border-radius: 22px; background: rgba(255,255,255,0.15); border: none; color: white; font-weight: bold; backdrop-filter: blur(5px); }
     </style>
 </head>
 <body>
 
 <div id="setup">
     <div class="setup-box">
-        <h2>VR Player</h2>
+        <h2>OnePlus 13 VR</h2>
         <div class="radio-group">
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
             <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -57,7 +83,9 @@
 </div>
 
 <template id="uiTemplate">
-    <div class="bar-track"><div class="bar-bg"><div class="bar-fill"></div></div></div>
+    <div class="bar-track">
+        <div class="bar-bg"><div class="bar-fill"></div></div>
+    </div>
     <div class="row">
         <button class="btn-icon pan-l">&larr;</button>
         <button class="btn-icon pan-c">⦾</button>
@@ -91,9 +119,11 @@
     uniform float panX;
     uniform float panY;
     uniform float zoom;
+    uniform float eyeAspect;
     uniform vec2 texelSize;
     varying vec2 vUv;
 
+    // Bicubic Sampling for smoothness
     vec4 textureBicubic(sampler2D tex, vec2 uv) {
         vec2 texSize = 1.0 / texelSize;
         vec2 tc = uv * texSize - 0.5;
@@ -119,8 +149,24 @@
     vec2 distort(vec2 p) {
         vec2 center = vec2(0.5, 0.5);
         vec2 v = p - center;
+        
+        // 1. Correct Aspect Ratio (Un-crunch vertical)
+        v.x *= eyeAspect; 
+        
         float r2 = dot(v, v);
-        return center + v * (1.0 + r2 * (k1 + k2 * r2));
+        float distortion = 1.0 + r2 * (k1 + k2 * r2);
+        
+        v *= distortion;
+        
+        // 2. Restore Aspect Ratio
+        v.x /= eyeAspect; 
+        
+        // 3. FIT WIDTH FIX:
+        // Scaling X by Aspect increases distortion radius, pushing edges out.
+        // We scale the whole image down slightly to bring the lateral edges back in.
+        v *= 0.85; 
+        
+        return center + v;
     }
 
     void main() {
@@ -140,11 +186,13 @@
 </script>
 
 <script>
+    // --- UI Initialization ---
     const el = (id) => document.getElementById(id);
     const tmpl = el('uiTemplate').content;
     el('uiL').appendChild(tmpl.cloneNode(true));
     el('uiR').appendChild(tmpl.cloneNode(true));
 
+    // --- Setup Logic ---
     let videoURL = null, activeVRVideo = null, isPlaying = false;
 
     el('fIn').onchange = (e) => {
@@ -160,16 +208,20 @@
     el('goBtn').onclick = async () => {
         el('testVideo').pause(); 
         const mode = document.querySelector('input[name="mode"]:checked').value;
+        
         if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
             try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
         }
+        
         const d = document.documentElement;
         if(d.requestFullscreen) d.requestFullscreen();
         screen.orientation?.lock('landscape').catch(()=>{});
+        
         el('setup').classList.add('hidden');
         init3D(mode);
     };
 
+    // --- Engine Vars ---
     let renderer, scene, camera, effect, tracker;
     let zIdx = 4; 
     const zLvls = [0.2,0.4,0.6,0.8, 1.0, 1.25,1.5,1.75,2.0,2.5,3.0,4.0];
@@ -202,7 +254,7 @@
             document.body.appendChild(renderer.domElement);
 
             const aspect = mode==='3d' ? (activeVRVideo.videoWidth/2)/activeVRVideo.videoHeight : activeVRVideo.videoWidth/activeVRVideo.videoHeight;
-            const h = (6/aspect) * 1.5;
+            const h = 6/aspect;
 
             const mkEye = (l, off) => {
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.ShaderMaterial({
@@ -217,7 +269,8 @@
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.MeshBasicMaterial({map:videoTex}));
                 m.position.z = -2.5; camera.add(m);
             } else {
-                camera.add(mkEye(1,0.0)); camera.add(mkEye(2,0.5));
+                camera.add(mkEye(1,0.0)); 
+                camera.add(mkEye(2,0.5));
             }
             scene.add(camera);
 
@@ -237,24 +290,15 @@
     }
 
     function StereoEffect(ren, mode) {
-        const _s = new THREE.StereoCamera();
+        const _s = new THREE.StereoCamera(); _s.aspect = 0.5;
         const dpr = window.devicePixelRatio;
         
-        const logicalW = window.innerWidth * dpr / 2;
-        const logicalH = window.innerHeight * dpr;
-        const targetAspect = logicalW / logicalH;
-        
-        const maxDim = 4096;
-        let w, h;
-        if (targetAspect > 1) {
-            w = Math.min(logicalW, maxDim);
-            h = Math.floor(w / targetAspect);
-        } else {
-            h = Math.min(logicalH, maxDim);
-            w = Math.floor(h * targetAspect);
-        }
-        
-        _s.aspect = w / h;
+        // Active Aspect Ratio of one eye (approx 1.1 on OP13)
+        const eyeAspect = (window.innerWidth / 2) / window.innerHeight;
+
+        // 4K Buffer
+        const w = Math.min(window.innerWidth*dpr/2, 4096); 
+        const h = Math.min(window.innerHeight*dpr, 4096);
 
         const rtConf = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBFormat, generateMipmaps: false, depthBuffer: false, stencilBuffer: false };
         const rtL = new THREE.WebGLRenderTarget(w, h, rtConf);
@@ -262,9 +306,12 @@
 
         const mat = new THREE.ShaderMaterial({
             uniforms: { 
-                tDiffuse:{value:null}, k1:{value:0.22}, k2:{value:0.18}, 
+                tDiffuse:{value:null}, 
+                k1:{value:0.20}, // Reduced K1 for Wearility
+                k2:{value:0.10}, // Reduced K2 for Wearility
                 yaw:{value:0}, pitch:{value:0}, panX:{value:0}, panY:{value:0}, zoom:{value:1},
-                texelSize:{value: new THREE.Vector2(1.0/w, 1.0/h)}
+                texelSize:{value: new THREE.Vector2(1.0/w, 1.0/h)},
+                eyeAspect: { value: eyeAspect }
             },
             vertexShader: el('vert').textContent,
             fragmentShader: el('frag').textContent
@@ -273,6 +320,12 @@
         const sceneQ = new THREE.Scene();
         const camQ = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
         sceneQ.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), mat));
+
+        window.addEventListener('resize', () => {
+            const newAspect = (window.innerWidth / 2) / window.innerHeight;
+            mat.uniforms.eyeAspect.value = newAspect;
+            ren.setSize(window.innerWidth, window.innerHeight);
+        });
 
         this.render = (scn, cam) => {
             scn.updateMatrixWorld(); _s.update(cam);
@@ -327,6 +380,7 @@
         }
     }
 
+    // --- Controls Logic ---
     const ui = el('overlay');
     let fadeT;
     const showUI = () => { ui.classList.add('visible'); ui.classList.remove('fading'); clearTimeout(fadeT); fadeT = setTimeout(hideUI, 3000); };
@@ -340,7 +394,11 @@
         });
     };
 
-    bind('.pp', () => { if(isPlaying) activeVRVideo.pause(); else activeVRVideo.play(); isPlaying = !isPlaying; document.querySelectorAll('.pp').forEach(x => x.textContent = isPlaying ? '||' : '▶'); });
+    bind('.pp', () => { 
+        if(isPlaying) activeVRVideo.pause(); else activeVRVideo.play(); 
+        isPlaying = !isPlaying; 
+        document.querySelectorAll('.pp').forEach(x => x.textContent = isPlaying ? '||' : '▶');
+    });
     bind('.rew', () => activeVRVideo.currentTime = Math.max(0, activeVRVideo.currentTime - 10));
     bind('.fwd', () => activeVRVideo.currentTime = Math.min(activeVRVideo.duration, activeVRVideo.currentTime + 10));
     bind('.zoom-in', () => zIdx = Math.min(zLvls.length-1, zIdx+1));
