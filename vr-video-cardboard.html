@@ -39,7 +39,7 @@
 
 <div id="setup">
     <div class="setup-box">
-        <h2>VR Player</h2>
+        <h2>VR Video Player</h2>
         <div class="radio-group">
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
             <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -202,7 +202,7 @@
             document.body.appendChild(renderer.domElement);
 
             const aspect = mode==='3d' ? (activeVRVideo.videoWidth/2)/activeVRVideo.videoHeight : activeVRVideo.videoWidth/activeVRVideo.videoHeight;
-            const h = 6/aspect;
+            const h = (6/aspect) * 1.5;
 
             const mkEye = (l, off) => {
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.ShaderMaterial({
