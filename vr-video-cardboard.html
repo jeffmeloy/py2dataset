@@ -39,7 +39,7 @@
 
 <div id="setup">
     <div class="setup-box">
-        <h2>VR Video Player</h2>
+        <h2>VR Player</h2>
         <div class="radio-group">
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
             <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -177,7 +177,7 @@
 
     function init3D(mode) {
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 100);
+        camera = new THREE.PerspectiveCamera(100, window.innerWidth/window.innerHeight, 0.1, 100);
         
         activeVRVideo = document.createElement('video');
         activeVRVideo.src = videoURL;
