@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video ww Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -693,15 +693,13 @@
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
                 
                 let pitchDelta = headPitch - pitchOffset;
-                pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
                 const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
                 
-                const maxOffset = 0.45 / effectiveZoom;
-                const yawUV = Math.max(-maxOffset, Math.min(maxOffset, -yawDelta * 0.7));
-                const pitchUV = Math.max(-maxOffset, Math.min(maxOffset, -pitchDelta * 0.8));
+                const yawUV = -Math.tanh(yawDelta * 1.2) * 0.45;
+                const pitchUV = -Math.tanh(pitchDelta * 1.2) * 0.45;
                 
                 if (Math.abs(yawUV - cachedYawUV) > 0.001) {
                     distortionMaterial.uniforms.headYawOffset.value = yawUV;
