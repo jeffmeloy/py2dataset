@@ -1,29 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - Aspect & Crop Fix</title>
+    <title>VR Player - Aspect Fixed</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#000000">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        /* CORE STYLES */
         body { margin: 0; overflow: hidden; background: #000; color: white; font-family: system-ui, -apple-system, sans-serif; user-select: none; -webkit-user-select: none; }
         
-        /* SETUP SCREEN */
+        /* SETUP UI */
         #setup { position: fixed; inset: 0; z-index: 10000; background: #121212; display: flex; align-items: center; justify-content: center; padding: 20px; }
         #setup.hidden { display: none !important; }
         .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
         
         h2 { margin: 0; text-align: center; color: #fff; text-transform: uppercase; letter-spacing: 1px; font-size: 18px; }
-        
         .radio-group { display: flex; background: #2c2c2c; border-radius: 8px; padding: 4px; }
         .radio-group label { flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; color: #888; font-weight: 600; transition: 0.2s; }
         .radio-group input:checked + label { background: #007BFF; color: white; }
         
         .file-btn { background: #333; color: #ddd; padding: 16px; border-radius: 8px; text-align: center; font-weight: 600; border: 1px dashed #555; cursor: pointer; display: block; }
-        
         .preview { background: #000; border-radius: 8px; height: 220px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; overflow: hidden; position: relative; }
         #testVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
         #testVideo.active { display: block; }
@@ -31,7 +28,7 @@
         .btn-main { background: #007BFF; color: white; border: none; padding: 16px; font-size: 16px; font-weight: bold; border-radius: 8px; width: 100%; text-transform: uppercase; letter-spacing: 1px; }
         .btn-main:disabled { background: #333; color: #555; }
 
-        /* VR OVERLAY CONTROLS */
+        /* VR OVERLAY */
         #overlay { 
             position: fixed; bottom: 0; left: 0; right: 0; 
             background: linear-gradient(to top, rgba(0,0,0,0.95), transparent); 
@@ -119,11 +116,11 @@
     uniform float panX;
     uniform float panY;
     uniform float zoom;
-    uniform float eyeAspect;
+    uniform float videoScaleY; // Aspect Ratio Fix
     uniform vec2 texelSize;
     varying vec2 vUv;
 
-    // Bicubic Sampling for smoothness
+    // Bicubic Sampling
     vec4 textureBicubic(sampler2D tex, vec2 uv) {
         vec2 texSize = 1.0 / texelSize;
         vec2 tc = uv * texSize - 0.5;
@@ -149,32 +146,27 @@
     vec2 distort(vec2 p) {
         vec2 center = vec2(0.5, 0.5);
         vec2 v = p - center;
-        
-        // 1. Correct Aspect Ratio (Un-crunch vertical)
-        v.x *= eyeAspect; 
-        
+        // Minimal distortion for now to prevent edge cropping
         float r2 = dot(v, v);
         float distortion = 1.0 + r2 * (k1 + k2 * r2);
-        
-        v *= distortion;
-        
-        // 2. Restore Aspect Ratio
-        v.x /= eyeAspect; 
-        
-        // 3. FIT WIDTH FIX:
-        // Scaling X by Aspect increases distortion radius, pushing edges out.
-        // We scale the whole image down slightly to bring the lateral edges back in.
-        v *= 0.85; 
-        
-        return center + v;
+        return center + v * distortion;
     }
 
     void main() {
         vec2 center = vec2(0.5, 0.5);
+        
+        // 1. Distort
         vec2 uv = distort(vUv);
+        
+        // 2. Apply Zoom & Pan
         uv = (uv - center) / zoom;
         uv.x += yaw + panX;
         uv.y += pitch + panY;
+        
+        // 3. Apply Aspect Ratio Correction (Scale Y)
+        // This unsquishes the video vertically by scaling texture coordinates up
+        uv.y *= videoScaleY;
+        
         uv += center;
 
         if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
@@ -192,7 +184,7 @@
     el('uiL').appendChild(tmpl.cloneNode(true));
     el('uiR').appendChild(tmpl.cloneNode(true));
 
-    // --- Setup Logic ---
+    // --- Setup ---
     let videoURL = null, activeVRVideo = null, isPlaying = false;
 
     el('fIn').onchange = (e) => {
@@ -208,23 +200,23 @@
     el('goBtn').onclick = async () => {
         el('testVideo').pause(); 
         const mode = document.querySelector('input[name="mode"]:checked').value;
-        
         if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
             try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
         }
-        
         const d = document.documentElement;
         if(d.requestFullscreen) d.requestFullscreen();
         screen.orientation?.lock('landscape').catch(()=>{});
-        
         el('setup').classList.add('hidden');
         init3D(mode);
     };
 
-    // --- Engine Vars ---
+    // --- Engine ---
     let renderer, scene, camera, effect, tracker;
+    
+    // Zoom Logic: Start more zoomed out (0.7) to prevent cropping
     let zIdx = 4; 
-    const zLvls = [0.2,0.4,0.6,0.8, 1.0, 1.25,1.5,1.75,2.0,2.5,3.0,4.0];
+    const zLvls = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.4, 1.6, 1.8, 2.0];
+    
     let pan = {x:0, y:0}, head = {y:0, p:0}, offset = {y:0, p:0};
 
     function init3D(mode) {
@@ -269,8 +261,7 @@
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(6,h), new THREE.MeshBasicMaterial({map:videoTex}));
                 m.position.z = -2.5; camera.add(m);
             } else {
-                camera.add(mkEye(1,0.0)); 
-                camera.add(mkEye(2,0.5));
+                camera.add(mkEye(1,0.0)); camera.add(mkEye(2,0.5));
             }
             scene.add(camera);
 
@@ -293,10 +284,25 @@
         const _s = new THREE.StereoCamera(); _s.aspect = 0.5;
         const dpr = window.devicePixelRatio;
         
-        // Active Aspect Ratio of one eye (approx 1.1 on OP13)
-        const eyeAspect = (window.innerWidth / 2) / window.innerHeight;
+        // Aspect Ratio Calculation
+        // Video Aspect Ratio
+        const vidW = activeVRVideo.videoWidth;
+        const vidH = activeVRVideo.videoHeight;
+        const vidAspect = (mode === '3d' ? vidW/2 : vidW) / vidH;
 
-        // 4K Buffer
+        // Eye Aspect Ratio (Screen)
+        const eyeW = window.innerWidth / 2;
+        const eyeH = window.innerHeight;
+        const eyeAspect = eyeW / eyeH;
+
+        // Correction Factor: If video is wider than screen, we need to scale Y up (zoom out Y)
+        // to prevent it from being squeezed.
+        let scaleY = vidAspect / eyeAspect;
+        
+        // If the result is < 1 (video taller than screen), we might need to scale X instead,
+        // but generally for landscape video on phone, video is wider.
+        if(scaleY < 1.0) scaleY = 1.0; // Prevent distortion if video fits naturally
+
         const w = Math.min(window.innerWidth*dpr/2, 4096); 
         const h = Math.min(window.innerHeight*dpr, 4096);
 
@@ -307,11 +313,11 @@
         const mat = new THREE.ShaderMaterial({
             uniforms: { 
                 tDiffuse:{value:null}, 
-                k1:{value:0.20}, // Reduced K1 for Wearility
-                k2:{value:0.10}, // Reduced K2 for Wearility
+                k1:{value:0.10}, // Low distortion to minimize cropping
+                k2:{value:0.05}, 
                 yaw:{value:0}, pitch:{value:0}, panX:{value:0}, panY:{value:0}, zoom:{value:1},
                 texelSize:{value: new THREE.Vector2(1.0/w, 1.0/h)},
-                eyeAspect: { value: eyeAspect }
+                videoScaleY: { value: scaleY }
             },
             vertexShader: el('vert').textContent,
             fragmentShader: el('frag').textContent
@@ -322,9 +328,9 @@
         sceneQ.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), mat));
 
         window.addEventListener('resize', () => {
-            const newAspect = (window.innerWidth / 2) / window.innerHeight;
-            mat.uniforms.eyeAspect.value = newAspect;
             ren.setSize(window.innerWidth, window.innerHeight);
+            const newEyeAspect = (window.innerWidth/2) / window.innerHeight;
+            mat.uniforms.videoScaleY.value = vidAspect / newEyeAspect;
         });
 
         this.render = (scn, cam) => {
@@ -380,7 +386,7 @@
         }
     }
 
-    // --- Controls Logic ---
+    // --- Controls ---
     const ui = el('overlay');
     let fadeT;
     const showUI = () => { ui.classList.add('visible'); ui.classList.remove('fading'); clearTimeout(fadeT); fadeT = setTimeout(hideUI, 3000); };
