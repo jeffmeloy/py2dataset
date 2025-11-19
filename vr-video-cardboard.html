@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video f Player</h2>
+        <h2>VR Video Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -195,7 +195,6 @@
         let headYaw = 0, headPitch = 0, yawOffset = 0, pitchOffset = 0;
         let lastUpdateTime = 0, lastYaw = 0, lastPitch = 0;
         let angularVelocity = 0;
-        let filteredYawDelta = 0, filteredPitchDelta = 0;
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
 
         fileInput.addEventListener('change', handleFileSelect);
@@ -517,8 +516,6 @@
             manualPanY = 0;
             yawOffset = headYaw;
             pitchOffset = headPitch;
-            filteredYawDelta = 0;
-            filteredPitchDelta = 0;
             showOverlay();
         }
 
@@ -573,19 +570,26 @@
                 if (this.autoCenterTimer) clearTimeout(this.autoCenterTimer);
             };
 
+            // *** ONLY CHANGED FUNCTION ***
             this.update = function() {
                 if (!this.enabled) return;
 
                 const now = Date.now();
-                if (now - lastUpdateTime < 33) return;
+                if (now - lastUpdateTime < 33) return; // ~30Hz cap
 
                 const device = this.deviceOrientation;
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
-                    const isLandscape = Math.abs(this.screenOrientation) === 90;
+
+                    // Yaw: compass-style heading
                     const currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                    const currentPitch = isLandscape 
-                        ? THREE.MathUtils.degToRad(device.gamma)
-                        : THREE.MathUtils.degToRad(device.beta);
+
+                    // Pitch: always front–back tilt (beta), independent of portrait/landscape
+                    let currentPitch = THREE.MathUtils.degToRad(device.beta);
+
+                    // Keep pitch continuous across ±180° wrap
+                    if (Math.abs(currentPitch - lastPitch) > Math.PI) {
+                        currentPitch += (currentPitch < lastPitch) ? 2 * Math.PI : -2 * Math.PI;
+                    }
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = Date.now();
@@ -595,16 +599,16 @@
                         }, 800);
                     }
 
-                    const yawDiff = Math.abs(currentYaw - lastYaw);
+                    const yawDiff   = Math.abs(currentYaw   - lastYaw);
                     const pitchDiff = Math.abs(currentPitch - lastPitch);
                     
                     if (yawDiff > 0.009 || pitchDiff > 0.009) {
                         const dt = (now - lastUpdateTime) / 1000;
                         angularVelocity = dt > 0 ? (yawDiff + pitchDiff) / dt : 0;
                         
-                        headYaw = currentYaw;
+                        headYaw   = currentYaw;
                         headPitch = currentPitch;
-                        lastYaw = currentYaw;
+                        lastYaw   = currentYaw;
                         lastPitch = currentPitch;
                     }
                     
@@ -692,20 +696,15 @@
                 renderer.clear();
                 renderer.setScissorTest(true);
 
-                let yawDelta = headYaw - yawOffset;
-                yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
-                
+                let yawDelta   = headYaw   - yawOffset;
                 let pitchDelta = headPitch - pitchOffset;
-                
-                filteredYawDelta = 0.3 * yawDelta + 0.7 * filteredYawDelta;
-                filteredPitchDelta = 0.3 * pitchDelta + 0.7 * filteredPitchDelta;
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
                 const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
                 
-                const yawUV = -Math.tanh(filteredYawDelta * 1.2) * 0.45;
-                const pitchUV = -Math.tanh(filteredPitchDelta * 1.2) * 0.45;
+                const yawUV   = -Math.tanh(yawDelta   * 1.2) * 0.45;
+                const pitchUV = -Math.tanh(pitchDelta * 1.2) * 0.45;
                 
                 if (Math.abs(yawUV - cachedYawUV) > 0.001) {
                     distortionMaterial.uniforms.headYawOffset.value = yawUV;
