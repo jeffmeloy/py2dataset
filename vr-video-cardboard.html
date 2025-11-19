@@ -38,7 +38,7 @@
 </head>
 <body>
     <div id="setup">
-        <h2>VR Video j Player</h2>
+        <h2>VR Video ww Player</h2>
         <div class="section">
             <strong>Video Type</strong><br>
             <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
@@ -167,7 +167,12 @@
             uv.x += headYawOffset + manualPanOffset;
             uv.y += headPitchOffset + manualTiltOffset;
             uv += eyeCenter;
-            gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
+            
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            } else {
+                gl_FragColor = zoomLevel > 1.5 ? sampleLanczos2(uv) : texture2D(tDiffuse, uv);
+            }
         }
     </script>
 
@@ -575,13 +580,9 @@
                 if (device && device.alpha !== null && device.beta !== null && device.gamma !== null) {
                     const isLandscape = Math.abs(this.screenOrientation) === 90;
                     const currentYaw = THREE.MathUtils.degToRad(device.alpha);
-                    let currentPitch = isLandscape 
+                    const currentPitch = isLandscape 
                         ? THREE.MathUtils.degToRad(device.gamma)
                         : THREE.MathUtils.degToRad(device.beta);
-
-                    if (Math.abs(currentPitch - lastPitch) > Math.PI) {
-                        currentPitch += (currentPitch < lastPitch) ? 2 * Math.PI : -2 * Math.PI;
-                    }
 
                     if (!this.firstReadingTime) {
                         this.firstReadingTime = Date.now();
@@ -690,15 +691,17 @@
 
                 let yawDelta = headYaw - yawOffset;
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI;
-                const yawUV = -yawDelta * 0.7;
                 
                 let pitchDelta = headPitch - pitchOffset;
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta));
-                const pitchUV = -pitchDelta * 0.8;
                 
                 const currentZoom = zoomLevels[currentZoomLevel];
                 const isMovingFast = angularVelocity > 1.5;
                 const effectiveZoom = isMovingFast ? Math.min(currentZoom, 1.5) : currentZoom;
+                
+                const maxOffset = 0.45 / effectiveZoom;
+                const yawUV = Math.max(-maxOffset, Math.min(maxOffset, -yawDelta * 0.7));
+                const pitchUV = Math.max(-maxOffset, Math.min(maxOffset, -pitchDelta * 0.8));
                 
                 if (Math.abs(yawUV - cachedYawUV) > 0.001) {
                     distortionMaterial.uniforms.headYawOffset.value = yawUV;
