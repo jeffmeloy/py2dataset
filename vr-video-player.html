@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - Native Res Buffer</title>
+    <title>VR Video Player - Optimized</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -246,7 +246,7 @@
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
     </script>
 
-    <!-- FRAGMENT SHADER (CORRECTED BICUBIC SAMPLER) -->
+    <!-- FRAGMENT SHADER (16-TAP BICUBIC) -->
     <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
         uniform sampler2D tDiffuse;
         uniform vec2 texSize; 
@@ -260,20 +260,17 @@
         uniform float zoomLevel;
         varying vec2 vUv;
 
-        // 16-Tap Catmull-Rom with precise weighting
         vec4 textureBicubic(sampler2D sampler, vec2 texCoords, vec2 texSize) {
             vec2 invTexSize = 1.0 / texSize;
             vec2 pos = texCoords * texSize;
-            vec2 ipos = floor(pos - 0.5) + 0.5; // Align to pixel center
-            vec2 f = pos - ipos; // Subpixel offset
+            vec2 ipos = floor(pos - 0.5) + 0.5; 
+            vec2 f = pos - ipos; 
 
-            // Catmull-Rom weights
             vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
             vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
             vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
             vec2 w3 = f * f * (-0.5 + 0.5 * f);
 
-            // Helper to sample row
             vec4 row0 = texture2D(sampler, (ipos + vec2(-1, -1)) * invTexSize) * w0.x +
                         texture2D(sampler, (ipos + vec2( 0, -1)) * invTexSize) * w1.x +
                         texture2D(sampler, (ipos + vec2( 1, -1)) * invTexSize) * w2.x +
@@ -439,7 +436,6 @@
 
                 createScreenMeshes();
 
-                // FIX: Pass video object to StereoEffect so it can check resolution
                 effect = new THREE.StereoEffect(renderer, video);
                 effect.setSize(window.innerWidth, window.innerHeight);
 
@@ -686,40 +682,39 @@
             _stereo.aspect = 0.5;
             const dpr = window.devicePixelRatio || 1;
             
-            // FIX: Determine max resolution between Screen and Source Video
             const videoW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 0;
             const videoH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 0;
-            
             const calcWidth = (w) => Math.min(Math.max(Math.floor(w * dpr), videoW), 4096);
             const calcHeight = (h) => Math.min(Math.max(Math.floor(h * dpr), videoH), 4096);
 
             let rtWidth = calcWidth(window.innerWidth);
             let rtHeight = calcHeight(window.innerHeight);
             
-            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+            
             const distortionMaterial = new THREE.ShaderMaterial({
                 uniforms: { tDiffuse: { value: null }, texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, k1: { value: 0.22 }, k2: { value: 0.18 }, headYawOffset: { value: 0.0 }, headPitchOffset: { value: 0.0 }, manualPanOffset: { value: 0.0 }, manualTiltOffset: { value: 0.0 }, ipdOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
             let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
+            // NEW: Cache variables initialized to infinity to ensure first update happens
+            let cachedManualPanX = Infinity, cachedManualPanY = Infinity;
+
             const quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), distortionMaterial);
             const orthoScene = new THREE.Scene(); const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
             orthoScene.add(quadMesh); const sizeVec = new THREE.Vector2();
             
             this.setSize = function(width, height) {
                 renderer.setSize(width, height); const dpr = window.devicePixelRatio || 1;
-                
-                // FIX: Recalculate based on video/screen max on resize
                 const newW = calcWidth(width);
                 const newH = calcHeight(height);
-                
                 if (newW !== rtWidth || newH !== rtHeight) { 
                     renderTargetL.dispose(); renderTargetR.dispose(); 
                     rtWidth = newW; rtHeight = newH; 
-                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }); 
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }); 
+                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); 
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); 
                     distortionMaterial.uniforms.texSize.value.set(rtWidth, rtHeight);
                 }
             };
@@ -748,9 +743,17 @@
                 if (Math.abs(pitchUV - cachedPitchUV) > 0.0001) { distortionMaterial.uniforms.headPitchOffset.value = pitchUV; cachedPitchUV = pitchUV; }
                 if (currentZoom !== cachedZoom) { distortionMaterial.uniforms.zoomLevel.value = currentZoom; cachedZoom = currentZoom; }
                 
-                distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
-                distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
+                // OPTIMIZATION: Only update uniforms if values have changed
+                if (Math.abs(manualPanX - cachedManualPanX) > 0.00001) {
+                    distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
+                    cachedManualPanX = manualPanX;
+                }
+                if (Math.abs(manualPanY - cachedManualPanY) > 0.00001) {
+                    distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
+                    cachedManualPanY = manualPanY;
+                }
                 
+                // NOTE: ipdOffset is updated per eye draw call (switches sign) so we don't cache it per frame
                 distortionMaterial.uniforms.ipdOffset.value = userIPDOffset; 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height); renderer.setViewport(0, 0, halfWidth, sizeVec.height);
