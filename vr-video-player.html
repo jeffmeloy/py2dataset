@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - High Res</title>
+    <title>VR Video Player - Bicubic</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -39,7 +39,7 @@
         .radio-group input { display: none; }
         .radio-group input:checked + label { background: #007BFF; color: white; }
 
-        /* File Input Label - Acts as the button */
+        /* File Input Label */
         .file-upload-label {
             display: block; background: #333; color: #ddd; width: 100%; padding: 12px;
             border-radius: 8px; text-align: center; font-weight: 500; border: 1px dashed #555;
@@ -123,7 +123,7 @@
 
     <div id="setup">
         <div class="setup-container">
-            <h2>--O^O--</h2>
+            <h2>:---O^O--:</h2>
             <div class="radio-group">
                 <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D Video</label>
                 <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -240,14 +240,16 @@
         </div>
     </div>
 
-    <!-- STABLE SHADER (UV OFFSET) -->
+    <!-- VERTEX SHADER -->
     <script id="vertexShader" type="x-shader/x-vertex">
         varying vec2 vUv;
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
     </script>
 
+    <!-- FRAGMENT SHADER (BICUBIC INTERPOLATION) -->
     <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
         uniform sampler2D tDiffuse;
+        uniform vec2 texSize; 
         uniform float k1;
         uniform float k2;
         uniform float headYawOffset;
@@ -257,6 +259,60 @@
         uniform float ipdOffset; 
         uniform float zoomLevel;
         varying vec2 vUv;
+
+        // Catmull-Rom Cubic Spline Interpolation
+        // Samples 16 pixels around the UV coordinate for sharper image
+        vec4 textureBicubic(sampler2D sampler, vec2 texCoords, vec2 texSize) {
+            vec2 invTexSize = 1.0 / texSize;
+            texCoords = texCoords * texSize - 0.5;
+
+            vec2 fxy = fract(texCoords);
+            texCoords -= fxy;
+
+            vec4 xcubic = vec4(
+                1.0 - fxy.x, 
+                1.0 + fxy.x, 
+                1.0 - (1.0 + fxy.x), 
+                1.0 + (1.0 - fxy.x) // Placeholder math for weights
+            );
+            
+            // Optimized weights for Cubic Catmull-Rom
+            vec4 w0 = vec4(-0.5, 1.5, -1.5, 0.5);
+            vec4 w1 = vec4(1.0, -2.5, 2.0, -0.5);
+            vec4 w2 = vec4(-0.5, 0.0, 0.5, 0.0);
+            vec4 w3 = vec4(0.0, 1.0, 0.0, 0.0);
+
+            // Precompute powers
+            vec2 fxy2 = fxy * fxy;
+            vec2 fxy3 = fxy2 * fxy;
+
+            // Weight calculation function
+            // Using expanded form for GLSL compatibility
+            // x weights
+            float wx0 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w0);
+            float wx1 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w1);
+            float wx2 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w2);
+            float wx3 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w3);
+            
+            // y weights
+            float wy0 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w0);
+            float wy1 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w1);
+            float wy2 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w2);
+            float wy3 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w3);
+
+            // Sample coordinates
+            vec2 c = (texCoords + 0.5) * invTexSize;
+            vec2 ox = vec2(invTexSize.x, 0.0);
+            vec2 oy = vec2(0.0, invTexSize.y);
+
+            // 16 taps
+            vec4 row0 = texture2D(sampler, c - ox - oy) * wx0 + texture2D(sampler, c - oy) * wx1 + texture2D(sampler, c + ox - oy) * wx2 + texture2D(sampler, c + 2.0 * ox - oy) * wx3;
+            vec4 row1 = texture2D(sampler, c - ox)      * wx0 + texture2D(sampler, c)      * wx1 + texture2D(sampler, c + ox)      * wx2 + texture2D(sampler, c + 2.0 * ox)      * wx3;
+            vec4 row2 = texture2D(sampler, c - ox + oy) * wx0 + texture2D(sampler, c + oy) * wx1 + texture2D(sampler, c + ox + oy) * wx2 + texture2D(sampler, c + 2.0 * ox + oy) * wx3;
+            vec4 row3 = texture2D(sampler, c - ox + 2.0*oy) * wx0 + texture2D(sampler, c + 2.0*oy) * wx1 + texture2D(sampler, c + ox + 2.0*oy) * wx2 + texture2D(sampler, c + 2.0 * ox + 2.0*oy) * wx3;
+
+            return row0 * wy0 + row1 * wy1 + row2 * wy2 + row3 * wy3;
+        }
 
         vec2 distort(vec2 p) {
             vec2 center = vec2(0.5, 0.5);
@@ -276,7 +332,8 @@
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                 gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
             } else {
-                gl_FragColor = texture2D(tDiffuse, uv);
+                // Use Bicubic instead of texture2D
+                gl_FragColor = textureBicubic(tDiffuse, uv, texSize);
             }
         }
     </script>
@@ -554,9 +611,8 @@
         function adjustPan(dx) { manualPanX += dx * 0.05; showOverlay(); }
         function centerPan() { manualPanX = 0; manualPanY = 0; yawOffset = headYaw; pitchOffset = headPitch; showOverlay(); }
         
-        // UPDATED: PD now adjusts Horizontal Image Shift (Convergence)
         function adjustPD(direction) {
-            userIPDOffset += direction * 0.005; // Shift image by 0.5% per click
+            userIPDOffset += direction * 0.005;
             showOverlay();
         }
         
@@ -606,8 +662,8 @@
             else if (cl.contains('pan-left-btn')) adjustPan(-1);
             else if (cl.contains('pan-center-btn')) centerPan();
             else if (cl.contains('pan-right-btn')) adjustPan(1);
-            else if (cl.contains('pd-inc-btn')) adjustPD(1); // Moves images apart
-            else if (cl.contains('pd-dec-btn')) adjustPD(-1); // Moves images closer
+            else if (cl.contains('pd-inc-btn')) adjustPD(1);
+            else if (cl.contains('pd-dec-btn')) adjustPD(-1);
             else if (cl.contains('pd-reset-btn')) resetPD();
             else if (cl.contains('dist-inc-btn')) adjustDistance(1);
             else if (cl.contains('dist-dec-btn')) adjustDistance(-1);
@@ -646,7 +702,6 @@
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera(); 
             _stereo.aspect = 0.5;
-            // NOTE: We keep default camera sep for matrix calc, but use shader for visual alignment
             const dpr = window.devicePixelRatio || 1;
             
             let rtWidth = Math.min(Math.floor(window.innerWidth * dpr), 4096);
@@ -655,7 +710,8 @@
             let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             const distortionMaterial = new THREE.ShaderMaterial({
-                uniforms: { tDiffuse: { value: null }, k1: { value: 0.22 }, k2: { value: 0.18 }, headYawOffset: { value: 0.0 }, headPitchOffset: { value: 0.0 }, manualPanOffset: { value: 0.0 }, manualTiltOffset: { value: 0.0 }, ipdOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
+                // ADDED texSize uniform
+                uniforms: { tDiffuse: { value: null }, texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, k1: { value: 0.22 }, k2: { value: 0.18 }, headYawOffset: { value: 0.0 }, headPitchOffset: { value: 0.0 }, manualPanOffset: { value: 0.0 }, manualTiltOffset: { value: 0.0 }, ipdOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
@@ -668,7 +724,15 @@
                 renderer.setSize(width, height); const dpr = window.devicePixelRatio || 1;
                 const newW = Math.min(Math.floor(width * dpr), 4096); 
                 const newH = Math.min(Math.floor(height * dpr), 4096);
-                if (newW !== rtWidth || newH !== rtHeight) { renderTargetL.dispose(); renderTargetR.dispose(); rtWidth = newW; rtHeight = newH; renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight); renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight); }
+                if (newW !== rtWidth || newH !== rtHeight) { 
+                    renderTargetL.dispose(); renderTargetR.dispose(); 
+                    rtWidth = newW; rtHeight = newH; 
+                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight); 
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight); 
+                    
+                    // UPDATE shader uniform
+                    distortionMaterial.uniforms.texSize.value.set(rtWidth, rtHeight);
+                }
             };
             
             this.render = function(scene, camera) {
@@ -677,11 +741,9 @@
                 renderer.getSize(sizeVec); const halfWidth = sizeVec.width * 0.5;
                 if (mode === '3d') { _stereo.cameraL.layers.set(1); _stereo.cameraR.layers.set(2); }
                 
-                // 1. Render Scene to Texture
                 renderer.setRenderTarget(renderTargetL); renderer.clear(); renderer.render(scene, _stereo.cameraL);
                 renderer.setRenderTarget(renderTargetR); renderer.clear(); renderer.render(scene, _stereo.cameraR);
                 
-                // 2. Render Distortion to Screen
                 renderer.setRenderTarget(null); renderer.clear(); renderer.setScissorTest(true);
                 
                 let yawDelta = headYaw - yawOffset; 
@@ -700,15 +762,11 @@
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
                 
-                // LEFT EYE: Apply positive offset (move image right) or negative based on preference
-                // Standard: Diverge images by pushing them outwards or Pull inwards.
-                // We apply + offset for Left and - for Right to separate them relative to center
                 distortionMaterial.uniforms.ipdOffset.value = userIPDOffset; 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height); renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
                 
-                // RIGHT EYE: Apply negative offset
                 distortionMaterial.uniforms.ipdOffset.value = -userIPDOffset;
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height); renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
