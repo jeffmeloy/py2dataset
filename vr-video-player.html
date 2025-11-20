@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - Bicubic</title>
+    <title>VR Video Player - Bicubic Fixed</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -123,7 +123,7 @@
 
     <div id="setup">
         <div class="setup-container">
-            <h2>:---O^O--:</h2>
+            <h2>--O^O--</h2>
             <div class="radio-group">
                 <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D Video</label>
                 <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -246,7 +246,7 @@
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
     </script>
 
-    <!-- FRAGMENT SHADER (BICUBIC INTERPOLATION) -->
+    <!-- FRAGMENT SHADER (CORRECTED BICUBIC SAMPLER) -->
     <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
         uniform sampler2D tDiffuse;
         uniform vec2 texSize; 
@@ -260,58 +260,44 @@
         uniform float zoomLevel;
         varying vec2 vUv;
 
-        // Catmull-Rom Cubic Spline Interpolation
-        // Samples 16 pixels around the UV coordinate for sharper image
+        // 16-Tap Catmull-Rom with precise weighting
         vec4 textureBicubic(sampler2D sampler, vec2 texCoords, vec2 texSize) {
             vec2 invTexSize = 1.0 / texSize;
-            texCoords = texCoords * texSize - 0.5;
+            vec2 pos = texCoords * texSize;
+            vec2 ipos = floor(pos - 0.5) + 0.5; // Align to pixel center
+            vec2 f = pos - ipos; // Subpixel offset
 
-            vec2 fxy = fract(texCoords);
-            texCoords -= fxy;
+            // Catmull-Rom weights
+            vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+            vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+            vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+            vec2 w3 = f * f * (-0.5 + 0.5 * f);
 
-            vec4 xcubic = vec4(
-                1.0 - fxy.x, 
-                1.0 + fxy.x, 
-                1.0 - (1.0 + fxy.x), 
-                1.0 + (1.0 - fxy.x) // Placeholder math for weights
-            );
+            // Y-offsets (relative to ipos)
+            float wSumY = w0.y + w1.y + w2.y + w3.y;
             
-            // Optimized weights for Cubic Catmull-Rom
-            vec4 w0 = vec4(-0.5, 1.5, -1.5, 0.5);
-            vec4 w1 = vec4(1.0, -2.5, 2.0, -0.5);
-            vec4 w2 = vec4(-0.5, 0.0, 0.5, 0.0);
-            vec4 w3 = vec4(0.0, 1.0, 0.0, 0.0);
+            // Helper to sample row
+            vec4 row0 = texture2D(sampler, (ipos + vec2(-1, -1)) * invTexSize) * w0.x +
+                        texture2D(sampler, (ipos + vec2( 0, -1)) * invTexSize) * w1.x +
+                        texture2D(sampler, (ipos + vec2( 1, -1)) * invTexSize) * w2.x +
+                        texture2D(sampler, (ipos + vec2( 2, -1)) * invTexSize) * w3.x;
 
-            // Precompute powers
-            vec2 fxy2 = fxy * fxy;
-            vec2 fxy3 = fxy2 * fxy;
+            vec4 row1 = texture2D(sampler, (ipos + vec2(-1,  0)) * invTexSize) * w0.x +
+                        texture2D(sampler, (ipos + vec2( 0,  0)) * invTexSize) * w1.x +
+                        texture2D(sampler, (ipos + vec2( 1,  0)) * invTexSize) * w2.x +
+                        texture2D(sampler, (ipos + vec2( 2,  0)) * invTexSize) * w3.x;
 
-            // Weight calculation function
-            // Using expanded form for GLSL compatibility
-            // x weights
-            float wx0 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w0);
-            float wx1 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w1);
-            float wx2 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w2);
-            float wx3 = dot(vec4(fxy3.x, fxy2.x, fxy.x, 1.0), w3);
-            
-            // y weights
-            float wy0 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w0);
-            float wy1 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w1);
-            float wy2 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w2);
-            float wy3 = dot(vec4(fxy3.y, fxy2.y, fxy.y, 1.0), w3);
+            vec4 row2 = texture2D(sampler, (ipos + vec2(-1,  1)) * invTexSize) * w0.x +
+                        texture2D(sampler, (ipos + vec2( 0,  1)) * invTexSize) * w1.x +
+                        texture2D(sampler, (ipos + vec2( 1,  1)) * invTexSize) * w2.x +
+                        texture2D(sampler, (ipos + vec2( 2,  1)) * invTexSize) * w3.x;
 
-            // Sample coordinates
-            vec2 c = (texCoords + 0.5) * invTexSize;
-            vec2 ox = vec2(invTexSize.x, 0.0);
-            vec2 oy = vec2(0.0, invTexSize.y);
+            vec4 row3 = texture2D(sampler, (ipos + vec2(-1,  2)) * invTexSize) * w0.x +
+                        texture2D(sampler, (ipos + vec2( 0,  2)) * invTexSize) * w1.x +
+                        texture2D(sampler, (ipos + vec2( 1,  2)) * invTexSize) * w2.x +
+                        texture2D(sampler, (ipos + vec2( 2,  2)) * invTexSize) * w3.x;
 
-            // 16 taps
-            vec4 row0 = texture2D(sampler, c - ox - oy) * wx0 + texture2D(sampler, c - oy) * wx1 + texture2D(sampler, c + ox - oy) * wx2 + texture2D(sampler, c + 2.0 * ox - oy) * wx3;
-            vec4 row1 = texture2D(sampler, c - ox)      * wx0 + texture2D(sampler, c)      * wx1 + texture2D(sampler, c + ox)      * wx2 + texture2D(sampler, c + 2.0 * ox)      * wx3;
-            vec4 row2 = texture2D(sampler, c - ox + oy) * wx0 + texture2D(sampler, c + oy) * wx1 + texture2D(sampler, c + ox + oy) * wx2 + texture2D(sampler, c + 2.0 * ox + oy) * wx3;
-            vec4 row3 = texture2D(sampler, c - ox + 2.0*oy) * wx0 + texture2D(sampler, c + 2.0*oy) * wx1 + texture2D(sampler, c + ox + 2.0*oy) * wx2 + texture2D(sampler, c + 2.0 * ox + 2.0*oy) * wx3;
-
-            return row0 * wy0 + row1 * wy1 + row2 * wy2 + row3 * wy3;
+            return row0 * w0.y + row1 * w1.y + row2 * w2.y + row3 * w3.y;
         }
 
         vec2 distort(vec2 p) {
@@ -332,7 +318,6 @@
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                 gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
             } else {
-                // Use Bicubic instead of texture2D
                 gl_FragColor = textureBicubic(tDiffuse, uv, texSize);
             }
         }
@@ -364,8 +349,7 @@
 
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
         
-        // Depth perception settings
-        let userIPDOffset = 0.0; // Software IPD (Image Shift)
+        let userIPDOffset = 0.0; 
         let screenDistance = 3.0;
         let screenWidth = 6.0;
         const defaultDistance = 3.0;
@@ -707,10 +691,10 @@
             let rtWidth = Math.min(Math.floor(window.innerWidth * dpr), 4096);
             let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), 4096);
             
-            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+            // FIX: Use NEAREST filtering to prevent "gridding" when using manual Bicubic shader
+            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
             const distortionMaterial = new THREE.ShaderMaterial({
-                // ADDED texSize uniform
                 uniforms: { tDiffuse: { value: null }, texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, k1: { value: 0.22 }, k2: { value: 0.18 }, headYawOffset: { value: 0.0 }, headPitchOffset: { value: 0.0 }, manualPanOffset: { value: 0.0 }, manualTiltOffset: { value: 0.0 }, ipdOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
@@ -727,10 +711,9 @@
                 if (newW !== rtWidth || newH !== rtHeight) { 
                     renderTargetL.dispose(); renderTargetR.dispose(); 
                     rtWidth = newW; rtHeight = newH; 
-                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight); 
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight); 
-                    
-                    // UPDATE shader uniform
+                    // FIX: Ensure resized targets also use NearestFilter
+                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }); 
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter }); 
                     distortionMaterial.uniforms.texSize.value.set(rtWidth, rtHeight);
                 }
             };
