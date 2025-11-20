@@ -123,7 +123,7 @@
 
     <div id="setup">
         <div class="setup-container">
-            <h2>VR Player</h2>
+            <h2>--O^O--</h2>
             <div class="radio-group">
                 <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D Video</label>
                 <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -534,7 +534,18 @@
         }
         
         function toggleOverlay(e) {
-            if (e.target.closest('#progressOverlay')) return;
+            // If clicking on a button or progress bar, let handleControls deal with it
+            if (e.target.closest('button, .progressBar')) return;
+            
+            // If clicking inside the overlay (but not on controls), hide it if visible
+            if (e.target.closest('#progressOverlay')) {
+                if (progressOverlay.classList.contains('visible')) {
+                    hideOverlay();
+                }
+                return;
+            }
+            
+            // Otherwise, clicking outside toggles it
             if (progressOverlay.classList.contains('visible')) hideOverlay(); else showOverlay();
         }
         
