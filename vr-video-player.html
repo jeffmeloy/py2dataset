@@ -73,7 +73,7 @@
         /* --- VR OVERLAY --- */
         #progressOverlay { 
             position: fixed; bottom: 0; left: 0; right: 0; 
-            background: rgba(0, 0, 0, 0.9); 
+            background: rgba(0, 0, 0, 0.45);
             padding: 8px 0; 
             display: none; 
             z-index: 998; 
@@ -176,11 +176,11 @@
                 <button class="btn-icon size-inc-btn">+</button>
             </div>
             
-            <div class="section-label">Eye Distance (PD)</div>
+            <div class="section-label">Eye Align (PD)</div>
             <div class="controls-row">
-                <button class="btn-icon pd-dec-btn">−</button>
-                <button class="btn-pill pd-reset-btn">64mm</button>
-                <button class="btn-icon pd-inc-btn">+</button>
+                <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
+                <button class="btn-pill pd-reset-btn">RESET</button>
+                <button class="btn-icon pd-inc-btn">&rarr;&larr;</button>
             </div>
             
             <div class="section-label">Pan</div>
@@ -224,11 +224,11 @@
                 <button class="btn-icon size-inc-btn">+</button>
             </div>
             
-            <div class="section-label">Eye Distance (PD)</div>
+            <div class="section-label">Eye Align (PD)</div>
             <div class="controls-row">
-                <button class="btn-icon pd-dec-btn">−</button>
-                <button class="btn-pill pd-reset-btn">64mm</button>
-                <button class="btn-icon pd-inc-btn">+</button>
+                <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
+                <button class="btn-pill pd-reset-btn">RESET</button>
+                <button class="btn-icon pd-inc-btn">&rarr;&larr;</button>
             </div>
             
             <div class="section-label">Pan</div>
@@ -254,6 +254,7 @@
         uniform float headPitchOffset;
         uniform float manualPanOffset;
         uniform float manualTiltOffset;
+        uniform float ipdOffset; 
         uniform float zoomLevel;
         varying vec2 vUv;
 
@@ -268,7 +269,7 @@
             vec2 eyeCenter = vec2(0.5, 0.5);
             vec2 distortedUV = distort(vUv);
             vec2 uv = (distortedUV - eyeCenter) / zoomLevel;
-            uv.x += headYawOffset + manualPanOffset;
+            uv.x += headYawOffset + manualPanOffset + ipdOffset;
             uv.y += headPitchOffset + manualTiltOffset;
             uv += eyeCenter;
 
@@ -307,13 +308,12 @@
         const zoomLevels = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0];
         
         // Depth perception settings
-        let eyeSeparation = 0.074;  // 64mm default PD
-        let screenDistance = 3.0;   // default distance
-        let screenWidth = 6.0;      // default width
-        const defaultEyeSep = 0.074;
+        let userIPDOffset = 0.0; // Software IPD (Image Shift)
+        let screenDistance = 3.0;
+        let screenWidth = 6.0;
         const defaultDistance = 3.0;
         const defaultWidth = 6.0;
-        let screenMeshes = [];      // Store meshes for dynamic updates
+        let screenMeshes = [];
 
         fileInput.addEventListener('change', handleFileSelect);
         startBtn.addEventListener('click', startVR);
@@ -337,7 +337,7 @@
 
         async function startVR() {
             if (!videoURL) return;
-            testVideo.pause(); // Stop preview before entering VR
+            testVideo.pause(); 
 
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
@@ -393,12 +393,8 @@
                 videoTexture.generateMipmaps = false;
 
                 renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-                
-                // QUALITY TWEAK: Enable Anisotropic Filtering
                 const maxAniso = renderer.capabilities.getMaxAnisotropy();
                 videoTexture.anisotropy = maxAniso;
-
-                // QUALITY TWEAK: Use native DPR for sharpness (uncapped)
                 renderer.setPixelRatio(window.devicePixelRatio);
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 document.body.appendChild(renderer.domElement);
@@ -407,7 +403,6 @@
 
                 effect = new THREE.StereoEffect(renderer);
                 effect.setSize(window.innerWidth, window.innerHeight);
-                effect.setEyeSeparation(eyeSeparation);
 
                 orientationTracker = new OrientationTracker();
                 orientationTracker.connect();
@@ -428,7 +423,6 @@
         }
 
         function createScreenMeshes() {
-            // Clear existing meshes
             screenMeshes.forEach(mesh => {
                 camera.remove(mesh);
                 if (mesh.geometry) mesh.geometry.dispose();
@@ -501,11 +495,6 @@
             playPauseBtns.forEach(btn => { btn.textContent = isPlaying ? '||' : '▶'; });
         }
         
-        function updatePDButtons() {
-            const mm = Math.round(eyeSeparation * 1000);
-            pdResetBtns.forEach(btn => { btn.textContent = mm + 'mm'; });
-        }
-        
         function togglePlayPause() {
             if (!video) return;
             if (isPlaying) { video.pause(); isPlaying = false; } else { video.play(); isPlaying = true; }
@@ -534,25 +523,20 @@
         }
         
         function toggleOverlay(e) {
-            // If clicking on a button or progress bar, let handleControls deal with it
             if (e.target.closest('button, .progressBar')) return;
-            
-            // If clicking inside the overlay (but not on controls), hide it if visible
             if (e.target.closest('#progressOverlay')) {
                 if (progressOverlay.classList.contains('visible')) {
                     hideOverlay();
                 }
                 return;
             }
-            
-            // Otherwise, clicking outside toggles it
             if (progressOverlay.classList.contains('visible')) hideOverlay(); else showOverlay();
         }
         
         function showOverlay() {
             progressOverlay.classList.add('visible'); progressOverlay.classList.remove('fading');
             if (hideOverlayTimer) clearTimeout(hideOverlayTimer);
-            hideOverlayTimer = setTimeout(() => { if (isPlaying) hideOverlay(); }, 4000);
+            hideOverlayTimer = setTimeout(() => { if (isPlaying) hideOverlay(); }, 3000);
         }
         
         function hideOverlay() {
@@ -567,24 +551,17 @@
         }
         
         function resetZoom() { currentZoomIndex = 4; showOverlay(); }
-        
         function adjustPan(dx) { manualPanX += dx * 0.05; showOverlay(); }
-        
         function centerPan() { manualPanX = 0; manualPanY = 0; yawOffset = headYaw; pitchOffset = headPitch; showOverlay(); }
         
-        // Depth perception adjustment functions
+        // UPDATED: PD now adjusts Horizontal Image Shift (Convergence)
         function adjustPD(direction) {
-            eyeSeparation += direction * 0.001; // 1mm increments
-            eyeSeparation = Math.max(0.050, Math.min(0.080, eyeSeparation)); // 50-80mm range
-            if (effect) effect.setEyeSeparation(eyeSeparation);
-            updatePDButtons();
+            userIPDOffset += direction * 0.005; // Shift image by 0.5% per click
             showOverlay();
         }
         
         function resetPD() {
-            eyeSeparation = defaultEyeSep;
-            if (effect) effect.setEyeSeparation(eyeSeparation);
-            updatePDButtons();
+            userIPDOffset = 0.0;
             showOverlay();
         }
         
@@ -629,8 +606,8 @@
             else if (cl.contains('pan-left-btn')) adjustPan(-1);
             else if (cl.contains('pan-center-btn')) centerPan();
             else if (cl.contains('pan-right-btn')) adjustPan(1);
-            else if (cl.contains('pd-inc-btn')) adjustPD(1);
-            else if (cl.contains('pd-dec-btn')) adjustPD(-1);
+            else if (cl.contains('pd-inc-btn')) adjustPD(1); // Moves images apart
+            else if (cl.contains('pd-dec-btn')) adjustPD(-1); // Moves images closer
             else if (cl.contains('pd-reset-btn')) resetPD();
             else if (cl.contains('dist-inc-btn')) adjustDistance(1);
             else if (cl.contains('dist-dec-btn')) adjustDistance(-1);
@@ -669,18 +646,16 @@
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera(); 
             _stereo.aspect = 0.5;
-            _stereo.eyeSep = eyeSeparation;
-            
+            // NOTE: We keep default camera sep for matrix calc, but use shader for visual alignment
             const dpr = window.devicePixelRatio || 1;
             
-            // QUALITY UPDATE: Increased limits and removed pre-downsampling
             let rtWidth = Math.min(Math.floor(window.innerWidth * dpr), 4096);
             let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), 4096);
             
             let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             const distortionMaterial = new THREE.ShaderMaterial({
-                uniforms: { tDiffuse: { value: null }, k1: { value: 0.22 }, k2: { value: 0.18 }, headYawOffset: { value: 0.0 }, headPitchOffset: { value: 0.0 }, manualPanOffset: { value: 0.0 }, manualTiltOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
+                uniforms: { tDiffuse: { value: null }, k1: { value: 0.22 }, k2: { value: 0.18 }, headYawOffset: { value: 0.0 }, headPitchOffset: { value: 0.0 }, manualPanOffset: { value: 0.0 }, manualTiltOffset: { value: 0.0 }, ipdOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
@@ -689,17 +664,10 @@
             const orthoScene = new THREE.Scene(); const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
             orthoScene.add(quadMesh); const sizeVec = new THREE.Vector2();
             
-            this.setEyeSeparation = function(separation) {
-                _stereo.eyeSep = separation;
-            };
-            
             this.setSize = function(width, height) {
                 renderer.setSize(width, height); const dpr = window.devicePixelRatio || 1;
-                
-                // QUALITY UPDATE: Consistent high-res sizing on resize
                 const newW = Math.min(Math.floor(width * dpr), 4096); 
                 const newH = Math.min(Math.floor(height * dpr), 4096);
-                
                 if (newW !== rtWidth || newH !== rtHeight) { renderTargetL.dispose(); renderTargetR.dispose(); rtWidth = newW; rtHeight = newH; renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight); renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight); }
             };
             
@@ -708,30 +676,44 @@
                 _stereo.update(camera);
                 renderer.getSize(sizeVec); const halfWidth = sizeVec.width * 0.5;
                 if (mode === '3d') { _stereo.cameraL.layers.set(1); _stereo.cameraR.layers.set(2); }
+                
+                // 1. Render Scene to Texture
                 renderer.setRenderTarget(renderTargetL); renderer.clear(); renderer.render(scene, _stereo.cameraL);
                 renderer.setRenderTarget(renderTargetR); renderer.clear(); renderer.render(scene, _stereo.cameraR);
+                
+                // 2. Render Distortion to Screen
                 renderer.setRenderTarget(null); renderer.clear(); renderer.setScissorTest(true);
                 
-                // FIX: Flip the sign to correct backwards lateral head tracking
                 let yawDelta = headYaw - yawOffset; 
                 yawDelta = ((yawDelta + Math.PI) % (2 * Math.PI)) - Math.PI; 
-                const yawUV = yawDelta * 0.7;  // Changed from -yawDelta to yawDelta
+                const yawUV = yawDelta * 0.7; 
                 
                 let pitchDelta = headPitch - pitchOffset; 
                 pitchDelta = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitchDelta)); 
                 const pitchUV = pitchDelta * 0.8;
                 const currentZoom = zoomLevels[currentZoomIndex];
+                
                 if (Math.abs(yawUV - cachedYawUV) > 0.0001) { distortionMaterial.uniforms.headYawOffset.value = yawUV; cachedYawUV = yawUV; }
                 if (Math.abs(pitchUV - cachedPitchUV) > 0.0001) { distortionMaterial.uniforms.headPitchOffset.value = pitchUV; cachedPitchUV = pitchUV; }
                 if (currentZoom !== cachedZoom) { distortionMaterial.uniforms.zoomLevel.value = currentZoom; cachedZoom = currentZoom; }
+                
                 distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                 distortionMaterial.uniforms.manualTiltOffset.value = manualPanY;
+                
+                // LEFT EYE: Apply positive offset (move image right) or negative based on preference
+                // Standard: Diverge images by pushing them outwards or Pull inwards.
+                // We apply + offset for Left and - for Right to separate them relative to center
+                distortionMaterial.uniforms.ipdOffset.value = userIPDOffset; 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height); renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
+                
+                // RIGHT EYE: Apply negative offset
+                distortionMaterial.uniforms.ipdOffset.value = -userIPDOffset;
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height); renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
+                
                 renderer.setScissorTest(false);
             };
             
