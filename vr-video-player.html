@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - Optimized</title>
+    <title>VR Video Player - Lanczos-2</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -246,7 +246,7 @@
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
     </script>
 
-    <!-- FRAGMENT SHADER (16-TAP BICUBIC) -->
+    <!-- FRAGMENT SHADER (LANCZOS-2 INTERPOLATION) -->
     <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
         uniform sampler2D tDiffuse;
         uniform vec2 texSize; 
@@ -260,38 +260,76 @@
         uniform float zoomLevel;
         varying vec2 vUv;
 
-        vec4 textureBicubic(sampler2D sampler, vec2 texCoords, vec2 texSize) {
+        const float PI = 3.14159265359;
+
+        // Sinc function: sin(pi*x)/(pi*x)
+        float sinc(float x) {
+            if (abs(x) < 0.0001) return 1.0;
+            float a = PI * x;
+            return sin(a) / a;
+        }
+
+        // Lanczos weight function for a=2
+        float lanczosWeight(float x) {
+            if (abs(x) >= 2.0) return 0.0;
+            return sinc(x) * sinc(x * 0.5);
+        }
+
+        // 16-Tap Lanczos-2 Interpolation
+        vec4 textureLanczos(sampler2D sampler, vec2 texCoords, vec2 texSize) {
             vec2 invTexSize = 1.0 / texSize;
             vec2 pos = texCoords * texSize;
             vec2 ipos = floor(pos - 0.5) + 0.5; 
             vec2 f = pos - ipos; 
 
-            vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
-            vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
-            vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
-            vec2 w3 = f * f * (-0.5 + 0.5 * f);
+            // Calculate weights for the 4 taps in each dimension
+            // Taps relative to center: -1, 0, 1, 2.
+            // Distances from sample point 'f': 
+            // Tap -1: distance is (1.0 + f)
+            // Tap 0:  distance is (f)
+            // Tap 1:  distance is (1.0 - f)
+            // Tap 2:  distance is (2.0 - f)
+            
+            vec4 wX = vec4(
+                lanczosWeight(1.0 + f.x), 
+                lanczosWeight(f.x), 
+                lanczosWeight(1.0 - f.x), 
+                lanczosWeight(2.0 - f.x)
+            );
+            
+            vec4 wY = vec4(
+                lanczosWeight(1.0 + f.y), 
+                lanczosWeight(f.y), 
+                lanczosWeight(1.0 - f.y), 
+                lanczosWeight(2.0 - f.y)
+            );
 
-            vec4 row0 = texture2D(sampler, (ipos + vec2(-1, -1)) * invTexSize) * w0.x +
-                        texture2D(sampler, (ipos + vec2( 0, -1)) * invTexSize) * w1.x +
-                        texture2D(sampler, (ipos + vec2( 1, -1)) * invTexSize) * w2.x +
-                        texture2D(sampler, (ipos + vec2( 2, -1)) * invTexSize) * w3.x;
+            // Normalize weights to prevent brightness fluctuations
+            wX /= dot(wX, vec4(1.0));
+            wY /= dot(wY, vec4(1.0));
 
-            vec4 row1 = texture2D(sampler, (ipos + vec2(-1,  0)) * invTexSize) * w0.x +
-                        texture2D(sampler, (ipos + vec2( 0,  0)) * invTexSize) * w1.x +
-                        texture2D(sampler, (ipos + vec2( 1,  0)) * invTexSize) * w2.x +
-                        texture2D(sampler, (ipos + vec2( 2,  0)) * invTexSize) * w3.x;
+            // Sample the 4x4 grid
+            vec4 row0 = texture2D(sampler, (ipos + vec2(-1, -1)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0, -1)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1, -1)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2, -1)) * invTexSize) * wX.w;
 
-            vec4 row2 = texture2D(sampler, (ipos + vec2(-1,  1)) * invTexSize) * w0.x +
-                        texture2D(sampler, (ipos + vec2( 0,  1)) * invTexSize) * w1.x +
-                        texture2D(sampler, (ipos + vec2( 1,  1)) * invTexSize) * w2.x +
-                        texture2D(sampler, (ipos + vec2( 2,  1)) * invTexSize) * w3.x;
+            vec4 row1 = texture2D(sampler, (ipos + vec2(-1,  0)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0,  0)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1,  0)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2,  0)) * invTexSize) * wX.w;
 
-            vec4 row3 = texture2D(sampler, (ipos + vec2(-1,  2)) * invTexSize) * w0.x +
-                        texture2D(sampler, (ipos + vec2( 0,  2)) * invTexSize) * w1.x +
-                        texture2D(sampler, (ipos + vec2( 1,  2)) * invTexSize) * w2.x +
-                        texture2D(sampler, (ipos + vec2( 2,  2)) * invTexSize) * w3.x;
+            vec4 row2 = texture2D(sampler, (ipos + vec2(-1,  1)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0,  1)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1,  1)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2,  1)) * invTexSize) * wX.w;
 
-            return row0 * w0.y + row1 * w1.y + row2 * w2.y + row3 * w3.y;
+            vec4 row3 = texture2D(sampler, (ipos + vec2(-1,  2)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0,  2)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1,  2)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2,  2)) * invTexSize) * wX.w;
+
+            return row0 * wY.x + row1 * wY.y + row2 * wY.z + row3 * wY.w;
         }
 
         vec2 distort(vec2 p) {
@@ -312,7 +350,7 @@
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                 gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
             } else {
-                gl_FragColor = textureBicubic(tDiffuse, uv, texSize);
+                gl_FragColor = textureLanczos(tDiffuse, uv, texSize);
             }
         }
     </script>
@@ -684,14 +722,26 @@
             
             const videoW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 0;
             const videoH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 0;
-            const calcWidth = (w) => Math.min(Math.max(Math.floor(w * dpr), videoW), 4096);
-            const calcHeight = (h) => Math.min(Math.max(Math.floor(h * dpr), videoH), 4096);
-
-            let rtWidth = calcWidth(window.innerWidth);
-            let rtHeight = calcHeight(window.innerHeight);
             
-            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+            const calcOptimalSize = (screenDim, videoDim) => {
+                const baseSize = Math.max(Math.floor(screenDim * dpr), videoDim);
+                const maxSize = Math.min(renderer.capabilities.maxTextureSize, 8192);
+                return Math.min(baseSize, maxSize);
+            };
+
+            let rtWidth = calcOptimalSize(window.innerWidth, videoW);
+            let rtHeight = calcOptimalSize(window.innerHeight, videoH);
+            
+            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { 
+                minFilter: THREE.LinearFilter, 
+                magFilter: THREE.LinearFilter,
+                generateMipmaps: false
+            });
+            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { 
+                minFilter: THREE.LinearFilter, 
+                magFilter: THREE.LinearFilter,
+                generateMipmaps: false
+            });
             
             const distortionMaterial = new THREE.ShaderMaterial({
                 uniforms: { tDiffuse: { value: null }, texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, k1: { value: 0.22 }, k2: { value: 0.18 }, headYawOffset: { value: 0.0 }, headPitchOffset: { value: 0.0 }, manualPanOffset: { value: 0.0 }, manualTiltOffset: { value: 0.0 }, ipdOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
@@ -699,7 +749,6 @@
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
             let cachedYawUV = 0, cachedPitchUV = 0, cachedZoom = 1.0;
-            // NEW: Cache variables initialized to infinity to ensure first update happens
             let cachedManualPanX = Infinity, cachedManualPanY = Infinity;
 
             const quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), distortionMaterial);
@@ -707,14 +756,26 @@
             orthoScene.add(quadMesh); const sizeVec = new THREE.Vector2();
             
             this.setSize = function(width, height) {
-                renderer.setSize(width, height); const dpr = window.devicePixelRatio || 1;
-                const newW = calcWidth(width);
-                const newH = calcHeight(height);
+                renderer.setSize(width, height);
+                
+                const newW = calcOptimalSize(width, videoW);
+                const newH = calcOptimalSize(height, videoH);
+                
                 if (newW !== rtWidth || newH !== rtHeight) { 
-                    renderTargetL.dispose(); renderTargetR.dispose(); 
-                    rtWidth = newW; rtHeight = newH; 
-                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); 
-                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }); 
+                    renderTargetL.dispose(); 
+                    renderTargetR.dispose(); 
+                    rtWidth = newW; 
+                    rtHeight = newH; 
+                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { 
+                        minFilter: THREE.LinearFilter, 
+                        magFilter: THREE.LinearFilter,
+                        generateMipmaps: false
+                    }); 
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { 
+                        minFilter: THREE.LinearFilter, 
+                        magFilter: THREE.LinearFilter,
+                        generateMipmaps: false
+                    }); 
                     distortionMaterial.uniforms.texSize.value.set(rtWidth, rtHeight);
                 }
             };
@@ -743,7 +804,6 @@
                 if (Math.abs(pitchUV - cachedPitchUV) > 0.0001) { distortionMaterial.uniforms.headPitchOffset.value = pitchUV; cachedPitchUV = pitchUV; }
                 if (currentZoom !== cachedZoom) { distortionMaterial.uniforms.zoomLevel.value = currentZoom; cachedZoom = currentZoom; }
                 
-                // OPTIMIZATION: Only update uniforms if values have changed
                 if (Math.abs(manualPanX - cachedManualPanX) > 0.00001) {
                     distortionMaterial.uniforms.manualPanOffset.value = manualPanX;
                     cachedManualPanX = manualPanX;
@@ -753,7 +813,6 @@
                     cachedManualPanY = manualPanY;
                 }
                 
-                // NOTE: ipdOffset is updated per eye draw call (switches sign) so we don't cache it per frame
                 distortionMaterial.uniforms.ipdOffset.value = userIPDOffset; 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height); renderer.setViewport(0, 0, halfWidth, sizeVec.height);
