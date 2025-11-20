@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - Stable</title>
+    <title>VR Video Player - High Res</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -97,7 +97,7 @@
 
     <div id="setup">
         <div class="setup-container">
-            <h2>VR Player</h2>
+            <h2>VR</h2>
             <div class="radio-group">
                 <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D Video</label>
                 <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
@@ -302,11 +302,12 @@
 
                 renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
                 
-                // QUALITY TWEAK: Enable Anisotropic Filtering for sharper angles
+                // QUALITY TWEAK: Enable Anisotropic Filtering
                 const maxAniso = renderer.capabilities.getMaxAnisotropy();
                 videoTexture.anisotropy = maxAniso;
 
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                // QUALITY TWEAK: Use native DPR for sharpness (uncapped)
+                renderer.setPixelRatio(window.devicePixelRatio);
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 document.body.appendChild(renderer.domElement);
 
@@ -474,8 +475,11 @@
         THREE.StereoEffect = function(renderer) {
             const _stereo = new THREE.StereoCamera(); _stereo.aspect = 0.5;
             const dpr = window.devicePixelRatio || 1;
-            let rtWidth = Math.min(Math.floor(window.innerWidth * dpr / 2), 2048);
-            let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), 2048);
+            
+            // QUALITY UPDATE: Increased limits and removed pre-downsampling
+            let rtWidth = Math.min(Math.floor(window.innerWidth * dpr), 4096);
+            let rtHeight = Math.min(Math.floor(window.innerHeight * dpr), 4096);
+            
             let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             const distortionMaterial = new THREE.ShaderMaterial({
@@ -489,7 +493,11 @@
             orthoScene.add(quadMesh); const sizeVec = new THREE.Vector2();
             this.setSize = function(width, height) {
                 renderer.setSize(width, height); const dpr = window.devicePixelRatio || 1;
-                const newW = Math.min(Math.floor(width * dpr / 2), 2048); const newH = Math.min(Math.floor(height * dpr), 2048);
+                
+                // QUALITY UPDATE: Consistent high-res sizing on resize
+                const newW = Math.min(Math.floor(width * dpr), 4096); 
+                const newH = Math.min(Math.floor(height * dpr), 4096);
+                
                 if (newW !== rtWidth || newH !== rtHeight) { renderTargetL.dispose(); renderTargetR.dispose(); rtWidth = newW; rtHeight = newH; renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight); renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight); }
             };
             this.render = function(scene, camera) {
