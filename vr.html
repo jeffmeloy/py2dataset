@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - True 3D & Lanczos</title>
+    <title>VR Video Player - v3 UI</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -71,8 +71,8 @@
         /* --- VR OVERLAY --- */
         #progressOverlay { 
             position: fixed; bottom: 0; left: 0; right: 0; 
-            background: rgba(0, 0, 0, 0.45);
-            padding: 8px 0; 
+            background: rgba(0, 0, 0, 0.6); /* Slightly darker for better contrast */
+            padding: 10px 0; 
             display: none; 
             z-index: 998; 
             transition: opacity 0.3s;
@@ -86,30 +86,43 @@
             display: flex; 
             flex-direction: column; 
             align-items: center; 
-            padding: 0 6px; 
+            padding: 0 8px; 
             box-sizing: border-box; 
         }
         
-        .progressBar { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer; margin-bottom: 4px; position: relative; }
-        .progressFill { height: 100%; background: #007BFF; border-radius: 5px; width: 0%; pointer-events: none; }
-        .timeDisplay { font-size: 11px; color: #aaa; margin-bottom: 4px; font-family: monospace; }
+        .progressBar { width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer; margin-bottom: 6px; position: relative; }
+        .progressFill { height: 100%; background: #007BFF; border-radius: 6px; width: 0%; pointer-events: none; }
+        .timeDisplay { font-size: 12px; color: #ccc; margin-bottom: 8px; font-family: monospace; }
         
-        .controls-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 3px; width: 100%; }
+        .controls-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 6px; width: 100%; }
+        
+        /* Round Icon Buttons */
         .btn-icon {
-            background: rgba(255,255,255,0.15); border: none; color: #eee;
-            width: 36px; height: 36px; border-radius: 50%; font-size: 14px;
+            background: rgba(255,255,255,0.2); border: none; color: #eee;
+            width: 40px; height: 40px; border-radius: 50%; font-size: 16px;
             display: flex; align-items: center; justify-content: center; cursor: pointer;
-            flex-shrink: 0;
+            flex-shrink: 0; transition: background 0.1s;
         }
-        .btn-icon:active { background: rgba(255,255,255,0.4); }
+        .btn-icon:active { background: #007BFF; }
+        
+        /* Pill Buttons (Resets) */
         .btn-pill {
-            background: rgba(255,255,255,0.15); border: none; color: #eee;
-            height: 28px; padding: 0 12px; border-radius: 14px; font-size: 10px; cursor: pointer;
-            white-space: nowrap; flex-shrink: 0;
+            background: rgba(255,255,255,0.2); border: none; color: #eee;
+            height: 32px; padding: 0 16px; border-radius: 16px; font-size: 11px; cursor: pointer;
+            white-space: nowrap; flex-shrink: 0; font-weight: bold;
         }
-        .btn-pill:active { background: rgba(255,255,255,0.4); }
+        .btn-pill:active { background: #007BFF; }
+
+        /* Wide Recenter Button */
+        .btn-wide {
+            background: #007BFF; border: none; color: white;
+            width: 90%; height: 44px; border-radius: 8px; font-size: 14px; font-weight: bold;
+            cursor: pointer; margin-top: 5px;
+        }
+        .btn-wide:active { background: #0056b3; transform: scale(0.98); }
+
         .section-label {
-            font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 2px 0 2px 0;
+            font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin: 6px 0 4px 0; font-weight: bold;
         }
     </style>
 </head>
@@ -137,88 +150,78 @@
     </div>
 
     <div id="progressOverlay">
-        <!-- Repeated HTML for Stereo UI overlay (Left/Right Eye) -->
-        <!-- JS will handle events for both sides -->
+        <!-- LEFT EYE UI -->
         <div class="eye-controls">
             <div class="progressBar"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
             
-            <div class="section-label">Playback</div>
             <div class="controls-row">
                 <button class="btn-icon rewind-btn">↺</button>
                 <button class="btn-icon play-pause-btn">▶</button>
                 <button class="btn-icon forward-btn">↻</button>
             </div>
             
-            <div class="section-label">Screen Position</div>
+            <div class="section-label">Video Zoom</div>
             <div class="controls-row">
-                <button class="btn-icon pan-left-btn">&larr;</button>
-                <button class="btn-pill pan-center-btn">RE-CENTER</button>
-                <button class="btn-icon pan-right-btn">&rarr;</button>
-            </div>
-            <div class="controls-row">
-                <button class="btn-icon pan-up-btn">&uarr;</button>
-                <button class="btn-pill dist-reset-btn">RESET DST</button>
-                <button class="btn-icon pan-down-btn">&darr;</button>
+                <button class="btn-icon zoom-out-btn">−</button>
+                <button class="btn-pill zoom-reset-btn">100%</button>
+                <button class="btn-icon zoom-in-btn">+</button>
             </div>
 
-            <div class="section-label">Distance & Size</div>
+            <div class="section-label">Screen Distance</div>
             <div class="controls-row">
-                <button class="btn-icon dist-dec-btn">In</button>
-                <button class="btn-icon dist-inc-btn">Out</button>
-                <button class="btn-icon size-dec-btn">Sml</button>
-                <button class="btn-icon size-inc-btn">Big</button>
+                <button class="btn-icon dist-dec-btn">−</button>
+                <button class="btn-pill dist-reset-btn">RESET</button>
+                <button class="btn-icon dist-inc-btn">+</button>
             </div>
             
-            <div class="section-label">Lens / IPD</div>
+            <div class="section-label">IPD Align</div>
             <div class="controls-row">
                 <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
                 <button class="btn-pill pd-reset-btn">RESET</button>
                 <button class="btn-icon pd-inc-btn">&rarr;&larr;</button>
             </div>
+
+            <button class="btn-wide recenter-btn">RE-CENTER</button>
         </div>
         
+        <!-- RIGHT EYE UI -->
         <div class="eye-controls">
             <div class="progressBar"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
             
-            <div class="section-label">Playback</div>
             <div class="controls-row">
                 <button class="btn-icon rewind-btn">↺</button>
                 <button class="btn-icon play-pause-btn">▶</button>
                 <button class="btn-icon forward-btn">↻</button>
             </div>
             
-            <div class="section-label">Screen Position</div>
+            <div class="section-label">Video Zoom</div>
             <div class="controls-row">
-                <button class="btn-icon pan-left-btn">&larr;</button>
-                <button class="btn-pill pan-center-btn">RE-CENTER</button>
-                <button class="btn-icon pan-right-btn">&rarr;</button>
-            </div>
-            <div class="controls-row">
-                <button class="btn-icon pan-up-btn">&uarr;</button>
-                <button class="btn-pill dist-reset-btn">RESET DST</button>
-                <button class="btn-icon pan-down-btn">&darr;</button>
+                <button class="btn-icon zoom-out-btn">−</button>
+                <button class="btn-pill zoom-reset-btn">100%</button>
+                <button class="btn-icon zoom-in-btn">+</button>
             </div>
 
-            <div class="section-label">Distance & Size</div>
+            <div class="section-label">Screen Distance</div>
             <div class="controls-row">
-                <button class="btn-icon dist-dec-btn">In</button>
-                <button class="btn-icon dist-inc-btn">Out</button>
-                <button class="btn-icon size-dec-btn">Sml</button>
-                <button class="btn-icon size-inc-btn">Big</button>
+                <button class="btn-icon dist-dec-btn">−</button>
+                <button class="btn-pill dist-reset-btn">RESET</button>
+                <button class="btn-icon dist-inc-btn">+</button>
             </div>
             
-            <div class="section-label">Lens / IPD</div>
+            <div class="section-label">IPD Align</div>
             <div class="controls-row">
                 <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
                 <button class="btn-pill pd-reset-btn">RESET</button>
                 <button class="btn-icon pd-inc-btn">&rarr;&larr;</button>
             </div>
+
+            <button class="btn-wide recenter-btn">RE-CENTER</button>
         </div>
     </div>
 
-    <!-- VERTEX SHADER (Standard Pass-through) -->
+    <!-- VERTEX SHADER -->
     <script id="vertexShader" type="x-shader/x-vertex">
         varying vec2 vUv;
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
@@ -247,7 +250,6 @@
             return sinc(x) * sinc(x * 0.5);
         }
 
-        // 16-Tap Lanczos-2 Interpolation
         vec4 textureLanczos(sampler2D sampler, vec2 texCoords, vec2 texSize) {
             vec2 invTexSize = 1.0 / texSize;
             vec2 pos = texCoords * texSize;
@@ -322,13 +324,14 @@
         let screenGroup; 
         let mode = '2d', isPlaying = false, videoURL = null;
         let hideOverlayTimer = null;
-        let currentZoomLevel = 1.0; 
         
+        let currentZoomLevel = 1.0; 
         let userIPDOffset = 0.0; 
         let screenDistance = 3.0;
         let screenWidth = 6.0;
+        
         const defaultDistance = 3.0;
-        const defaultWidth = 6.0;
+        const defaultWidth = 6.0; // Default physical width
         let screenMeshes = [];
 
         fileInput.addEventListener('change', handleFileSelect);
@@ -560,52 +563,44 @@
             setTimeout(() => { progressOverlay.classList.remove('visible'); }, 300);
         }
         
-        /* --- KEY FIX IS HERE --- */
         function recenterScreen() {
-            // Copies full orientation (Yaw + Pitch + Roll)
-            // Centers the screen to exactly where the user is looking
             screenGroup.quaternion.copy(camera.quaternion);
             showOverlay();
         }
 
-        function panScreen(deg) {
-            screenGroup.rotateY(THREE.MathUtils.degToRad(deg));
+        // --- NEW BUTTON HANDLERS ---
+        
+        // Zoom (Digital)
+        function adjustZoom(val) {
+            currentZoomLevel += val;
+            currentZoomLevel = Math.max(0.5, Math.min(3.0, currentZoomLevel)); // Clamp zoom
+            showOverlay();
+        }
+        function resetZoom() {
+            currentZoomLevel = 1.0;
             showOverlay();
         }
 
-        function tiltScreen(deg) {
-            screenGroup.rotateX(THREE.MathUtils.degToRad(deg));
-            showOverlay();
-        }
-        
-        function adjustIPD(direction) {
-            userIPDOffset += direction * 0.005;
-            showOverlay();
-        }
-        
-        function resetIPD() {
-            userIPDOffset = 0.0;
-            showOverlay();
-        }
-        
+        // Distance (Physical Mesh)
         function adjustDistance(direction) {
             screenDistance += direction * 0.2;
             screenDistance = Math.max(1.0, Math.min(10.0, screenDistance));
             updateScreenMeshes();
             showOverlay();
         }
-
-        function adjustSize(direction) {
-            screenWidth += direction * 0.5;
-            screenWidth = Math.max(1.0, Math.min(20.0, screenWidth));
+        function resetDistance() {
+            screenDistance = defaultDistance;
             updateScreenMeshes();
             showOverlay();
         }
-
-        function resetDistSize() {
-            screenDistance = defaultDistance;
-            screenWidth = defaultWidth;
-            updateScreenMeshes();
+        
+        // IPD
+        function adjustIPD(direction) {
+            userIPDOffset += direction * 0.005;
+            showOverlay();
+        }
+        function resetIPD() {
+            userIPDOffset = 0.0;
             showOverlay();
         }
         
@@ -614,23 +609,31 @@
             const target = e.target.closest('button, .progressBar');
             if (!target) return;
             if (target.matches('.progressBar')) { seekVideo(e, target); return; }
+            
             const cl = target.classList;
+            
+            // Playback
             if (cl.contains('play-pause-btn')) togglePlayPause();
             else if (cl.contains('rewind-btn')) seekRelative(-10);
             else if (cl.contains('forward-btn')) seekRelative(10);
-            else if (cl.contains('pan-left-btn')) panScreen(5);
-            else if (cl.contains('pan-right-btn')) panScreen(-5);
-            else if (cl.contains('pan-up-btn')) tiltScreen(-5);
-            else if (cl.contains('pan-down-btn')) tiltScreen(5);
-            else if (cl.contains('pan-center-btn')) recenterScreen();
+            
+            // Zoom
+            else if (cl.contains('zoom-in-btn')) adjustZoom(0.1);
+            else if (cl.contains('zoom-out-btn')) adjustZoom(-0.1);
+            else if (cl.contains('zoom-reset-btn')) resetZoom();
+
+            // Distance
             else if (cl.contains('dist-inc-btn')) adjustDistance(1);
             else if (cl.contains('dist-dec-btn')) adjustDistance(-1);
-            else if (cl.contains('size-inc-btn')) adjustSize(1);
-            else if (cl.contains('size-dec-btn')) adjustSize(-1);
-            else if (cl.contains('dist-reset-btn')) resetDistSize();
+            else if (cl.contains('dist-reset-btn')) resetDistance();
+            
+            // IPD
             else if (cl.contains('pd-inc-btn')) adjustIPD(1);
             else if (cl.contains('pd-dec-btn')) adjustIPD(-1);
             else if (cl.contains('pd-reset-btn')) resetIPD();
+            
+            // Recenter
+            else if (cl.contains('recenter-btn')) recenterScreen();
         }
 
         function OrientationTracker() {
