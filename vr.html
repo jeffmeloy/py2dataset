@@ -224,8 +224,7 @@
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
     </script>
 
-    <!-- FRAGMENT SHADER (LANCZOS-2 + BARREL DISTORTION ONLY) -->
-    <!-- Note: Head tracking math has been removed from here! -->
+    <!-- FRAGMENT SHADER (LANCZOS-2 + BARREL DISTORTION) -->
     <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
         uniform sampler2D tDiffuse;
         uniform vec2 texSize; 
@@ -292,19 +291,11 @@
 
         void main() {
             vec2 eyeCenter = vec2(0.5, 0.5);
-            
-            // 1. Apply Geometric Lens Distortion
             vec2 distortedUV = distort(vUv);
-            
-            // 2. Apply Digital Zoom (Cropping) & IPD Offset
-            // We DO NOT add head rotation here. The camera 3D rotation handles that.
             vec2 uv = (distortedUV - eyeCenter) / zoomLevel;
-            
-            // IPD offset shifts the texture horizontally to align with physical pupil distance
             uv.x += ipdOffset;
             uv += eyeCenter;
 
-            // 3. Boundary Check & Sample
             if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
                 gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
             } else {
@@ -328,13 +319,11 @@
 
         let camera, scene, renderer, effect;
         let video, videoTexture, orientationTracker;
-        let screenGroup; // Container for the screen meshes
+        let screenGroup; 
         let mode = '2d', isPlaying = false, videoURL = null;
         let hideOverlayTimer = null;
+        let currentZoomLevel = 1.0; 
         
-        let currentZoomLevel = 1.0; // Digital zoom in shader
-        
-        // Screen Physical Settings
         let userIPDOffset = 0.0; 
         let screenDistance = 3.0;
         let screenWidth = 6.0;
@@ -402,12 +391,9 @@
 
         function initVR() {
             scene = new THREE.Scene();
-            
-            // Standard VR Camera setup
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-            scene.add(camera); // Camera is now part of the scene, rotating freely
+            scene.add(camera); 
 
-            // Group to hold the screen (Video Wall)
             screenGroup = new THREE.Group();
             scene.add(screenGroup);
 
@@ -442,7 +428,6 @@
                 video.addEventListener('timeupdate', updateProgress);
                 progressOverlay.addEventListener('click', handleControls);
 
-                // Initial center after small delay to allow sensors to settle
                 setTimeout(() => recenterScreen(), 500);
 
                 showOverlay();
@@ -456,7 +441,6 @@
         }
 
         function createScreenMeshes() {
-            // Clear old meshes
             screenMeshes.forEach(mesh => {
                 screenGroup.remove(mesh);
                 if (mesh.geometry) mesh.geometry.dispose();
@@ -464,17 +448,14 @@
             });
             screenMeshes = [];
 
-            // Aspect Ratio Calculation
             const vidW = video.videoWidth;
             const vidH = video.videoHeight;
-            // For 3D Top/Bottom or SBS, we'd need more logic, but for 3D SBS standard:
             const aspect = mode === '3d' ? (vidW / 2) / vidH : vidW / vidH;
             
             const width = screenWidth;
             const height = width / aspect;
             const geometry = new THREE.PlaneGeometry(width, height);
 
-            // Create meshes based on mode
             if (mode === '2d') {
                 const material = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
                 const screenMesh = new THREE.Mesh(geometry, material);
@@ -482,7 +463,6 @@
                 screenGroup.add(screenMesh);
                 screenMeshes.push(screenMesh);
             } else {
-                // Left Eye Mesh
                 const matL = new THREE.ShaderMaterial({
                     uniforms: { tex: { value: videoTexture } },
                     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -491,11 +471,10 @@
                 });
                 const screenL = new THREE.Mesh(geometry, matL);
                 screenL.position.set(0, 0, -screenDistance);
-                screenL.layers.set(1); // Layer 1 for Left Camera
+                screenL.layers.set(1);
                 screenGroup.add(screenL);
                 screenMeshes.push(screenL);
 
-                // Right Eye Mesh
                 const matR = new THREE.ShaderMaterial({
                     uniforms: { tex: { value: videoTexture } },
                     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -504,7 +483,7 @@
                 });
                 const screenR = new THREE.Mesh(geometry, matR);
                 screenR.position.set(0, 0, -screenDistance);
-                screenR.layers.set(2); // Layer 2 for Right Camera
+                screenR.layers.set(2);
                 screenGroup.add(screenR);
                 screenMeshes.push(screenR);
             }
@@ -517,15 +496,10 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            
-            // 1. Update Orientation
             if (orientationTracker) {
                 orientationTracker.update();
-                // Apply rotation DIRECTLY to the camera (True 3D)
                 camera.quaternion.copy(orientationTracker.getQuaternion());
             }
-
-            // 2. Render Scene via StereoEffect (handles render targets + distortion)
             if (effect) effect.render(scene, camera);
         }
 
@@ -534,8 +508,6 @@
             camera.updateProjectionMatrix();
             effect.setSize(window.innerWidth, window.innerHeight);
         }
-
-        /* --- UI & CONTROL LOGIC --- */
 
         function updatePlayPauseButtons() {
             playPauseBtns.forEach(btn => { btn.textContent = isPlaying ? '||' : '▶'; });
@@ -588,15 +560,11 @@
             setTimeout(() => { progressOverlay.classList.remove('visible'); }, 300);
         }
         
-        // -- 3D MANIPULATION CONTROLS --
-
+        /* --- KEY FIX IS HERE --- */
         function recenterScreen() {
-            // Rotate the screenGroup to face the same direction as the camera
-            // We copy the Y rotation (Yaw) from the camera, but keep X/Z flat
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            // Calculate Yaw angle
-            const angle = Math.atan2(forward.x, forward.z) + Math.PI; // Invert for lookAt
-            screenGroup.rotation.set(0, angle, 0);
+            // Copies full orientation (Yaw + Pitch + Roll)
+            // Centers the screen to exactly where the user is looking
+            screenGroup.quaternion.copy(camera.quaternion);
             showOverlay();
         }
 
@@ -650,56 +618,43 @@
             if (cl.contains('play-pause-btn')) togglePlayPause();
             else if (cl.contains('rewind-btn')) seekRelative(-10);
             else if (cl.contains('forward-btn')) seekRelative(10);
-            // Position controls now rotate the screen object in 3D space
             else if (cl.contains('pan-left-btn')) panScreen(5);
             else if (cl.contains('pan-right-btn')) panScreen(-5);
             else if (cl.contains('pan-up-btn')) tiltScreen(-5);
             else if (cl.contains('pan-down-btn')) tiltScreen(5);
             else if (cl.contains('pan-center-btn')) recenterScreen();
-            // Physical controls
             else if (cl.contains('dist-inc-btn')) adjustDistance(1);
             else if (cl.contains('dist-dec-btn')) adjustDistance(-1);
             else if (cl.contains('size-inc-btn')) adjustSize(1);
             else if (cl.contains('size-dec-btn')) adjustSize(-1);
             else if (cl.contains('dist-reset-btn')) resetDistSize();
-            // Lens controls
             else if (cl.contains('pd-inc-btn')) adjustIPD(1);
             else if (cl.contains('pd-dec-btn')) adjustIPD(-1);
             else if (cl.contains('pd-reset-btn')) resetIPD();
         }
 
-        // -- ORIENTATION TRACKING --
-        
         function OrientationTracker() {
             this.deviceOrientation = {};
             this.screenOrientation = 0;
             this.enabled = false;
-            
             const _euler = new THREE.Euler(); 
             const _deviceQ = new THREE.Quaternion(); 
             const _q0 = new THREE.Quaternion(); 
-            const _q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around X
+            const _q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); 
             const _zee = new THREE.Vector3(0, 0, 1); 
-            
-            // Public accessor for the calculated Quaternion
             this.getQuaternion = function() { return _deviceQ; };
-
             const onEvent = (e) => { this.deviceOrientation = e; };
             const onScreen = () => { this.screenOrientation = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0); };
-            
             this.connect = function() { onScreen(); window.addEventListener('orientationchange', onScreen); window.addEventListener('deviceorientation', onEvent); this.enabled = true; };
             this.disconnect = function() { window.removeEventListener('orientationchange', onScreen); window.removeEventListener('deviceorientation', onEvent); this.enabled = false; };
-            
             this.update = function() {
                 if (!this.enabled) return;
                 const device = this.deviceOrientation; 
                 if (!device || device.alpha === null) return;
-                
                 const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) : 0;
                 const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
                 const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
                 const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
-                
                 _euler.set(beta, alpha, -gamma, 'YXZ'); 
                 _deviceQ.setFromEuler(_euler); 
                 _deviceQ.multiply(_q1); 
@@ -707,41 +662,26 @@
             };
         }
 
-        // -- STEREO EFFECT & DISTORTION RENDERER --
-
         THREE.StereoEffect = function(renderer, videoElement) {
             const _stereo = new THREE.StereoCamera(); 
             _stereo.aspect = 0.5;
             const dpr = window.devicePixelRatio || 1;
-            
             const videoW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
             const videoH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 1080;
-            
-            // Calculate Texture size
             const calcOptimalSize = (screenDim, videoDim) => {
                 const baseSize = Math.max(Math.floor(screenDim * dpr), videoDim);
-                return Math.min(baseSize, 4096); // Cap at 4k for mobile performance
+                return Math.min(baseSize, 4096); 
             };
-
             let rtWidth = calcOptimalSize(window.innerWidth, videoW);
             let rtHeight = calcOptimalSize(window.innerHeight, videoH);
-            
             let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
             
             const distortionMaterial = new THREE.ShaderMaterial({
-                uniforms: { 
-                    tDiffuse: { value: null }, 
-                    texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, 
-                    k1: { value: 0.22 }, // Barrel Distortion Coeff
-                    k2: { value: 0.18 }, 
-                    ipdOffset: { value: 0.0 }, 
-                    zoomLevel: { value: 1.0 }
-                },
+                uniforms: { tDiffuse: { value: null }, texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, k1: { value: 0.22 }, k2: { value: 0.18 }, ipdOffset: { value: 0.0 }, zoomLevel: { value: 1.0 } },
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
             });
-
             const quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), distortionMaterial);
             const orthoScene = new THREE.Scene(); 
             const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -752,47 +692,32 @@
                 const newW = calcOptimalSize(width, videoW);
                 const newH = calcOptimalSize(height, videoH);
                 if (newW !== rtWidth || newH !== rtHeight) { 
-                    renderTargetL.dispose(); renderTargetR.dispose(); 
-                    rtWidth = newW; rtHeight = newH; 
+                    renderTargetL.dispose(); renderTargetR.dispose(); rtWidth = newW; rtHeight = newH; 
                     renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter }); 
                     renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter }); 
                     distortionMaterial.uniforms.texSize.value.set(rtWidth, rtHeight);
                 }
             };
-            
             this.render = function(scene, camera) {
-                scene.updateMatrixWorld();
-                _stereo.update(camera);
-                
+                scene.updateMatrixWorld(); _stereo.update(camera);
                 renderer.getSize(sizeVec); const halfWidth = sizeVec.width * 0.5;
-                
-                // Render Left Eye to Texture
                 if (mode === '3d') { _stereo.cameraL.layers.set(1); _stereo.cameraR.layers.set(2); }
                 renderer.setRenderTarget(renderTargetL); renderer.clear(); renderer.render(scene, _stereo.cameraL);
-                
-                // Render Right Eye to Texture
                 renderer.setRenderTarget(renderTargetR); renderer.clear(); renderer.render(scene, _stereo.cameraR);
-                
-                // Post-Process Output
                 renderer.setRenderTarget(null); renderer.clear(); renderer.setScissorTest(true);
                 
                 distortionMaterial.uniforms.zoomLevel.value = currentZoomLevel;
-
-                // Left Lens
                 distortionMaterial.uniforms.ipdOffset.value = userIPDOffset; 
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
                 renderer.setScissor(0, 0, halfWidth, sizeVec.height); renderer.setViewport(0, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
                 
-                // Right Lens
                 distortionMaterial.uniforms.ipdOffset.value = -userIPDOffset;
                 distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
                 renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height); renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
                 renderer.render(orthoScene, orthoCamera);
-                
                 renderer.setScissorTest(false);
             };
-            
             this.dispose = function() { renderTargetL.dispose(); renderTargetR.dispose(); distortionMaterial.dispose(); quadMesh.geometry.dispose(); };
         };
     </script>
