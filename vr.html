@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - v3.1 (Menu Toggle)</title>
+    <title>VR Player - v3.2 (Compact & Pro Controls)</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -60,11 +60,11 @@
         button.primary:active { transform: scale(0.98); background: #0056b3; }
         button:disabled { background: #333; color: #555; cursor: not-allowed; transform: none; }
 
-        /* --- VR OVERLAY --- */
+        /* --- VR OVERLAY (COMPACT) --- */
         #progressOverlay { 
             position: fixed; bottom: 0; left: 0; right: 0; 
             background: rgba(0, 0, 0, 0.6);
-            padding: 10px 0; 
+            padding: 6px 0; 
             display: none; 
             z-index: 998; 
             transition: opacity 0.3s;
@@ -78,19 +78,21 @@
             display: flex; 
             flex-direction: column; 
             align-items: center; 
-            padding: 0 8px; 
+            padding: 0 4px; 
             box-sizing: border-box; 
         }
         
-        .progressBar { width: 100%; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; cursor: pointer; margin-bottom: 6px; position: relative; }
-        .progressFill { height: 100%; background: #007BFF; border-radius: 6px; width: 0%; pointer-events: none; }
-        .timeDisplay { font-size: 12px; color: #ccc; margin-bottom: 8px; font-family: monospace; }
+        /* Tighter Spacing */
+        .progressBar { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer; margin-bottom: 2px; position: relative; }
+        .progressFill { height: 100%; background: #007BFF; border-radius: 5px; width: 0%; pointer-events: none; }
+        .timeDisplay { font-size: 10px; color: #ccc; margin-bottom: 4px; font-family: monospace; }
         
-        .controls-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 6px; width: 100%; }
+        .controls-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 3px; width: 100%; }
         
+        /* Smaller Buttons for Compact Layout */
         .btn-icon {
             background: rgba(255,255,255,0.2); border: none; color: #eee;
-            width: 40px; height: 40px; border-radius: 50%; font-size: 16px;
+            width: 32px; height: 32px; border-radius: 50%; font-size: 12px; font-weight: bold;
             display: flex; align-items: center; justify-content: center; cursor: pointer;
             flex-shrink: 0; transition: background 0.1s;
         }
@@ -98,21 +100,21 @@
         
         .btn-pill {
             background: rgba(255,255,255,0.2); border: none; color: #eee;
-            height: 32px; padding: 0 16px; border-radius: 16px; font-size: 11px; cursor: pointer;
+            height: 28px; padding: 0 12px; border-radius: 14px; font-size: 10px; cursor: pointer;
             white-space: nowrap; flex-shrink: 0; font-weight: bold; transition: background 0.2s;
         }
         .btn-pill:active { background: #007BFF; }
-        .btn-pill.active { background: #007BFF; color: white; } /* Selected State */
+        .btn-pill.active { background: #007BFF; color: white; }
 
         .btn-wide {
             background: #007BFF; border: none; color: white;
-            width: 90%; height: 44px; border-radius: 8px; font-size: 14px; font-weight: bold;
-            cursor: pointer; margin-top: 5px;
+            width: 90%; height: 36px; border-radius: 8px; font-size: 12px; font-weight: bold;
+            cursor: pointer; margin-top: 4px;
         }
         .btn-wide:active { background: #0056b3; transform: scale(0.98); }
 
         .section-label {
-            font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; margin: 6px 0 4px 0; font-weight: bold;
+            font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 4px 0 2px 0; font-weight: bold;
         }
     </style>
 </head>
@@ -120,6 +122,7 @@
 
     <div id="setup">
         <div class="setup-container">
+            <h2>--O^O--</h2>
             
             <label for="fileInput" class="file-upload-label" id="fileLabel">Tap to Select Video File</label>
             <input type="file" id="fileInput" accept="video/*">
@@ -140,10 +143,13 @@
             <div class="progressBar"><div class="progressFill"></div></div>
             <div class="timeDisplay">0:00 / 0:00</div>
             
+            <!-- 5-Button Playback Control -->
             <div class="controls-row">
-                <button class="btn-icon rewind-btn">↺</button>
-                <button class="btn-icon play-pause-btn">▶</button>
-                <button class="btn-icon forward-btn">↻</button>
+                <button class="btn-icon rewind-long-btn">&laquo;</button> <!-- -60s -->
+                <button class="btn-icon rewind-btn">&lsaquo;</button>    <!-- -10s -->
+                <button class="btn-icon play-pause-btn">▶</button>       <!-- Play/Pause -->
+                <button class="btn-icon forward-btn">&rsaquo;</button>   <!-- +10s -->
+                <button class="btn-icon forward-long-btn">&raquo;</button> <!-- +60s -->
             </div>
 
             <div class="section-label">Format</div>
@@ -182,9 +188,11 @@
             <div class="timeDisplay">0:00 / 0:00</div>
             
             <div class="controls-row">
-                <button class="btn-icon rewind-btn">↺</button>
+                <button class="btn-icon rewind-long-btn">&laquo;</button>
+                <button class="btn-icon rewind-btn">&lsaquo;</button>
                 <button class="btn-icon play-pause-btn">▶</button>
-                <button class="btn-icon forward-btn">↻</button>
+                <button class="btn-icon forward-btn">&rsaquo;</button>
+                <button class="btn-icon forward-long-btn">&raquo;</button>
             </div>
 
             <div class="section-label">Format</div>
@@ -224,7 +232,7 @@
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
     </script>
 
-    <!-- FRAGMENT SHADER (LANCZOS-2 + BARREL DISTORTION) -->
+    <!-- FRAGMENT SHADER -->
     <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
         uniform sampler2D tDiffuse;
         uniform vec2 texSize; 
@@ -465,7 +473,6 @@
                 screenGroup.add(screenMesh);
                 screenMeshes.push(screenMesh);
             } else {
-                // Left Eye
                 const matL = new THREE.ShaderMaterial({
                     uniforms: { tex: { value: videoTexture } },
                     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -478,7 +485,6 @@
                 screenGroup.add(screenL);
                 screenMeshes.push(screenL);
 
-                // Right Eye
                 const matR = new THREE.ShaderMaterial({
                     uniforms: { tex: { value: videoTexture } },
                     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -603,12 +609,8 @@
         function setVideoMode(newMode) {
             if (mode === newMode) return;
             mode = newMode;
-            
-            // Update UI
             mode2dBtns.forEach(b => b.classList.toggle('active', mode === '2d'));
             mode3dBtns.forEach(b => b.classList.toggle('active', mode === '3d'));
-
-            // Rebuild Screen geometry for new aspect ratio / UVs
             updateScreenMeshes();
             showOverlay();
         }
@@ -621,15 +623,17 @@
             
             const cl = target.classList;
             
-            // Mode Switching
-            if (cl.contains('mode-2d-btn')) setVideoMode('2d');
-            else if (cl.contains('mode-3d-btn')) setVideoMode('3d');
-
             // Playback
-            else if (cl.contains('play-pause-btn')) togglePlayPause();
+            if (cl.contains('play-pause-btn')) togglePlayPause();
             else if (cl.contains('rewind-btn')) seekRelative(-10);
             else if (cl.contains('forward-btn')) seekRelative(10);
+            else if (cl.contains('rewind-long-btn')) seekRelative(-60); // 1 Minute Rewind
+            else if (cl.contains('forward-long-btn')) seekRelative(60); // 1 Minute Forward
             
+            // Modes
+            else if (cl.contains('mode-2d-btn')) setVideoMode('2d');
+            else if (cl.contains('mode-3d-btn')) setVideoMode('3d');
+
             // Zoom
             else if (cl.contains('zoom-in-btn')) adjustZoom(0.1);
             else if (cl.contains('zoom-out-btn')) adjustZoom(-0.1);
