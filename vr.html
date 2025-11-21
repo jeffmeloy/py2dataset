@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>VR Video Player - True 3D & Lanczos</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #000; color: white; }
+        
+        /* --- SETUP SCREEN --- */
+        #setup { 
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10000; 
+            background: #121212; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        #setup.hidden { display: none; }
+        
+        .setup-container {
+            width: 100%; max-width: 360px;
+            background: #1e1e1e;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; gap: 15px;
+        }
+
+        h2 { margin: 0 0 10px 0; text-align: center; font-size: 22px; color: #fff; }
+        
+        .radio-group { display: flex; background: #2c2c2c; border-radius: 8px; padding: 4px; }
+        .radio-group label {
+            flex: 1; text-align: center; padding: 10px; cursor: pointer;
+            border-radius: 6px; transition: background 0.2s; font-weight: 500; color: #888;
+        }
+        .radio-group input { display: none; }
+        .radio-group input:checked + label { background: #007BFF; color: white; }
+
+        .file-upload-label {
+            display: block; background: #333; color: #ddd; width: 100%; padding: 12px;
+            border-radius: 8px; text-align: center; font-weight: 500; border: 1px dashed #555;
+            cursor: pointer; box-sizing: border-box;
+        }
+        .file-upload-label:active { background: #444; }
+        #fileInput { display: none; }
+
+        .preview-area {
+            background: #000; border-radius: 8px; overflow: hidden; 
+            height: 200px; display: flex; align-items: center; justify-content: center;
+            position: relative; border: 1px solid #333;
+        }
+        #testVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
+        #testVideo.active { display: block; }
+        .placeholder-text { position: absolute; color: #555; font-size: 14px; pointer-events: none; }
+        .preview-area.has-video .placeholder-text { display: none; }
+
+        #status { font-size: 13px; color: #666; text-align: center; height: 16px; }
+        #status.success { color: #4CAF50; }
+        
+        button.primary {
+            background: #007BFF; color: white; border: none; padding: 14px;
+            font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer;
+            width: 100%; transition: transform 0.1s;
+        }
+        button.primary:active { transform: scale(0.98); background: #0056b3; }
+        button:disabled { background: #333; color: #555; cursor: not-allowed; transform: none; }
+
+        /* --- VR OVERLAY --- */
+        #progressOverlay { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background: rgba(0, 0, 0, 0.45);
+            padding: 8px 0; 
+            display: none; 
+            z-index: 998; 
+            transition: opacity 0.3s;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+        #progressOverlay.visible { display: flex; }
+        #progressOverlay.fading { opacity: 0; }
+        .eye-controls { 
+            width: 50%; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding: 0 6px; 
+            box-sizing: border-box; 
+        }
+        
+        .progressBar { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer; margin-bottom: 4px; position: relative; }
+        .progressFill { height: 100%; background: #007BFF; border-radius: 5px; width: 0%; pointer-events: none; }
+        .timeDisplay { font-size: 11px; color: #aaa; margin-bottom: 4px; font-family: monospace; }
+        
+        .controls-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 3px; width: 100%; }
+        .btn-icon {
+            background: rgba(255,255,255,0.15); border: none; color: #eee;
+            width: 36px; height: 36px; border-radius: 50%; font-size: 14px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            flex-shrink: 0;
+        }
+        .btn-icon:active { background: rgba(255,255,255,0.4); }
+        .btn-pill {
+            background: rgba(255,255,255,0.15); border: none; color: #eee;
+            height: 28px; padding: 0 12px; border-radius: 14px; font-size: 10px; cursor: pointer;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .btn-pill:active { background: rgba(255,255,255,0.4); }
+        .section-label {
+            font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 2px 0 2px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="setup">
+        <div class="setup-container">
+            <h2>--O^O--</h2>
+            <div class="radio-group">
+                <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D Video</label>
+                <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
+            </div>
+            
+            <label for="fileInput" class="file-upload-label" id="fileLabel">Tap to Select Video File</label>
+            <input type="file" id="fileInput" accept="video/*">
+
+            <div class="preview-area" id="previewArea">
+                <span class="placeholder-text">Preview</span>
+                <video id="testVideo" controls playsinline webkit-playsinline></video>
+            </div>
+            
+            <div id="status">Waiting for file...</div>
+            <button id="startBtn" class="primary" disabled>ENTER VR</button>
+        </div>
+    </div>
+
+    <div id="progressOverlay">
+        <!-- Repeated HTML for Stereo UI overlay (Left/Right Eye) -->
+        <!-- JS will handle events for both sides -->
+        <div class="eye-controls">
+            <div class="progressBar"><div class="progressFill"></div></div>
+            <div class="timeDisplay">0:00 / 0:00</div>
+            
+            <div class="section-label">Playback</div>
+            <div class="controls-row">
+                <button class="btn-icon rewind-btn">↺</button>
+                <button class="btn-icon play-pause-btn">▶</button>
+                <button class="btn-icon forward-btn">↻</button>
+            </div>
+            
+            <div class="section-label">Screen Position</div>
+            <div class="controls-row">
+                <button class="btn-icon pan-left-btn">&larr;</button>
+                <button class="btn-pill pan-center-btn">RE-CENTER</button>
+                <button class="btn-icon pan-right-btn">&rarr;</button>
+            </div>
+            <div class="controls-row">
+                <button class="btn-icon pan-up-btn">&uarr;</button>
+                <button class="btn-pill dist-reset-btn">RESET DST</button>
+                <button class="btn-icon pan-down-btn">&darr;</button>
+            </div>
+
+            <div class="section-label">Distance & Size</div>
+            <div class="controls-row">
+                <button class="btn-icon dist-dec-btn">In</button>
+                <button class="btn-icon dist-inc-btn">Out</button>
+                <button class="btn-icon size-dec-btn">Sml</button>
+                <button class="btn-icon size-inc-btn">Big</button>
+            </div>
+            
+            <div class="section-label">Lens / IPD</div>
+            <div class="controls-row">
+                <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
+                <button class="btn-pill pd-reset-btn">RESET</button>
+                <button class="btn-icon pd-inc-btn">&rarr;&larr;</button>
+            </div>
+        </div>
+        
+        <div class="eye-controls">
+            <div class="progressBar"><div class="progressFill"></div></div>
+            <div class="timeDisplay">0:00 / 0:00</div>
+            
+            <div class="section-label">Playback</div>
+            <div class="controls-row">
+                <button class="btn-icon rewind-btn">↺</button>
+                <button class="btn-icon play-pause-btn">▶</button>
+                <button class="btn-icon forward-btn">↻</button>
+            </div>
+            
+            <div class="section-label">Screen Position</div>
+            <div class="controls-row">
+                <button class="btn-icon pan-left-btn">&larr;</button>
+                <button class="btn-pill pan-center-btn">RE-CENTER</button>
+                <button class="btn-icon pan-right-btn">&rarr;</button>
+            </div>
+            <div class="controls-row">
+                <button class="btn-icon pan-up-btn">&uarr;</button>
+                <button class="btn-pill dist-reset-btn">RESET DST</button>
+                <button class="btn-icon pan-down-btn">&darr;</button>
+            </div>
+
+            <div class="section-label">Distance & Size</div>
+            <div class="controls-row">
+                <button class="btn-icon dist-dec-btn">In</button>
+                <button class="btn-icon dist-inc-btn">Out</button>
+                <button class="btn-icon size-dec-btn">Sml</button>
+                <button class="btn-icon size-inc-btn">Big</button>
+            </div>
+            
+            <div class="section-label">Lens / IPD</div>
+            <div class="controls-row">
+                <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
+                <button class="btn-pill pd-reset-btn">RESET</button>
+                <button class="btn-icon pd-inc-btn">&rarr;&larr;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VERTEX SHADER (Standard Pass-through) -->
+    <script id="vertexShader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    </script>
+
+    <!-- FRAGMENT SHADER (LANCZOS-2 + BARREL DISTORTION ONLY) -->
+    <!-- Note: Head tracking math has been removed from here! -->
+    <script id="fragmentShaderDistortion" type="x-shader/x-fragment">
+        uniform sampler2D tDiffuse;
+        uniform vec2 texSize; 
+        uniform float k1;
+        uniform float k2;
+        uniform float ipdOffset; 
+        uniform float zoomLevel;
+        varying vec2 vUv;
+
+        const float PI = 3.14159265359;
+
+        float sinc(float x) {
+            if (abs(x) < 0.0001) return 1.0;
+            float a = PI * x;
+            return sin(a) / a;
+        }
+
+        float lanczosWeight(float x) {
+            if (abs(x) >= 2.0) return 0.0;
+            return sinc(x) * sinc(x * 0.5);
+        }
+
+        // 16-Tap Lanczos-2 Interpolation
+        vec4 textureLanczos(sampler2D sampler, vec2 texCoords, vec2 texSize) {
+            vec2 invTexSize = 1.0 / texSize;
+            vec2 pos = texCoords * texSize;
+            vec2 ipos = floor(pos - 0.5) + 0.5; 
+            vec2 f = pos - ipos; 
+
+            vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
+            vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
+            wX /= dot(wX, vec4(1.0));
+            wY /= dot(wY, vec4(1.0));
+
+            vec4 row0 = texture2D(sampler, (ipos + vec2(-1, -1)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0, -1)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1, -1)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2, -1)) * invTexSize) * wX.w;
+
+            vec4 row1 = texture2D(sampler, (ipos + vec2(-1,  0)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0,  0)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1,  0)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2,  0)) * invTexSize) * wX.w;
+
+            vec4 row2 = texture2D(sampler, (ipos + vec2(-1,  1)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0,  1)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1,  1)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2,  1)) * invTexSize) * wX.w;
+
+            vec4 row3 = texture2D(sampler, (ipos + vec2(-1,  2)) * invTexSize) * wX.x +
+                        texture2D(sampler, (ipos + vec2( 0,  2)) * invTexSize) * wX.y +
+                        texture2D(sampler, (ipos + vec2( 1,  2)) * invTexSize) * wX.z +
+                        texture2D(sampler, (ipos + vec2( 2,  2)) * invTexSize) * wX.w;
+
+            return row0 * wY.x + row1 * wY.y + row2 * wY.z + row3 * wY.w;
+        }
+
+        vec2 distort(vec2 p) {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 v = p - center;
+            float r2 = dot(v, v);
+            return center + v * (1.0 + r2 * (k1 + k2 * r2));
+        }
+
+        void main() {
+            vec2 eyeCenter = vec2(0.5, 0.5);
+            
+            // 1. Apply Geometric Lens Distortion
+            vec2 distortedUV = distort(vUv);
+            
+            // 2. Apply Digital Zoom (Cropping) & IPD Offset
+            // We DO NOT add head rotation here. The camera 3D rotation handles that.
+            vec2 uv = (distortedUV - eyeCenter) / zoomLevel;
+            
+            // IPD offset shifts the texture horizontally to align with physical pupil distance
+            uv.x += ipdOffset;
+            uv += eyeCenter;
+
+            // 3. Boundary Check & Sample
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            } else {
+                gl_FragColor = textureLanczos(tDiffuse, uv, texSize);
+            }
+        }
+    </script>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const fileLabel = document.getElementById('fileLabel');
+        const testVideo = document.getElementById('testVideo');
+        const previewArea = document.getElementById('previewArea');
+        const startBtn = document.getElementById('startBtn');
+        const setupDiv = document.getElementById('setup');
+        const status = document.getElementById('status');
+        const progressOverlay = document.getElementById('progressOverlay');
+        const progressFills = document.querySelectorAll('.progressFill');
+        const timeDisplays = document.querySelectorAll('.timeDisplay');
+        const playPauseBtns = document.querySelectorAll('.play-pause-btn');
+
+        let camera, scene, renderer, effect;
+        let video, videoTexture, orientationTracker;
+        let screenGroup; // Container for the screen meshes
+        let mode = '2d', isPlaying = false, videoURL = null;
+        let hideOverlayTimer = null;
+        
+        let currentZoomLevel = 1.0; // Digital zoom in shader
+        
+        // Screen Physical Settings
+        let userIPDOffset = 0.0; 
+        let screenDistance = 3.0;
+        let screenWidth = 6.0;
+        const defaultDistance = 3.0;
+        const defaultWidth = 6.0;
+        let screenMeshes = [];
+
+        fileInput.addEventListener('change', handleFileSelect);
+        startBtn.addEventListener('click', startVR);
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            fileLabel.textContent = file.name; 
+            if (videoURL) URL.revokeObjectURL(videoURL);
+            videoURL = URL.createObjectURL(file);
+            testVideo.src = videoURL;
+            testVideo.classList.add('active'); 
+            previewArea.classList.add('has-video'); 
+            mode = document.querySelector('input[name="mode"]:checked').value;
+            testVideo.addEventListener('loadedmetadata', function() {
+                status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
+                status.className = 'status success';
+                startBtn.disabled = false;
+            }, { once: true });
+        }
+
+        async function startVR() {
+            if (!videoURL) return;
+            testVideo.pause(); 
+
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+            }
+
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) elem.requestFullscreen();
+
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
+            }
+
+            setTimeout(() => {
+                setupDiv.classList.add('hidden');
+                disposeResources();
+                initVR();
+            }, 100);
+        }
+
+        function disposeResources() {
+            if (videoTexture) { videoTexture.dispose(); videoTexture = null; }
+            if (video) { video.pause(); video.src = ''; video.load(); video = null; }
+            if (orientationTracker) { orientationTracker.disconnect(); orientationTracker = null; }
+            if (effect && effect.dispose) { effect.dispose(); effect = null; }
+            if (renderer) {
+                renderer.dispose();
+                if (renderer.domElement && renderer.domElement.parentNode) {
+                    renderer.domElement.parentNode.removeChild(renderer.domElement);
+                }
+                renderer = null;
+            }
+            screenMeshes = [];
+            scene = null;
+        }
+
+        function initVR() {
+            scene = new THREE.Scene();
+            
+            // Standard VR Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+            scene.add(camera); // Camera is now part of the scene, rotating freely
+
+            // Group to hold the screen (Video Wall)
+            screenGroup = new THREE.Group();
+            scene.add(screenGroup);
+
+            video = document.createElement('video');
+            video.src = videoURL;
+            video.loop = false;
+            video.muted = false;
+            video.playsinline = true;
+            video.setAttribute('webkit-playsinline', '');
+
+            video.addEventListener('loadeddata', function() {
+                videoTexture = new THREE.VideoTexture(video);
+                videoTexture.minFilter = THREE.LinearFilter;
+                videoTexture.magFilter = THREE.LinearFilter;
+                videoTexture.generateMipmaps = false;
+
+                renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+
+                createScreenMeshes();
+
+                effect = new THREE.StereoEffect(renderer, video);
+                effect.setSize(window.innerWidth, window.innerHeight);
+
+                orientationTracker = new OrientationTracker();
+                orientationTracker.connect();
+
+                window.addEventListener('resize', onResize);
+                document.addEventListener('click', toggleOverlay);
+                video.addEventListener('timeupdate', updateProgress);
+                progressOverlay.addEventListener('click', handleControls);
+
+                // Initial center after small delay to allow sensors to settle
+                setTimeout(() => recenterScreen(), 500);
+
+                showOverlay();
+                video.play().then(() => {
+                    isPlaying = true;
+                    updatePlayPauseButtons();
+                    animate();
+                }).catch(console.error);
+            });
+            video.load();
+        }
+
+        function createScreenMeshes() {
+            // Clear old meshes
+            screenMeshes.forEach(mesh => {
+                screenGroup.remove(mesh);
+                if (mesh.geometry) mesh.geometry.dispose();
+                if (mesh.material) mesh.material.dispose();
+            });
+            screenMeshes = [];
+
+            // Aspect Ratio Calculation
+            const vidW = video.videoWidth;
+            const vidH = video.videoHeight;
+            // For 3D Top/Bottom or SBS, we'd need more logic, but for 3D SBS standard:
+            const aspect = mode === '3d' ? (vidW / 2) / vidH : vidW / vidH;
+            
+            const width = screenWidth;
+            const height = width / aspect;
+            const geometry = new THREE.PlaneGeometry(width, height);
+
+            // Create meshes based on mode
+            if (mode === '2d') {
+                const material = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
+                const screenMesh = new THREE.Mesh(geometry, material);
+                screenMesh.position.set(0, 0, -screenDistance);
+                screenGroup.add(screenMesh);
+                screenMeshes.push(screenMesh);
+            } else {
+                // Left Eye Mesh
+                const matL = new THREE.ShaderMaterial({
+                    uniforms: { tex: { value: videoTexture } },
+                    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                    fragmentShader: `uniform sampler2D tex; varying vec2 vUv; void main() { gl_FragColor = texture2D(tex, vec2(vUv.x * 0.5, vUv.y)); }`,
+                    side: THREE.DoubleSide
+                });
+                const screenL = new THREE.Mesh(geometry, matL);
+                screenL.position.set(0, 0, -screenDistance);
+                screenL.layers.set(1); // Layer 1 for Left Camera
+                screenGroup.add(screenL);
+                screenMeshes.push(screenL);
+
+                // Right Eye Mesh
+                const matR = new THREE.ShaderMaterial({
+                    uniforms: { tex: { value: videoTexture } },
+                    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                    fragmentShader: `uniform sampler2D tex; varying vec2 vUv; void main() { gl_FragColor = texture2D(tex, vec2(vUv.x * 0.5 + 0.5, vUv.y)); }`,
+                    side: THREE.DoubleSide
+                });
+                const screenR = new THREE.Mesh(geometry, matR);
+                screenR.position.set(0, 0, -screenDistance);
+                screenR.layers.set(2); // Layer 2 for Right Camera
+                screenGroup.add(screenR);
+                screenMeshes.push(screenR);
+            }
+        }
+
+        function updateScreenMeshes() {
+            if (!video || !videoTexture) return;
+            createScreenMeshes();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 1. Update Orientation
+            if (orientationTracker) {
+                orientationTracker.update();
+                // Apply rotation DIRECTLY to the camera (True 3D)
+                camera.quaternion.copy(orientationTracker.getQuaternion());
+            }
+
+            // 2. Render Scene via StereoEffect (handles render targets + distortion)
+            if (effect) effect.render(scene, camera);
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            effect.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /* --- UI & CONTROL LOGIC --- */
+
+        function updatePlayPauseButtons() {
+            playPauseBtns.forEach(btn => { btn.textContent = isPlaying ? '||' : '▶'; });
+        }
+        
+        function togglePlayPause() {
+            if (!video) return;
+            if (isPlaying) { video.pause(); isPlaying = false; } else { video.play(); isPlaying = true; }
+            updatePlayPauseButtons(); showOverlay();
+        }
+        
+        function seekVideo(e, barEl) {
+            if (!video) return;
+            const rect = barEl.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            video.currentTime = pos * video.duration; showOverlay();
+        }
+        
+        function seekRelative(seconds) {
+            if (!video) return;
+            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds)); showOverlay();
+        }
+        
+        function updateProgress() {
+            if (!video) return;
+            const percent = (video.currentTime / video.duration) * 100;
+            progressFills.forEach(fill => { fill.style.width = percent + '%'; });
+            const format = (t) => { const m = Math.floor(t / 60); const s = Math.floor(t % 60).toString().padStart(2, '0'); return `${m}:${s}`; };
+            const timeText = `${format(video.currentTime)} / ${format(video.duration || 0)}`;
+            timeDisplays.forEach(display => { display.textContent = timeText; });
+        }
+        
+        function toggleOverlay(e) {
+            if (e.target.closest('button, .progressBar')) return;
+            if (e.target.closest('#progressOverlay')) {
+                if (progressOverlay.classList.contains('visible')) hideOverlay();
+                return;
+            }
+            if (progressOverlay.classList.contains('visible')) hideOverlay(); else showOverlay();
+        }
+        
+        function showOverlay() {
+            progressOverlay.classList.add('visible'); progressOverlay.classList.remove('fading');
+            if (hideOverlayTimer) clearTimeout(hideOverlayTimer);
+            hideOverlayTimer = setTimeout(() => { if (isPlaying) hideOverlay(); }, 3000);
+        }
+        
+        function hideOverlay() {
+            progressOverlay.classList.add('fading');
+            setTimeout(() => { progressOverlay.classList.remove('visible'); }, 300);
+        }
+        
+        // -- 3D MANIPULATION CONTROLS --
+
+        function recenterScreen() {
+            // Rotate the screenGroup to face the same direction as the camera
+            // We copy the Y rotation (Yaw) from the camera, but keep X/Z flat
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            // Calculate Yaw angle
+            const angle = Math.atan2(forward.x, forward.z) + Math.PI; // Invert for lookAt
+            screenGroup.rotation.set(0, angle, 0);
+            showOverlay();
+        }
+
+        function panScreen(deg) {
+            screenGroup.rotateY(THREE.MathUtils.degToRad(deg));
+            showOverlay();
+        }
+
+        function tiltScreen(deg) {
+            screenGroup.rotateX(THREE.MathUtils.degToRad(deg));
+            showOverlay();
+        }
+        
+        function adjustIPD(direction) {
+            userIPDOffset += direction * 0.005;
+            showOverlay();
+        }
+        
+        function resetIPD() {
+            userIPDOffset = 0.0;
+            showOverlay();
+        }
+        
+        function adjustDistance(direction) {
+            screenDistance += direction * 0.2;
+            screenDistance = Math.max(1.0, Math.min(10.0, screenDistance));
+            updateScreenMeshes();
+            showOverlay();
+        }
+
+        function adjustSize(direction) {
+            screenWidth += direction * 0.5;
+            screenWidth = Math.max(1.0, Math.min(20.0, screenWidth));
+            updateScreenMeshes();
+            showOverlay();
+        }
+
+        function resetDistSize() {
+            screenDistance = defaultDistance;
+            screenWidth = defaultWidth;
+            updateScreenMeshes();
+            showOverlay();
+        }
+        
+        function handleControls(e) {
+            e.stopPropagation();
+            const target = e.target.closest('button, .progressBar');
+            if (!target) return;
+            if (target.matches('.progressBar')) { seekVideo(e, target); return; }
+            const cl = target.classList;
+            if (cl.contains('play-pause-btn')) togglePlayPause();
+            else if (cl.contains('rewind-btn')) seekRelative(-10);
+            else if (cl.contains('forward-btn')) seekRelative(10);
+            // Position controls now rotate the screen object in 3D space
+            else if (cl.contains('pan-left-btn')) panScreen(5);
+            else if (cl.contains('pan-right-btn')) panScreen(-5);
+            else if (cl.contains('pan-up-btn')) tiltScreen(-5);
+            else if (cl.contains('pan-down-btn')) tiltScreen(5);
+            else if (cl.contains('pan-center-btn')) recenterScreen();
+            // Physical controls
+            else if (cl.contains('dist-inc-btn')) adjustDistance(1);
+            else if (cl.contains('dist-dec-btn')) adjustDistance(-1);
+            else if (cl.contains('size-inc-btn')) adjustSize(1);
+            else if (cl.contains('size-dec-btn')) adjustSize(-1);
+            else if (cl.contains('dist-reset-btn')) resetDistSize();
+            // Lens controls
+            else if (cl.contains('pd-inc-btn')) adjustIPD(1);
+            else if (cl.contains('pd-dec-btn')) adjustIPD(-1);
+            else if (cl.contains('pd-reset-btn')) resetIPD();
+        }
+
+        // -- ORIENTATION TRACKING --
+        
+        function OrientationTracker() {
+            this.deviceOrientation = {};
+            this.screenOrientation = 0;
+            this.enabled = false;
+            
+            const _euler = new THREE.Euler(); 
+            const _deviceQ = new THREE.Quaternion(); 
+            const _q0 = new THREE.Quaternion(); 
+            const _q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around X
+            const _zee = new THREE.Vector3(0, 0, 1); 
+            
+            // Public accessor for the calculated Quaternion
+            this.getQuaternion = function() { return _deviceQ; };
+
+            const onEvent = (e) => { this.deviceOrientation = e; };
+            const onScreen = () => { this.screenOrientation = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0); };
+            
+            this.connect = function() { onScreen(); window.addEventListener('orientationchange', onScreen); window.addEventListener('deviceorientation', onEvent); this.enabled = true; };
+            this.disconnect = function() { window.removeEventListener('orientationchange', onScreen); window.removeEventListener('deviceorientation', onEvent); this.enabled = false; };
+            
+            this.update = function() {
+                if (!this.enabled) return;
+                const device = this.deviceOrientation; 
+                if (!device || device.alpha === null) return;
+                
+                const alpha = device.alpha ? THREE.MathUtils.degToRad(device.alpha) : 0;
+                const beta = device.beta ? THREE.MathUtils.degToRad(device.beta) : 0;
+                const gamma = device.gamma ? THREE.MathUtils.degToRad(device.gamma) : 0;
+                const orient = this.screenOrientation ? THREE.MathUtils.degToRad(this.screenOrientation) : 0;
+                
+                _euler.set(beta, alpha, -gamma, 'YXZ'); 
+                _deviceQ.setFromEuler(_euler); 
+                _deviceQ.multiply(_q1); 
+                _deviceQ.multiply(_q0.setFromAxisAngle(_zee, -orient));
+            };
+        }
+
+        // -- STEREO EFFECT & DISTORTION RENDERER --
+
+        THREE.StereoEffect = function(renderer, videoElement) {
+            const _stereo = new THREE.StereoCamera(); 
+            _stereo.aspect = 0.5;
+            const dpr = window.devicePixelRatio || 1;
+            
+            const videoW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
+            const videoH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 1080;
+            
+            // Calculate Texture size
+            const calcOptimalSize = (screenDim, videoDim) => {
+                const baseSize = Math.max(Math.floor(screenDim * dpr), videoDim);
+                return Math.min(baseSize, 4096); // Cap at 4k for mobile performance
+            };
+
+            let rtWidth = calcOptimalSize(window.innerWidth, videoW);
+            let rtHeight = calcOptimalSize(window.innerHeight, videoH);
+            
+            let renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+            let renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+            
+            const distortionMaterial = new THREE.ShaderMaterial({
+                uniforms: { 
+                    tDiffuse: { value: null }, 
+                    texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, 
+                    k1: { value: 0.22 }, // Barrel Distortion Coeff
+                    k2: { value: 0.18 }, 
+                    ipdOffset: { value: 0.0 }, 
+                    zoomLevel: { value: 1.0 }
+                },
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShaderDistortion').textContent
+            });
+
+            const quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), distortionMaterial);
+            const orthoScene = new THREE.Scene(); 
+            const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            orthoScene.add(quadMesh); const sizeVec = new THREE.Vector2();
+            
+            this.setSize = function(width, height) {
+                renderer.setSize(width, height);
+                const newW = calcOptimalSize(width, videoW);
+                const newH = calcOptimalSize(height, videoH);
+                if (newW !== rtWidth || newH !== rtHeight) { 
+                    renderTargetL.dispose(); renderTargetR.dispose(); 
+                    rtWidth = newW; rtHeight = newH; 
+                    renderTargetL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter }); 
+                    renderTargetR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, { minFilter: THREE.LinearFilter }); 
+                    distortionMaterial.uniforms.texSize.value.set(rtWidth, rtHeight);
+                }
+            };
+            
+            this.render = function(scene, camera) {
+                scene.updateMatrixWorld();
+                _stereo.update(camera);
+                
+                renderer.getSize(sizeVec); const halfWidth = sizeVec.width * 0.5;
+                
+                // Render Left Eye to Texture
+                if (mode === '3d') { _stereo.cameraL.layers.set(1); _stereo.cameraR.layers.set(2); }
+                renderer.setRenderTarget(renderTargetL); renderer.clear(); renderer.render(scene, _stereo.cameraL);
+                
+                // Render Right Eye to Texture
+                renderer.setRenderTarget(renderTargetR); renderer.clear(); renderer.render(scene, _stereo.cameraR);
+                
+                // Post-Process Output
+                renderer.setRenderTarget(null); renderer.clear(); renderer.setScissorTest(true);
+                
+                distortionMaterial.uniforms.zoomLevel.value = currentZoomLevel;
+
+                // Left Lens
+                distortionMaterial.uniforms.ipdOffset.value = userIPDOffset; 
+                distortionMaterial.uniforms.tDiffuse.value = renderTargetL.texture;
+                renderer.setScissor(0, 0, halfWidth, sizeVec.height); renderer.setViewport(0, 0, halfWidth, sizeVec.height);
+                renderer.render(orthoScene, orthoCamera);
+                
+                // Right Lens
+                distortionMaterial.uniforms.ipdOffset.value = -userIPDOffset;
+                distortionMaterial.uniforms.tDiffuse.value = renderTargetR.texture;
+                renderer.setScissor(halfWidth, 0, halfWidth, sizeVec.height); renderer.setViewport(halfWidth, 0, halfWidth, sizeVec.height);
+                renderer.render(orthoScene, orthoCamera);
+                
+                renderer.setScissorTest(false);
+            };
+            
+            this.dispose = function() { renderTargetL.dispose(); renderTargetR.dispose(); distortionMaterial.dispose(); quadMesh.geometry.dispose(); };
+        };
+    </script>
+</body>
+</html>
