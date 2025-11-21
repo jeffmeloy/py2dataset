@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Video Player - v3 UI</title>
+    <title>VR Player - v3.1 (Menu Toggle)</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -30,19 +30,11 @@
         }
 
         h2 { margin: 0 0 10px 0; text-align: center; font-size: 22px; color: #fff; }
-        
-        .radio-group { display: flex; background: #2c2c2c; border-radius: 8px; padding: 4px; }
-        .radio-group label {
-            flex: 1; text-align: center; padding: 10px; cursor: pointer;
-            border-radius: 6px; transition: background 0.2s; font-weight: 500; color: #888;
-        }
-        .radio-group input { display: none; }
-        .radio-group input:checked + label { background: #007BFF; color: white; }
 
         .file-upload-label {
-            display: block; background: #333; color: #ddd; width: 100%; padding: 12px;
+            display: block; background: #333; color: #ddd; width: 100%; padding: 20px;
             border-radius: 8px; text-align: center; font-weight: 500; border: 1px dashed #555;
-            cursor: pointer; box-sizing: border-box;
+            cursor: pointer; box-sizing: border-box; transition: background 0.2s;
         }
         .file-upload-label:active { background: #444; }
         #fileInput { display: none; }
@@ -71,7 +63,7 @@
         /* --- VR OVERLAY --- */
         #progressOverlay { 
             position: fixed; bottom: 0; left: 0; right: 0; 
-            background: rgba(0, 0, 0, 0.6); /* Slightly darker for better contrast */
+            background: rgba(0, 0, 0, 0.6);
             padding: 10px 0; 
             display: none; 
             z-index: 998; 
@@ -96,7 +88,6 @@
         
         .controls-row { display: flex; justify-content: center; gap: 8px; margin-bottom: 6px; width: 100%; }
         
-        /* Round Icon Buttons */
         .btn-icon {
             background: rgba(255,255,255,0.2); border: none; color: #eee;
             width: 40px; height: 40px; border-radius: 50%; font-size: 16px;
@@ -105,15 +96,14 @@
         }
         .btn-icon:active { background: #007BFF; }
         
-        /* Pill Buttons (Resets) */
         .btn-pill {
             background: rgba(255,255,255,0.2); border: none; color: #eee;
             height: 32px; padding: 0 16px; border-radius: 16px; font-size: 11px; cursor: pointer;
-            white-space: nowrap; flex-shrink: 0; font-weight: bold;
+            white-space: nowrap; flex-shrink: 0; font-weight: bold; transition: background 0.2s;
         }
         .btn-pill:active { background: #007BFF; }
+        .btn-pill.active { background: #007BFF; color: white; } /* Selected State */
 
-        /* Wide Recenter Button */
         .btn-wide {
             background: #007BFF; border: none; color: white;
             width: 90%; height: 44px; border-radius: 8px; font-size: 14px; font-weight: bold;
@@ -130,11 +120,6 @@
 
     <div id="setup">
         <div class="setup-container">
-            <h2>--O^O--</h2>
-            <div class="radio-group">
-                <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D Video</label>
-                <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
-            </div>
             
             <label for="fileInput" class="file-upload-label" id="fileLabel">Tap to Select Video File</label>
             <input type="file" id="fileInput" accept="video/*">
@@ -160,22 +145,28 @@
                 <button class="btn-icon play-pause-btn">▶</button>
                 <button class="btn-icon forward-btn">↻</button>
             </div>
+
+            <div class="section-label">Format</div>
+            <div class="controls-row">
+                <button class="btn-pill mode-2d-btn active">2D</button>
+                <button class="btn-pill mode-3d-btn">3D SBS</button>
+            </div>
             
-            <div class="section-label">Video Zoom</div>
+            <div class="section-label">Zoom</div>
             <div class="controls-row">
                 <button class="btn-icon zoom-out-btn">−</button>
                 <button class="btn-pill zoom-reset-btn">100%</button>
                 <button class="btn-icon zoom-in-btn">+</button>
             </div>
 
-            <div class="section-label">Screen Distance</div>
+            <div class="section-label">Distance</div>
             <div class="controls-row">
                 <button class="btn-icon dist-dec-btn">−</button>
                 <button class="btn-pill dist-reset-btn">RESET</button>
                 <button class="btn-icon dist-inc-btn">+</button>
             </div>
             
-            <div class="section-label">IPD Align</div>
+            <div class="section-label">IPD</div>
             <div class="controls-row">
                 <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
                 <button class="btn-pill pd-reset-btn">RESET</button>
@@ -195,22 +186,28 @@
                 <button class="btn-icon play-pause-btn">▶</button>
                 <button class="btn-icon forward-btn">↻</button>
             </div>
+
+            <div class="section-label">Format</div>
+            <div class="controls-row">
+                <button class="btn-pill mode-2d-btn active">2D</button>
+                <button class="btn-pill mode-3d-btn">3D SBS</button>
+            </div>
             
-            <div class="section-label">Video Zoom</div>
+            <div class="section-label">Zoom</div>
             <div class="controls-row">
                 <button class="btn-icon zoom-out-btn">−</button>
                 <button class="btn-pill zoom-reset-btn">100%</button>
                 <button class="btn-icon zoom-in-btn">+</button>
             </div>
 
-            <div class="section-label">Screen Distance</div>
+            <div class="section-label">Distance</div>
             <div class="controls-row">
                 <button class="btn-icon dist-dec-btn">−</button>
                 <button class="btn-pill dist-reset-btn">RESET</button>
                 <button class="btn-icon dist-inc-btn">+</button>
             </div>
             
-            <div class="section-label">IPD Align</div>
+            <div class="section-label">IPD</div>
             <div class="controls-row">
                 <button class="btn-icon pd-dec-btn">&larr;&rarr;</button>
                 <button class="btn-pill pd-reset-btn">RESET</button>
@@ -318,6 +315,8 @@
         const progressFills = document.querySelectorAll('.progressFill');
         const timeDisplays = document.querySelectorAll('.timeDisplay');
         const playPauseBtns = document.querySelectorAll('.play-pause-btn');
+        const mode2dBtns = document.querySelectorAll('.mode-2d-btn');
+        const mode3dBtns = document.querySelectorAll('.mode-3d-btn');
 
         let camera, scene, renderer, effect;
         let video, videoTexture, orientationTracker;
@@ -331,7 +330,7 @@
         let screenWidth = 6.0;
         
         const defaultDistance = 3.0;
-        const defaultWidth = 6.0; // Default physical width
+        const defaultWidth = 6.0; 
         let screenMeshes = [];
 
         fileInput.addEventListener('change', handleFileSelect);
@@ -346,7 +345,7 @@
             testVideo.src = videoURL;
             testVideo.classList.add('active'); 
             previewArea.classList.add('has-video'); 
-            mode = document.querySelector('input[name="mode"]:checked').value;
+            // Mode defaults to 2d now
             testVideo.addEventListener('loadedmetadata', function() {
                 status.textContent = `Ready: ${testVideo.videoWidth}x${testVideo.videoHeight}`;
                 status.className = 'status success';
@@ -466,6 +465,7 @@
                 screenGroup.add(screenMesh);
                 screenMeshes.push(screenMesh);
             } else {
+                // Left Eye
                 const matL = new THREE.ShaderMaterial({
                     uniforms: { tex: { value: videoTexture } },
                     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -478,6 +478,7 @@
                 screenGroup.add(screenL);
                 screenMeshes.push(screenL);
 
+                // Right Eye
                 const matR = new THREE.ShaderMaterial({
                     uniforms: { tex: { value: videoTexture } },
                     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -568,12 +569,9 @@
             showOverlay();
         }
 
-        // --- NEW BUTTON HANDLERS ---
-        
-        // Zoom (Digital)
         function adjustZoom(val) {
             currentZoomLevel += val;
-            currentZoomLevel = Math.max(0.5, Math.min(3.0, currentZoomLevel)); // Clamp zoom
+            currentZoomLevel = Math.max(0.5, Math.min(3.0, currentZoomLevel)); 
             showOverlay();
         }
         function resetZoom() {
@@ -581,7 +579,6 @@
             showOverlay();
         }
 
-        // Distance (Physical Mesh)
         function adjustDistance(direction) {
             screenDistance += direction * 0.2;
             screenDistance = Math.max(1.0, Math.min(10.0, screenDistance));
@@ -594,13 +591,25 @@
             showOverlay();
         }
         
-        // IPD
         function adjustIPD(direction) {
             userIPDOffset += direction * 0.005;
             showOverlay();
         }
         function resetIPD() {
             userIPDOffset = 0.0;
+            showOverlay();
+        }
+
+        function setVideoMode(newMode) {
+            if (mode === newMode) return;
+            mode = newMode;
+            
+            // Update UI
+            mode2dBtns.forEach(b => b.classList.toggle('active', mode === '2d'));
+            mode3dBtns.forEach(b => b.classList.toggle('active', mode === '3d'));
+
+            // Rebuild Screen geometry for new aspect ratio / UVs
+            updateScreenMeshes();
             showOverlay();
         }
         
@@ -612,8 +621,12 @@
             
             const cl = target.classList;
             
+            // Mode Switching
+            if (cl.contains('mode-2d-btn')) setVideoMode('2d');
+            else if (cl.contains('mode-3d-btn')) setVideoMode('3d');
+
             // Playback
-            if (cl.contains('play-pause-btn')) togglePlayPause();
+            else if (cl.contains('play-pause-btn')) togglePlayPause();
             else if (cl.contains('rewind-btn')) seekRelative(-10);
             else if (cl.contains('forward-btn')) seekRelative(10);
             
