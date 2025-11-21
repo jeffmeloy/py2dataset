@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - v3.2 (Compact & Pro Controls)</title>
+    <title>VR Player</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -60,7 +60,7 @@
         button.primary:active { transform: scale(0.98); background: #0056b3; }
         button:disabled { background: #333; color: #555; cursor: not-allowed; transform: none; }
 
-        /* --- VR OVERLAY (COMPACT) --- */
+        /* --- VR OVERLAY --- */
         #progressOverlay { 
             position: fixed; bottom: 0; left: 0; right: 0; 
             background: rgba(0, 0, 0, 0.6);
@@ -81,15 +81,13 @@
             padding: 0 4px; 
             box-sizing: border-box; 
         }
-        
-        /* Tighter Spacing */
+    
         .progressBar { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer; margin-bottom: 2px; position: relative; }
         .progressFill { height: 100%; background: #007BFF; border-radius: 5px; width: 0%; pointer-events: none; }
         .timeDisplay { font-size: 10px; color: #ccc; margin-bottom: 4px; font-family: monospace; }
         
         .controls-row { display: flex; justify-content: center; gap: 6px; margin-bottom: 3px; width: 100%; }
         
-        /* Smaller Buttons for Compact Layout */
         .btn-icon {
             background: rgba(255,255,255,0.2); border: none; color: #eee;
             width: 32px; height: 32px; border-radius: 50%; font-size: 12px; font-weight: bold;
@@ -122,8 +120,7 @@
 
     <div id="setup">
         <div class="setup-container">
-            <h2>--O^O--</h2>
-            
+        
             <label for="fileInput" class="file-upload-label" id="fileLabel">Tap to Select Video File</label>
             <input type="file" id="fileInput" accept="video/*">
 
