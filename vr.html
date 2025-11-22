@@ -321,6 +321,34 @@
         const mode2dBtns = document.querySelectorAll('.mode-2d-btn');
         const mode3dBtns = document.querySelectorAll('.mode-3d-btn');
 
+        // --- ADDED: Auto-Sizing Logic from File 2 ---
+        function getPhysicalScreenWidth() {
+            const screenWidthPx = screen.width * window.devicePixelRatio; 
+            const screenHeightPx = screen.height * window.devicePixelRatio;
+            
+            const diagonalPx = Math.sqrt(screenWidthPx * screenWidthPx + screenHeightPx * screenHeightPx);
+            
+            let estimatedPPI;
+            const isTablet = Math.min(screen.width, screen.height) > 600; 
+            
+            if (isTablet) {
+                estimatedPPI = 264; 
+            } else {
+                const minDimension = Math.min(screenWidthPx, screenHeightPx);
+                if (minDimension > 1440) {
+                    estimatedPPI = 500; 
+                } else if (minDimension > 1080) {
+                    estimatedPPI = 450; 
+                } else {
+                    estimatedPPI = 320; 
+                }
+            }
+            
+            const physicalWidthInches = screenWidthPx / estimatedPPI;
+            console.log(`Detected: ${screenWidthPx}x${screenHeightPx}px @ ~${estimatedPPI} PPI = ${physicalWidthInches.toFixed(2)}" wide`);
+            return physicalWidthInches;
+        }
+
         let camera, scene, renderer, effect;
         let video, videoTexture, orientationTracker;
         let screenGroup; 
@@ -329,12 +357,17 @@
         
         let currentZoomLevel = 1.0; 
         let userIPDOffset = 0.0; 
-        let screenDistance = 3.0;
-        let screenWidth = 6.0;
         
-        const defaultDistance = 3.0;
-        const defaultWidth = 6.0; 
+        // --- CONFIG: Auto-Sizing applied, but keeping File 1 Distance Default ---
+        const deviceScreenWidth = getPhysicalScreenWidth();
+        let screenWidth = deviceScreenWidth * 0.254; 
+        let screenDistance = 3.0; // File 1 Default (File 2 was 2.5)
+        
+        const defaultDistance = 3.0; // File 1 Default
+        const defaultWidth = screenWidth; 
         let screenMeshes = [];
+
+        console.log(`Virtual screen: ${screenWidth.toFixed(2)} units wide at ${defaultDistance} units distance`);
 
         fileInput.addEventListener('change', handleFileSelect);
         startBtn.addEventListener('click', startVR);
@@ -359,9 +392,7 @@
             if (!videoURL) return;
             testVideo.pause(); 
 
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
-            }
+            // --- REMOVED: iOS Permission Request Block (as requested) ---
 
             const elem = document.documentElement;
             if (elem.requestFullscreen) elem.requestFullscreen();
@@ -406,7 +437,7 @@
             video.loop = false;
             video.muted = false;
             video.playsinline = true;
-            video.setAttribute('webkit-playsinline', '');
+            video.setAttribute('webkit-playsinline', ''); // Kept File 1 default attribute
 
             video.addEventListener('loadeddata', function() {
                 videoTexture = new THREE.VideoTexture(video);
