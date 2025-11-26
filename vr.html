@@ -164,13 +164,13 @@
             <div class="row"><button class="btn-icon ddec">-</button><button class="btn-pill drst">RESET</button><button class="btn-icon dinc">+</button></div>
             <div class="lbl">IPD</div>
             <div class="row"><button class="btn-icon idec">-</button><button class="btn-pill irst">RESET</button><button class="btn-icon iinc">+</button></div>
-            <button class="btn-wide rec">RE-CENTER</button>
+            <button class="btn-wide rec ${mediaType==='web'?'hidden':''}">RE-CENTER</button>
         `;
         els.overlay.innerHTML = isFull ? `<div class="ctrl-panel">${controls}</div>` : `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
     }
 
     let scene, camera, renderer, effect;
-    let cssSceneL, cssSceneR, cssRendererL, cssRendererR, webGroupL, webGroupR;
+    let cssScene, cssRendererL, cssRendererR, webGroup;
     let videoEl, screenGroup, tracker;
 
     function initEngine() {
@@ -207,21 +207,20 @@
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Locked Sync, Left Interaction)
+        // 2. WEB (Single synchronized iframe)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
-            cssSceneL = new THREE.Scene(); cssSceneR = new THREE.Scene();
+            cssScene = new THREE.Scene();
             
-            const mkObj = () => {
-                const d = document.createElement('div'); d.className = 'web-content'; 
-                const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
-                return new THREE.CSS3DObject(d);
-            };
+            const d = document.createElement('div'); d.className = 'web-content'; 
+            const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
+            const webObj = new THREE.CSS3DObject(d);
             
-            webGroupL = new THREE.Group(); cssSceneL.add(webGroupL); webGroupL.add(mkObj());
-            webGroupR = new THREE.Group(); cssSceneR.add(webGroupR); webGroupR.add(mkObj());
+            webGroup = new THREE.Group(); 
+            webGroup.add(webObj);
+            cssScene.add(webGroup);
 
             const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
             cssRendererL = mkR(); cssRendererR = mkR();
@@ -296,15 +295,17 @@
             }
         } else {
             renderer.clear();
-            webGroupL.quaternion.copy(screenGroup.quaternion); webGroupR.quaternion.copy(screenGroup.quaternion);
             const currentY = webScrollY;
-            [webGroupL.children[0], webGroupR.children[0]].forEach(o => { o.position.set(0, currentY, z); o.scale.set(s,s,s); });
+            webGroup.children[0].position.set(0, currentY, z);
+            webGroup.children[0].scale.set(s,s,s);
 
-            if(viewMode === 'full') { cssRendererL.render(cssSceneL, camera); }
+            if(viewMode === 'full') { 
+                cssRendererL.render(cssScene, camera); 
+            }
             else {
                 const st = new THREE.StereoCamera(); st.aspect = 0.5; st.eyeSep = 0.064 + (params.i * 0.1); st.update(camera);
-                cssRendererL.render(cssSceneL, st.cameraL);
-                cssRendererR.render(cssSceneR, st.cameraR);
+                cssRendererL.render(cssScene, st.cameraL);
+                cssRendererR.render(cssScene, st.cameraR);
             }
         }
     }
