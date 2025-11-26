@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR</title>
+    <title>HQ VR Player + Web</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -43,7 +43,11 @@
         /* RENDERER LAYERS */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
-        /* MOBILE CONFIGURATION: 375px width (iPhone standard) */
+        
+        /* MIRROR EFFECT: This ensures the Left Eye Web content is cloned exactly to the Right Eye */
+        .css-renderer.mirror { -webkit-box-reflect: right 0px; box-reflect: right 0px; }
+
+        /* MOBILE WEB CONFIGURATION: Fixed iPhone-like dimensions */
         .web-content { width: 375px; height: 667px; background: white; }
         .web-content iframe { width: 100%; height: 100%; border: 0; }
         .hidden { display: none !important; }
@@ -56,6 +60,7 @@
 <!-- SETUP -->
 <div id="setup">
     <div class="setup-box">
+        <h2 style="margin:0; text-align:center;">HQ VR Player</h2>
         <div>
             <label for="fileInput" class="file-btn" id="fileLabel">Tap to Select Video</label>
             <input type="file" id="fileInput" accept="video/*">
@@ -167,7 +172,7 @@
     }
 
     let scene, camera, renderer, effect;
-    let cssSceneL, cssSceneR, cssRendererL, cssRendererR, webGroupL, webGroupR;
+    let cssScene, cssRenderer, webGroup;
     let videoEl, screenGroup, tracker;
 
     function initEngine() {
@@ -202,22 +207,22 @@
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Dual Scene)
+        // 2. WEB (Single Session Mirroring)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
-            cssSceneL = new THREE.Scene(); cssSceneR = new THREE.Scene();
-            const mkObj = () => {
-                const d = document.createElement('div'); d.className = 'web-content'; 
-                const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
-                return new THREE.CSS3DObject(d);
-            };
-            webGroupL = new THREE.Group(); cssSceneL.add(webGroupL); webGroupL.add(mkObj());
-            webGroupR = new THREE.Group(); cssSceneR.add(webGroupR); webGroupR.add(mkObj());
+            cssScene = new THREE.Scene();
+            webGroup = new THREE.Group(); cssScene.add(webGroup);
+            
+            const d = document.createElement('div'); d.className = 'web-content'; 
+            const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
+            const obj = new THREE.CSS3DObject(d);
+            webGroup.add(obj);
 
-            const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
-            cssRendererL = mkR(); cssRendererR = mkR();
+            cssRenderer = new THREE.CSS3DRenderer(); 
+            cssRenderer.domElement.className = 'css-renderer'; 
+            document.body.appendChild(cssRenderer.domElement);
             updateWebLayout();
         }
 
@@ -239,12 +244,15 @@
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         if(viewMode === 'full') {
-            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left='0px'; cssRendererL.domElement.style.display='block';
-            cssRendererR.domElement.style.display='none';
+            // Full screen mode: Width 100%, No mirroring
+            cssRenderer.setSize(window.innerWidth, window.innerHeight); 
+            cssRenderer.domElement.style.left = '0px'; 
+            cssRenderer.domElement.classList.remove('mirror');
         } else {
-            const w = window.innerWidth/2;
-            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left='0px'; cssRendererL.domElement.style.display='block';
-            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left=w+'px'; cssRendererR.domElement.style.display='block';
+            // VR Mode: Width 50% (Left Eye), Mirror to Right Eye
+            cssRenderer.setSize(window.innerWidth / 2, window.innerHeight); 
+            cssRenderer.domElement.style.left = '0px'; 
+            cssRenderer.domElement.classList.add('mirror');
         }
     }
 
@@ -257,7 +265,7 @@
         if (mediaType === 'video') {
              s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
         } else {
-             // Web Scale: Increased for mobile width (375px) vs desktop (1024px)
+             // Web Scale: Increased for mobile width (375px)
              s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
         }
 
@@ -274,16 +282,14 @@
                 if(effect) { effect.setUniforms(params.i, params.z); effect.render(scene, camera); }
             }
         } else {
+            // Web Render Loop: Single Instance + Mirror
             renderer.clear();
-            webGroupL.quaternion.copy(screenGroup.quaternion); webGroupR.quaternion.copy(screenGroup.quaternion);
-            [webGroupL.children[0], webGroupR.children[0]].forEach(o => { o.position.set(0,0,z); o.scale.set(s,s,s); });
-            if(viewMode === 'full') { cssRendererL.render(cssSceneL, camera); }
-            else {
-                const st = new THREE.StereoCamera(); st.aspect = 0.5; st.eyeSep = 0.064 + (params.i * 0.1); st.update(camera);
-                webGroupL.visible = true; webGroupR.visible = false; cssRendererL.render(cssSceneL, st.cameraL);
-                webGroupL.visible = false; webGroupR.visible = true; cssRendererR.render(cssSceneR, st.cameraR);
-                webGroupL.visible = true;
-            }
+            webGroup.quaternion.copy(screenGroup.quaternion); 
+            webGroup.children[0].position.set(0,0,z); 
+            webGroup.children[0].scale.set(s,s,s);
+            
+            // Just render the single scene. The CSS reflection handles the second eye.
+            cssRenderer.render(cssScene, camera);
         }
     }
 
