@@ -1,69 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - Final Stable</title>
+    <title>HQ VR Player + Web</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         
-        /* --- SETUP SCREEN --- */
+        /* SETUP SCREEN */
         #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
         .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; gap: 20px; border: 1px solid #333; }
-        
-        .label { font-size: 11px; text-transform: uppercase; color: #888; font-weight: bold; margin-bottom: 5px; display: block; }
-        
         .file-btn { display: block; background: #333; padding: 15px; text-align: center; border-radius: 8px; cursor: pointer; border: 1px dashed #555; }
         #fileInput { display: none; }
-        
         .url-row { display: flex; gap: 10px; }
         .url-input { flex: 1; padding: 12px; background: #252525; border: 1px solid #444; color: white; border-radius: 8px; }
         .btn-load { background: #444; color: white; border: none; padding: 0 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
-
         .preview-box { height: 180px; background: black; border: 1px solid #333; border-radius: 8px; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; }
         #pVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
         #pFrame { width: 100%; height: 100%; border: 0; background: white; display: none; }
         #placeholder { color: #555; pointer-events: none; }
-
         #startBtn { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         #startBtn:disabled { background: #333; color: #555; cursor: not-allowed; }
 
-        /* --- OVERLAY --- */
-        #overlay { 
-            position: fixed; bottom: 0; left: 0; right: 0; 
-            background: rgba(0, 0, 0, 0.5); 
-            z-index: 9999; display: none; padding: 10px 0; 
-            transition: opacity 0.3s;
-        }
+        /* OVERLAY */
+        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; padding: 10px 0; transition: opacity 0.3s; }
         #overlay.visible { display: flex; opacity: 1; }
-        
-        /* Layouts */
         #overlay.single { justify-content: center; } 
         #overlay.split { justify-content: space-around; }
-
         .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
-        
         .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
-        
         button { cursor: pointer; }
         .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
         .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
         .btn-pill.active { background: #007bff; color: white; }
         .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
-        
         .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
-        
         .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
         .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
 
-        /* --- RENDERER LAYERS --- */
+        /* RENDERER LAYERS */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
-        /* White background for WebVR to ensure visibility */
         .web-content { width: 1024px; height: 768px; background: white; }
         .web-content iframe { width: 100%; height: 100%; border: 0; }
-        
         .hidden { display: none !important; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -74,8 +54,7 @@
 <!-- SETUP -->
 <div id="setup">
     <div class="setup-box">
-        <h2 style="margin:0; text-align:center;">VR Player</h2>
-        
+        <h2 style="margin:0; text-align:center;">HQ VR Player</h2>
         <div>
             <label for="fileInput" class="file-btn" id="fileLabel">Tap to Select Video</label>
             <input type="file" id="fileInput" accept="video/*">
@@ -85,114 +64,89 @@
                 <button id="loadUrlBtn" class="btn-load">Load</button>
             </div>
         </div>
-
         <div class="preview-box">
             <span id="placeholder">No Content</span>
             <video id="pVideo" playsinline muted controls></video>
             <iframe id="pFrame"></iframe>
         </div>
-
         <button id="startBtn" disabled>START</button>
     </div>
 </div>
 
-<!-- OVERLAY -->
 <div id="overlay"></div>
 
-<!-- SHADERS -->
+<!-- ULTRA QUALITY SHADER (LANCZOS) -->
 <script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}</script>
 <script id="fs" type="x-shader/x-fragment">
     precision highp float;
-    uniform sampler2D tDiffuse; uniform float ipd; uniform float zoom; varying vec2 vUv;
-    
-    // Lanczos
+    uniform sampler2D tDiffuse; uniform vec2 texSize; uniform float ipd; uniform float zoom; varying vec2 vUv;
     const float PI = 3.14159265359;
-    float sinc(float x){if(abs(x)<0.0001)return 1.0;float a=PI*x;return sin(a)/a;}
-    float lw(float x){if(abs(x)>=2.0)return 0.0;return sinc(x)*sinc(x*0.5);}
     
-    // Barrel Distortion
-    vec2 distort(vec2 p){
-        vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v);
-        return c+v*(1.0+r2*(0.22+0.18*r2));
+    // Lanczos Weights
+    float sinc(float x){ if(abs(x)<0.0001)return 1.0; float a=PI*x; return sin(a)/a; }
+    float lw(float x){ if(abs(x)>=2.0)return 0.0; return sinc(x)*sinc(x*0.5); }
+
+    // High Quality Resampling
+    vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
+        vec2 inv = 1.0/size; vec2 pos = uv*size; vec2 ipos = floor(pos-0.5)+0.5; vec2 f = pos-ipos;
+        vec4 wX = vec4(lw(1.0+f.x), lw(f.x), lw(1.0-f.x), lw(2.0-f.x));
+        vec4 wY = vec4(lw(1.0+f.y), lw(f.y), lw(1.0-f.y), lw(2.0-f.y));
+        wX /= dot(wX, vec4(1.0)); wY /= dot(wY, vec4(1.0));
+        
+        vec4 r0 = texture2D(smp, (ipos+vec2(-1,-1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0,-1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1,-1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2,-1))*inv)*wX.w;
+        vec4 r1 = texture2D(smp, (ipos+vec2(-1, 0))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 0))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 0))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 0))*inv)*wX.w;
+        vec4 r2 = texture2D(smp, (ipos+vec2(-1, 1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 1))*inv)*wX.w;
+        vec4 r3 = texture2D(smp, (ipos+vec2(-1, 2))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 2))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 2))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 2))*inv)*wX.w;
+        return r0*wY.x + r1*wY.y + r2*wY.z + r3*wY.w;
     }
 
+    vec2 distort(vec2 p){ vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v); return c+v*(1.0+r2*(0.22+0.18*r2)); }
+
     void main(){
-        vec2 d=distort(vUv);
-        vec2 uv=(d-vec2(0.5))/zoom; uv.x+=ipd; uv+=vec2(0.5);
+        vec2 d = distort(vUv);
+        vec2 uv = (d-vec2(0.5))/zoom; uv.x+=ipd; uv+=vec2(0.5);
         if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) gl_FragColor=vec4(0.0);
-        else gl_FragColor=texture2D(tDiffuse,uv); // Linear sampling is sufficient with high res target
+        else gl_FragColor=textureLanczos(tDiffuse, uv, texSize);
     }
 </script>
 
 <script>
-    // --- APP STATE ---
-    let mediaType = null;
-    let viewMode = 'full'; 
-    let srcURL = null;
-    let hideTimer = null;
-    
+    let mediaType = null, viewMode = 'full', srcURL = null, hideTimer = null;
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
     let params = { ...defs };
 
-    const els = {
-        setup: document.getElementById('setup'),
-        pVid: document.getElementById('pVideo'),
-        pFrame: document.getElementById('pFrame'),
-        enter: document.getElementById('startBtn'),
-        lbl: document.getElementById('fileLabel'),
-        overlay: document.getElementById('overlay')
-    };
+    const els = { setup: document.getElementById('setup'), pVid: document.getElementById('pVideo'), pFrame: document.getElementById('pFrame'), enter: document.getElementById('startBtn'), lbl: document.getElementById('fileLabel'), overlay: document.getElementById('overlay') };
 
-    // --- SETUP ---
     document.getElementById('fileInput').addEventListener('change', (e) => {
-        const f = e.target.files[0];
-        if(!f) return;
+        const f = e.target.files[0]; if(!f) return;
         mediaType = 'video'; srcURL = URL.createObjectURL(f);
         els.pVid.src = srcURL; els.pVid.style.display='block'; els.pFrame.style.display='none';
-        document.getElementById('placeholder').style.display='none';
-        els.lbl.textContent = f.name;
-        els.enter.disabled = false;
+        document.getElementById('placeholder').style.display='none'; els.lbl.textContent = f.name; els.enter.disabled = false;
     });
 
     document.getElementById('loadUrlBtn').addEventListener('click', () => {
-        const u = document.getElementById('urlInput').value.trim();
-        if(!u) return;
+        const u = document.getElementById('urlInput').value.trim(); if(!u) return;
         mediaType = 'web'; srcURL = u;
-        els.pFrame.src = srcURL; els.pFrame.style.display='block'; els.pVid.style.display='none';
-        els.pVid.pause();
-        document.getElementById('placeholder').style.display='none';
-        els.enter.disabled = false;
+        els.pFrame.src = srcURL; els.pFrame.style.display='block'; els.pVid.style.display='none'; els.pVid.pause();
+        document.getElementById('placeholder').style.display='none'; els.enter.disabled = false;
     });
 
     els.enter.addEventListener('click', async () => {
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-            try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
-        }
-        const de = document.documentElement;
-        if(de.requestFullscreen) de.requestFullscreen();
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { try { await DeviceOrientationEvent.requestPermission(); } catch (e) {} }
+        const de = document.documentElement; if(de.requestFullscreen) de.requestFullscreen();
         if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
-
-        els.setup.style.display = 'none';
-        viewMode = 'full'; // Default
-        
-        initEngine();
-        updateOverlay();
+        els.setup.style.display = 'none'; viewMode = 'full'; 
+        initEngine(); updateOverlay();
     });
 
-    // --- OVERLAY ---
     function updateOverlay() {
-        const isFull = (viewMode === 'full');
-        els.overlay.className = isFull ? 'visible single' : 'visible split';
-        resetTimer();
-
+        const isFull = (viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; resetTimer();
         const controls = `
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <div class="prog-track"><div class="prog-fill"></div></div>
             </div>
             <div class="row ${mediaType==='web'?'hidden':''}">
-                <button class="btn-icon rw">&laquo;</button>
-                <button class="btn-icon pp">▶</button>
-                <button class="btn-icon fw">&raquo;</button>
+                <button class="btn-icon rw">&laquo;</button><button class="btn-icon pp">▶</button><button class="btn-icon fw">&raquo;</button>
             </div>
             <div class="lbl">View Mode</div>
             <div class="row">
@@ -201,118 +155,68 @@
                 <button class="btn-pill m-3d ${viewMode==='vr-3d'?'active':''}">3D</button>
             </div>
             <div class="lbl">Zoom</div>
-            <div class="row">
-                <button class="btn-icon zout">-</button>
-                <button class="btn-pill zrst">RESET</button>
-                <button class="btn-icon zin">+</button>
-            </div>
+            <div class="row"><button class="btn-icon zout">-</button><button class="btn-pill zrst">RESET</button><button class="btn-icon zin">+</button></div>
             <div class="lbl">Distance</div>
-            <div class="row">
-                <button class="btn-icon ddec">-</button>
-                <button class="btn-pill drst">RESET</button>
-                <button class="btn-icon dinc">+</button>
-            </div>
+            <div class="row"><button class="btn-icon ddec">-</button><button class="btn-pill drst">RESET</button><button class="btn-icon dinc">+</button></div>
             <div class="lbl">IPD</div>
-            <div class="row">
-                <button class="btn-icon idec">-</button>
-                <button class="btn-pill irst">RESET</button>
-                <button class="btn-icon iinc">+</button>
-            </div>
+            <div class="row"><button class="btn-icon idec">-</button><button class="btn-pill irst">RESET</button><button class="btn-icon iinc">+</button></div>
             <button class="btn-wide rec">RE-CENTER</button>
         `;
-
-        if(isFull) {
-            els.overlay.innerHTML = `<div class="ctrl-panel">${controls}</div>`;
-        } else {
-            els.overlay.innerHTML = `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
-        }
+        els.overlay.innerHTML = isFull ? `<div class="ctrl-panel">${controls}</div>` : `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
     }
 
-    // --- ENGINE ---
     let scene, camera, renderer, effect;
     let cssSceneL, cssSceneR, cssRendererL, cssRendererR, webGroupL, webGroupR;
-    let videoEl, screenGroup;
-    let tracker;
+    let videoEl, screenGroup, tracker;
 
     function initEngine() {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
-        screenGroup = new THREE.Group();
-        scene.add(screenGroup);
-        scene.add(camera);
+        screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
+        tracker = new Tracker(); tracker.connect();
 
-        tracker = new Tracker();
-        tracker.connect();
-
-        // 1. VIDEO (WebGL)
+        // 1. VIDEO (HQ Pipeline)
         if(mediaType === 'video') {
-            videoEl = document.createElement('video');
-            videoEl.src = srcURL; videoEl.playsinline = true; videoEl.loop = false;
-            
+            videoEl = document.createElement('video'); videoEl.src = srcURL; videoEl.playsinline = true; videoEl.loop = false;
             const tex = new THREE.VideoTexture(videoEl); 
             tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+            
             const geo = new THREE.PlaneGeometry(6, 6/(16/9));
+            const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2})); mStd.name = 'screenStandard'; screenGroup.add(mStd);
             
-            // 2D/Full Mesh
-            const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2}));
-            mStd.name = 'screenStandard';
-            screenGroup.add(mStd);
-            
-            // 3D SBS Meshes
             const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
             const fsL = `uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5, vUv.y)); }`;
             const fsR = `uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5+0.5, vUv.y)); }`;
-            
             const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsL, side:2})); mL.layers.set(1);
             const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsR, side:2})); mR.layers.set(2);
-            mL.name = mR.name = 'screenSBS';
-            screenGroup.add(mL); screenGroup.add(mR);
+            mL.name = mR.name = 'screenSBS'; screenGroup.add(mL); screenGroup.add(mR);
 
-            renderer = new THREE.WebGLRenderer({antialias:false});
-            renderer.domElement.id = 'webgl-canvas';
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            effect = new StereoEffect(renderer, videoEl);
-            effect.setSize(window.innerWidth, window.innerHeight);
+            renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
+            renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
-            videoEl.play();
-            videoEl.addEventListener('timeupdate', updateProg);
+            // HQ Settings
+            tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            effect = new StereoEffect(renderer, videoEl); effect.setSize(window.innerWidth, window.innerHeight);
+            
+            videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (CSS3D)
+        // 2. WEB (Dual Scene)
         if(mediaType === 'web') {
-            // Black BG
-            renderer = new THREE.WebGLRenderer();
-            renderer.domElement.id = 'webgl-canvas';
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            // Two Separate Scenes ensures no intersection bugs
-            cssSceneL = new THREE.Scene();
-            cssSceneR = new THREE.Scene();
-
+            renderer = new THREE.WebGLRenderer({antialias:false});
+            renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
+            
+            cssSceneL = new THREE.Scene(); cssSceneR = new THREE.Scene();
             const mkObj = () => {
-                const d = document.createElement('div');
-                d.className = 'web-content'; 
-                const i = document.createElement('iframe');
-                i.src = srcURL;
-                d.appendChild(i);
+                const d = document.createElement('div'); d.className = 'web-content'; 
+                const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
                 return new THREE.CSS3DObject(d);
             };
-
             webGroupL = new THREE.Group(); cssSceneL.add(webGroupL); webGroupL.add(mkObj());
             webGroupR = new THREE.Group(); cssSceneR.add(webGroupR); webGroupR.add(mkObj());
 
-            const mkR = () => {
-                const r = new THREE.CSS3DRenderer();
-                r.domElement.className = 'css-renderer';
-                document.body.appendChild(r.domElement);
-                return r;
-            };
-            cssRendererL = mkR();
-            cssRendererR = mkR();
-            
+            const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
+            cssRendererL = mkR(); cssRendererR = mkR();
             updateWebLayout();
         }
 
@@ -322,12 +226,7 @@
             if(effect) effect.setSize(window.innerWidth, window.innerHeight);
             if(mediaType === 'web') updateWebLayout();
         });
-        
-        document.addEventListener('click', (e) => {
-            if(e.target.closest('#overlay')) { resetTimer(); return; }
-            if(els.overlay.classList.contains('visible')) hideOverlay(); else showOverlay();
-        });
-        
+        document.addEventListener('click', (e) => { if(e.target.closest('#overlay')) { resetTimer(); return; } if(els.overlay.classList.contains('visible')) hideOverlay(); else showOverlay(); });
         els.overlay.addEventListener('click', handleInput);
         animate();
     }
@@ -339,127 +238,65 @@
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         if(viewMode === 'full') {
-            // Full: L takes 100%
-            cssRendererL.setSize(window.innerWidth, window.innerHeight);
-            cssRendererL.domElement.style.left = '0px';
-            cssRendererL.domElement.style.display = 'block';
-            cssRendererR.domElement.style.display = 'none';
+            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left='0px'; cssRendererL.domElement.style.display='block';
+            cssRendererR.domElement.style.display='none';
         } else {
-            // Split: L 50%, R 50%
-            const w = window.innerWidth / 2;
-            cssRendererL.setSize(w, window.innerHeight);
-            cssRendererL.domElement.style.left = '0px';
-            cssRendererL.domElement.style.display = 'block';
-            cssRendererR.setSize(w, window.innerHeight);
-            cssRendererR.domElement.style.left = w + 'px';
-            cssRendererR.domElement.style.display = 'block';
+            const w = window.innerWidth/2;
+            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left='0px'; cssRendererL.domElement.style.display='block';
+            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left=w+'px'; cssRendererR.domElement.style.display='block';
         }
     }
 
     function animate() {
-        requestAnimationFrame(animate);
-        tracker.update();
-        camera.quaternion.copy(tracker.getQ());
+        requestAnimationFrame(animate); tracker.update(); camera.quaternion.copy(tracker.getQ());
+        let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
+        let s = ((viewMode === 'full' && mediaType === 'video') ? 0.6 : (mediaType==='video'?1.0:0.005)) * params.z;
+        if(mediaType === 'web' && viewMode === 'full') s = 0.003 * params.z;
 
-        let z, s;
-        if(viewMode === 'full') {
-            // FOV Matching logic for 1D
-            z = -1.8 * params.d / 3.0; 
-            s = (mediaType==='video' ? 0.6 : 0.003) * params.z; 
-        } else {
-            z = -params.d; 
-            s = (mediaType==='video' ? 1.0 : 0.005) * params.z;
-        }
-
-        // VIDEO RENDER
         if(mediaType === 'video') {
             screenGroup.children.forEach(c => { c.position.z = z; c.scale.setScalar(s); });
             const mStd = screenGroup.getObjectByName('screenStandard');
             const mSBS = screenGroup.children.filter(c=>c.name==='screenSBS');
-
-            if(viewMode === 'vr-3d') {
-                if(mStd) mStd.visible = false; mSBS.forEach(m=>m.visible=true);
-            } else {
-                if(mStd) mStd.visible = true; mSBS.forEach(m=>m.visible=false);
-            }
+            if(viewMode === 'vr-3d') { if(mStd) mStd.visible = false; mSBS.forEach(m=>m.visible=true); } 
+            else { if(mStd) mStd.visible = true; mSBS.forEach(m=>m.visible=false); }
 
             if(viewMode === 'full') {
-                // Standard Fullscreen Render (No Distortion)
-                renderer.setScissorTest(false);
-                renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
-                renderer.render(scene, camera);
+                renderer.setScissorTest(false); renderer.setViewport(0,0,window.innerWidth,window.innerHeight); renderer.render(scene, camera);
             } else {
-                // VR Distortion Render
-                if(effect) {
-                    effect.setUniforms(params.i, params.z);
-                    effect.render(scene, camera);
-                }
+                if(effect) { effect.setUniforms(params.i, params.z); effect.render(scene, camera); }
             }
-        } 
-        
-        // WEB RENDER
-        else {
-            renderer.clear(); // Clear Black
-            webGroupL.quaternion.copy(screenGroup.quaternion);
-            webGroupR.quaternion.copy(screenGroup.quaternion);
-            [webGroupL.children[0], webGroupR.children[0]].forEach(o => {
-                o.position.set(0,0,z); o.scale.set(s,s,s);
-            });
-
-            if(viewMode === 'full') {
-                cssRendererL.render(cssSceneL, camera);
-            } else {
-                const stereo = new THREE.StereoCamera();
-                stereo.aspect = 0.5;
-                stereo.eyeSep = 0.064 + (params.i * 0.1);
-                stereo.update(camera);
-                cssRendererL.render(cssSceneL, stereo.cameraL);
-                cssRendererR.render(cssSceneR, stereo.cameraR);
+        } else {
+            renderer.clear();
+            webGroupL.quaternion.copy(screenGroup.quaternion); webGroupR.quaternion.copy(screenGroup.quaternion);
+            [webGroupL.children[0], webGroupR.children[0]].forEach(o => { o.position.set(0,0,z); o.scale.set(s,s,s); });
+            if(viewMode === 'full') { cssRendererL.render(cssSceneL, camera); }
+            else {
+                const st = new THREE.StereoCamera(); st.aspect = 0.5; st.eyeSep = 0.064 + (params.i * 0.1); st.update(camera);
+                webGroupL.visible = true; webGroupR.visible = false; cssRendererL.render(cssSceneL, st.cameraL);
+                webGroupL.visible = false; webGroupR.visible = true; cssRendererR.render(cssSceneR, st.cameraR);
+                webGroupL.visible = true;
             }
         }
     }
 
     function handleInput(e) {
-        e.stopPropagation();
-        const t = e.target.closest('button, .prog-track');
-        if(!t) return;
-        const cl = t.classList;
-
+        e.stopPropagation(); const t = e.target.closest('button, .prog-track'); if(!t) return; const cl = t.classList;
         if(cl.contains('m-full')) { viewMode='full'; if(viewMode==='full'){params.z=1.0;params.d=3.0;} updateOverlay(); updateWebLayout(); }
         if(cl.contains('m-2d')) { viewMode='vr-2d'; updateOverlay(); updateWebLayout(); }
         if(cl.contains('m-3d')) { viewMode='vr-3d'; updateOverlay(); updateWebLayout(); }
-
-        if(cl.contains('zin')) params.z+=0.1;
-        if(cl.contains('zout')) params.z-=0.1;
-        if(cl.contains('zrst')) params.z=defs.z;
-
-        if(cl.contains('dinc')) params.d+=0.5;
-        if(cl.contains('ddec')) params.d-=0.5;
-        if(cl.contains('drst')) params.d=defs.d;
-
-        if(cl.contains('iinc')) params.i+=0.005;
-        if(cl.contains('idec')) params.i-=0.005;
-        if(cl.contains('irst')) params.i=defs.i;
-
+        if(cl.contains('zin')) params.z+=0.1; if(cl.contains('zout')) params.z-=0.1; if(cl.contains('zrst')) params.z=defs.z;
+        if(cl.contains('dinc')) params.d+=0.5; if(cl.contains('ddec')) params.d-=0.5; if(cl.contains('drst')) params.d=defs.d;
+        if(cl.contains('iinc')) params.i+=0.005; if(cl.contains('idec')) params.i-=0.005; if(cl.contains('irst')) params.i=defs.i;
         if(cl.contains('rec')) screenGroup.quaternion.copy(camera.quaternion);
-
         if(videoEl) {
-            if(cl.contains('prog-track')) {
-                const r = t.getBoundingClientRect(); 
-                videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration;
-            }
+            if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration; }
             if(cl.contains('pp')) videoEl.paused ? videoEl.play() : videoEl.pause();
-            if(cl.contains('rw')) videoEl.currentTime -= 10;
-            if(cl.contains('fw')) videoEl.currentTime += 10;
+            if(cl.contains('rw')) videoEl.currentTime -= 10; if(cl.contains('fw')) videoEl.currentTime += 10;
             document.querySelectorAll('.pp').forEach(b=>b.textContent = videoEl.paused ? '▶' : '||');
         }
     }
 
-    function updateProg() {
-        if(!videoEl) return;
-        const p = (videoEl.currentTime/videoEl.duration)*100;
-        document.querySelectorAll('.prog-fill').forEach(f=>f.style.width=p+'%');
-    }
+    function updateProg() { if(videoEl) { const p=(videoEl.currentTime/videoEl.duration)*100; document.querySelectorAll('.prog-fill').forEach(f=>f.style.width=p+'%'); } }
 
     class Tracker {
         constructor() { this.q=new THREE.Quaternion(); this.e=null; }
@@ -474,22 +311,22 @@
         }
     }
 
+    // HQ Stereo Effect (Dynamic Res + Lanczos)
     function StereoEffect(r, videoElement) {
         const _s=new THREE.StereoCamera(); _s.aspect=0.5;
         const dpr=window.devicePixelRatio||1;
         const vidW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
         const vidH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 1080;
-        const sz = (sw,sh) => { 
-            let b=Math.max(Math.floor(sw*dpr), vidW); 
-            return Math.min(b, 4096); 
-        };
+        
+        const sz = (sw,sh) => { let b=Math.max(Math.floor(sw*dpr), vidW); return Math.min(b, 4096); };
         let w=sz(window.innerWidth), h=sz(window.innerHeight);
         
-        let _tL=new THREE.WebGLRenderTarget(w,h,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
-        let _tR=new THREE.WebGLRenderTarget(w,h,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+        const opts = { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, depthBuffer:false, stencilBuffer:false };
+        let _tL=new THREE.WebGLRenderTarget(w,h,opts);
+        let _tR=new THREE.WebGLRenderTarget(w,h,opts);
         
         const _m=new THREE.ShaderMaterial({
-            uniforms:{tDiffuse:{value:null},zoom:{value:1},ipd:{value:0}},
+            uniforms:{tDiffuse:{value:null},texSize:{value:new THREE.Vector2(w,h)},zoom:{value:1},ipd:{value:0}},
             vertexShader:document.getElementById('vs').textContent, fragmentShader:document.getElementById('fs').textContent
         });
         const _sc=new THREE.Scene(); _sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),_m));
@@ -497,7 +334,11 @@
         
         this.setSize=(sw,sh)=>{
             r.setSize(sw,sh); let nw=sz(sw), nh=sz(sh);
-            if(nw!==w || nh!==h) { w=nw; h=nh; _tL.dispose(); _tR.dispose(); _tL=new THREE.WebGLRenderTarget(w,h); _tR=new THREE.WebGLRenderTarget(w,h); }
+            if(nw!==w || nh!==h) { 
+                w=nw; h=nh; _tL.dispose(); _tR.dispose(); 
+                _tL=new THREE.WebGLRenderTarget(w,h,opts); _tR=new THREE.WebGLRenderTarget(w,h,opts); 
+                _m.uniforms.texSize.value.set(w,h);
+            }
         };
         this.setUniforms=(i,z)=>{_m.uniforms.ipd.value=i; _m.uniforms.zoom.value=z;};
         
