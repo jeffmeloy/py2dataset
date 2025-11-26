@@ -41,20 +41,27 @@
         .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
         .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
 
+        /* SCROLL CAPTURE LAYER */
+        #scroll-capturer { position: fixed; inset: 0; z-index: 9000; display: none; }
+        #scroll-capturer.active { display: block; }
+
         /* RENDERER LAYERS */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
         
         /* MOBILE WEB CONFIGURATION */
-        /* Forces standard mobile width on both instances */
-        .web-content { width: 375px; height: 667px; background: white; }
-        .web-content iframe { width: 100%; height: 100%; border: 0; }
+        /* Tall height to allow "Container Scrolling" without needing internal scroll */
+        .web-content { width: 375px; height: 1600px; background: white; overflow: hidden; }
+        .web-content iframe { width: 100%; height: 100%; border: 0; pointer-events: auto; }
         .hidden { display: none !important; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
 </head>
 <body>
+
+<!-- SCROLL CAPTURER (For Synced VR Scrolling) -->
+<div id="scroll-capturer"></div>
 
 <!-- SETUP -->
 <div id="setup">
@@ -117,10 +124,11 @@
 
 <script>
     let mediaType = null, viewMode = 'full', srcURL = null, hideTimer = null;
+    let webScrollY = 0, isScrollMode = true;
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
     let params = { ...defs };
 
-    const els = { setup: document.getElementById('setup'), pVid: document.getElementById('pVideo'), pFrame: document.getElementById('pFrame'), enter: document.getElementById('startBtn'), lbl: document.getElementById('fileLabel'), overlay: document.getElementById('overlay') };
+    const els = { setup: document.getElementById('setup'), pVid: document.getElementById('pVideo'), pFrame: document.getElementById('pFrame'), enter: document.getElementById('startBtn'), lbl: document.getElementById('fileLabel'), overlay: document.getElementById('overlay'), capturer: document.getElementById('scroll-capturer') };
 
     document.getElementById('fileInput').addEventListener('change', (e) => {
         const f = e.target.files[0]; if(!f) return;
@@ -146,12 +154,23 @@
 
     function updateOverlay() {
         const isFull = (viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; resetTimer();
+        
+        // Handle Scroll Mode vs Interact Mode
+        if(mediaType === 'web' && viewMode !== 'full') {
+            els.capturer.className = isScrollMode ? 'active' : '';
+        } else {
+            els.capturer.className = '';
+        }
+
         const controls = `
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <div class="prog-track"><div class="prog-fill"></div></div>
             </div>
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <button class="btn-icon rw">&laquo;</button><button class="btn-icon pp">▶</button><button class="btn-icon fw">&raquo;</button>
+            </div>
+            <div class="row ${mediaType!=='web'?'hidden':''}">
+                <button class="btn-wide toggle-scroll" style="background:${isScrollMode?'#007bff':'#444'}">${isScrollMode ? 'MODE: LOCKED (READ)' : 'MODE: INTERACT'}</button>
             </div>
             <div class="lbl">View Mode</div>
             <div class="row">
@@ -206,14 +225,12 @@
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Dual Instance - Non-Mirrored)
+        // 2. WEB (Dual Instance + Synced Container Scroll)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
-            // Create two identical scenes
-            cssSceneL = new THREE.Scene(); 
-            cssSceneR = new THREE.Scene();
+            cssSceneL = new THREE.Scene(); cssSceneR = new THREE.Scene();
             
             const mkObj = () => {
                 const d = document.createElement('div'); d.className = 'web-content'; 
@@ -224,12 +241,30 @@
             webGroupL = new THREE.Group(); cssSceneL.add(webGroupL); webGroupL.add(mkObj());
             webGroupR = new THREE.Group(); cssSceneR.add(webGroupR); webGroupR.add(mkObj());
 
-            // Create two renderers
             const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
-            cssRendererL = mkR(); 
-            cssRendererR = mkR();
+            cssRendererL = mkR(); cssRendererR = mkR();
             
             updateWebLayout();
+            
+            // Scroll Logic
+            let lastY = 0;
+            const handleMove = (dy) => {
+                webScrollY += dy * 0.005; // Sensitivity
+                const maxS = 8.0; // Limit scroll
+                if(webScrollY > maxS) webScrollY = maxS;
+                if(webScrollY < -maxS) webScrollY = -maxS;
+            };
+
+            els.capturer.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; });
+            els.capturer.addEventListener('touchmove', e => { 
+                e.preventDefault(); 
+                const cy = e.touches[0].clientY; 
+                handleMove(cy - lastY); 
+                lastY = cy; 
+            }, {passive:false});
+            
+            // Mouse wheel fallback
+            document.addEventListener('wheel', e => { if(isScrollMode) handleMove(-e.deltaY * 0.5); });
         }
 
         window.addEventListener('resize', () => {
@@ -250,21 +285,12 @@
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         if(viewMode === 'full') {
-            // Full Screen Mode: Show Left Only (Full Width)
-            cssRendererL.setSize(window.innerWidth, window.innerHeight); 
-            cssRendererL.domElement.style.left = '0px'; 
-            cssRendererL.domElement.style.display = 'block';
+            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left = '0px'; cssRendererL.domElement.style.display = 'block';
             cssRendererR.domElement.style.display = 'none';
         } else {
-            // VR Mode: Split Screen
             const w = window.innerWidth / 2;
-            cssRendererL.setSize(w, window.innerHeight); 
-            cssRendererL.domElement.style.left = '0px'; 
-            cssRendererL.domElement.style.display = 'block';
-            
-            cssRendererR.setSize(w, window.innerHeight); 
-            cssRendererR.domElement.style.left = w + 'px'; 
-            cssRendererR.domElement.style.display = 'block';
+            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left = '0px'; cssRendererL.domElement.style.display = 'block';
+            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left = w + 'px'; cssRendererR.domElement.style.display = 'block';
         }
     }
 
@@ -272,14 +298,9 @@
         requestAnimationFrame(animate); tracker.update(); camera.quaternion.copy(tracker.getQ());
         let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
         
-        // Scale Logic (Modified for Mobile Web)
         let s = params.z;
-        if (mediaType === 'video') {
-             s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
-        } else {
-             // Web Scale: Optimized for 375px width in 3D space
-             s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
-        }
+        if (mediaType === 'video') s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
+        else s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
 
         if(mediaType === 'video') {
             screenGroup.children.forEach(c => { c.position.z = z; c.scale.setScalar(s); });
@@ -294,29 +315,19 @@
                 if(effect) { effect.setUniforms(params.i, params.z); effect.render(scene, camera); }
             }
         } else {
-            // Web Render Loop: Sync position/rotation of both groups
             renderer.clear();
-            webGroupL.quaternion.copy(screenGroup.quaternion); 
-            webGroupR.quaternion.copy(screenGroup.quaternion);
+            webGroupL.quaternion.copy(screenGroup.quaternion); webGroupR.quaternion.copy(screenGroup.quaternion);
             
+            // Apply Synced Scroll Y
+            const currentY = webScrollY;
             [webGroupL.children[0], webGroupR.children[0]].forEach(o => { 
-                o.position.set(0,0,z); 
+                o.position.set(0, currentY, z); 
                 o.scale.set(s,s,s); 
             });
 
-            if(viewMode === 'full') { 
-                // Full: Single Eye
-                cssRendererL.render(cssSceneL, camera); 
-            }
+            if(viewMode === 'full') { cssRendererL.render(cssSceneL, camera); }
             else {
-                // VR: Dual Eye Stereo
-                // We render Left Scene to Left Renderer, Right Scene to Right Renderer
-                // This ensures non-mirrored, correct perspective
-                const st = new THREE.StereoCamera(); 
-                st.aspect = 0.5; 
-                st.eyeSep = 0.064 + (params.i * 0.1); 
-                st.update(camera);
-                
+                const st = new THREE.StereoCamera(); st.aspect = 0.5; st.eyeSep = 0.064 + (params.i * 0.1); st.update(camera);
                 cssRendererL.render(cssSceneL, st.cameraL);
                 cssRendererR.render(cssSceneR, st.cameraR);
             }
@@ -332,6 +343,10 @@
         if(cl.contains('dinc')) params.d+=0.5; if(cl.contains('ddec')) params.d-=0.5; if(cl.contains('drst')) params.d=defs.d;
         if(cl.contains('iinc')) params.i+=0.005; if(cl.contains('idec')) params.i-=0.005; if(cl.contains('irst')) params.i=defs.i;
         if(cl.contains('rec')) screenGroup.quaternion.copy(camera.quaternion);
+        
+        // Web Toggle
+        if(cl.contains('toggle-scroll')) { isScrollMode = !isScrollMode; updateOverlay(); }
+
         if(videoEl) {
             if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration; }
             if(cl.contains('pp')) videoEl.paused ? videoEl.play() : videoEl.pause();
