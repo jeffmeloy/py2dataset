@@ -167,7 +167,7 @@
     }
 
     let scene, camera, renderer, effect;
-    let cssScene, cssRendererL, cssRendererR, webGroup;
+    let cssSceneL, cssSceneR, cssRendererL, cssRendererR, webGroupL, webGroupR;
     let videoEl, screenGroup, tracker;
 
     function initEngine() {
@@ -202,23 +202,30 @@
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Single Shared Scene for both eyes)
+        // 2. WEB (Two synced iframes - required for CSS3D stereo)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
-            // Single shared scene with one iframe
-            cssScene = new THREE.Scene();
+            // Two scenes with identical iframes (CSS3D requires separate DOM elements per renderer)
+            cssSceneL = new THREE.Scene(); 
+            cssSceneR = new THREE.Scene();
+            
             const mkObj = () => {
                 const d = document.createElement('div'); d.className = 'web-content'; 
                 const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
                 return new THREE.CSS3DObject(d);
             };
-            webGroup = new THREE.Group(); 
-            cssScene.add(webGroup); 
-            webGroup.add(mkObj());
+            
+            webGroupL = new THREE.Group(); 
+            cssSceneL.add(webGroupL); 
+            webGroupL.add(mkObj());
+            
+            webGroupR = new THREE.Group(); 
+            cssSceneR.add(webGroupR); 
+            webGroupR.add(mkObj());
 
-            // Two renderers pointing at the same scene
+            // Two renderers, each with their own scene
             const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
             cssRendererL = mkR(); 
             cssRendererR = mkR();
@@ -279,23 +286,28 @@
             }
         } else {
             renderer.clear();
-            webGroup.quaternion.copy(screenGroup.quaternion);
-            webGroup.children[0].position.set(0, 0, z);
-            webGroup.children[0].scale.set(s, s, s);
+            
+            // Keep both groups synchronized
+            webGroupL.quaternion.copy(screenGroup.quaternion);
+            webGroupR.quaternion.copy(screenGroup.quaternion);
+            
+            // Apply same position/scale to both
+            [webGroupL.children[0], webGroupR.children[0]].forEach(o => {
+                o.position.set(0, 0, z);
+                o.scale.set(s, s, s);
+            });
             
             if(viewMode === 'full') { 
-                cssRendererL.render(cssScene, camera); 
+                cssRendererL.render(cssSceneL, camera); 
             } else {
-                // Stereo rendering: same scene, two camera perspectives
+                // Stereo rendering: each renderer gets its own scene
                 const st = new THREE.StereoCamera(); 
                 st.aspect = 0.5; 
                 st.eyeSep = 0.064 + (params.i * 0.1); 
                 st.update(camera);
                 
-                // Render left eye
-                cssRendererL.render(cssScene, st.cameraL);
-                // Render right eye (same scene, different camera)
-                cssRendererR.render(cssScene, st.cameraR);
+                cssRendererL.render(cssSceneL, st.cameraL);
+                cssRendererR.render(cssSceneR, st.cameraR);
             }
         }
     }
