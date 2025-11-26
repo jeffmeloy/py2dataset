@@ -1,9 +1,8 @@
---- START OF FILE vr.html ---
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>HQ VR Player + Web</title>
+    <title>VR</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -49,8 +48,8 @@
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
         
-        /* MOBILE WEB CONFIGURATION */
-        /* Tall height to allow "Container Scrolling" without needing internal scroll */
+        /* MOBILE WEB CONFIGURATION - SYNCED CONTAINER */
+        /* Tall height to allow the container to move up/down */
         .web-content { width: 375px; height: 1600px; background: white; overflow: hidden; }
         .web-content iframe { width: 100%; height: 100%; border: 0; pointer-events: auto; }
         .hidden { display: none !important; }
@@ -199,7 +198,7 @@
         screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
         tracker = new Tracker(); tracker.connect();
 
-        // 1. VIDEO (HQ Pipeline)
+        // 1. VIDEO (HQ Pipeline - RESTORED)
         if(mediaType === 'video') {
             videoEl = document.createElement('video'); videoEl.src = srcURL; videoEl.playsinline = true; videoEl.loop = false;
             const tex = new THREE.VideoTexture(videoEl); 
@@ -216,7 +215,11 @@
             mL.name = mR.name = 'screenSBS'; screenGroup.add(mL); screenGroup.add(mR);
 
             renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
-            renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
+            renderer.domElement.id = 'webgl-canvas'; 
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            // CRITICAL: Ensure 1:1 pixel mapping for HQ playback on mobile
+            renderer.setPixelRatio(window.devicePixelRatio); 
+            document.body.appendChild(renderer.domElement);
             
             // HQ Settings
             tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -246,11 +249,11 @@
             
             updateWebLayout();
             
-            // Scroll Logic
+            // Synced Scroll Logic
             let lastY = 0;
             const handleMove = (dy) => {
-                webScrollY += dy * 0.005; // Sensitivity
-                const maxS = 8.0; // Limit scroll
+                webScrollY += dy * 0.005; 
+                const maxS = 8.0; 
                 if(webScrollY > maxS) webScrollY = maxS;
                 if(webScrollY < -maxS) webScrollY = -maxS;
             };
@@ -262,8 +265,6 @@
                 handleMove(cy - lastY); 
                 lastY = cy; 
             }, {passive:false});
-            
-            // Mouse wheel fallback
             document.addEventListener('wheel', e => { if(isScrollMode) handleMove(-e.deltaY * 0.5); });
         }
 
@@ -297,10 +298,8 @@
     function animate() {
         requestAnimationFrame(animate); tracker.update(); camera.quaternion.copy(tracker.getQ());
         let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
-        
-        let s = params.z;
-        if (mediaType === 'video') s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
-        else s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
+        let s = ((viewMode === 'full' && mediaType === 'video') ? 0.6 : (mediaType==='video'?1.0:0.013)) * params.z;
+        if(mediaType === 'web' && viewMode === 'full') s = 0.008 * params.z;
 
         if(mediaType === 'video') {
             screenGroup.children.forEach(c => { c.position.z = z; c.scale.setScalar(s); });
@@ -318,7 +317,7 @@
             renderer.clear();
             webGroupL.quaternion.copy(screenGroup.quaternion); webGroupR.quaternion.copy(screenGroup.quaternion);
             
-            // Apply Synced Scroll Y
+            // Synced Scroll
             const currentY = webScrollY;
             [webGroupL.children[0], webGroupR.children[0]].forEach(o => { 
                 o.position.set(0, currentY, z); 
