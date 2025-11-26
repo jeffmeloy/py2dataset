@@ -1,8 +1,7 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR</title>
+    <title>HQ VR Player + Web</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -40,17 +39,12 @@
         .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
         .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
 
-        /* SCROLL CAPTURE LAYER */
-        #scroll-capturer { position: fixed; inset: 0; z-index: 9000; display: none; }
-        #scroll-capturer.active { display: block; }
-
         /* RENDERER LAYERS */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
         
-        /* MOBILE WEB CONFIGURATION - SYNCED CONTAINER */
-        /* Tall height to allow the container to move up/down */
-        .web-content { width: 375px; height: 1600px; background: white; overflow: hidden; }
+        /* MOBILE WEB CONFIGURATION */
+        .web-content { width: 375px; height: 2000px; background: white; overflow: hidden; }
         .web-content iframe { width: 100%; height: 100%; border: 0; pointer-events: auto; }
         .hidden { display: none !important; }
     </style>
@@ -58,9 +52,6 @@
     <script src="https://unpkg.com/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
 </head>
 <body>
-
-<!-- SCROLL CAPTURER (For Synced VR Scrolling) -->
-<div id="scroll-capturer"></div>
 
 <!-- SETUP -->
 <div id="setup">
@@ -123,11 +114,11 @@
 
 <script>
     let mediaType = null, viewMode = 'full', srcURL = null, hideTimer = null;
-    let webScrollY = 0, isScrollMode = true;
+    let webScrollY = 0;
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
     let params = { ...defs };
 
-    const els = { setup: document.getElementById('setup'), pVid: document.getElementById('pVideo'), pFrame: document.getElementById('pFrame'), enter: document.getElementById('startBtn'), lbl: document.getElementById('fileLabel'), overlay: document.getElementById('overlay'), capturer: document.getElementById('scroll-capturer') };
+    const els = { setup: document.getElementById('setup'), pVid: document.getElementById('pVideo'), pFrame: document.getElementById('pFrame'), enter: document.getElementById('startBtn'), lbl: document.getElementById('fileLabel'), overlay: document.getElementById('overlay') };
 
     document.getElementById('fileInput').addEventListener('change', (e) => {
         const f = e.target.files[0]; if(!f) return;
@@ -154,22 +145,12 @@
     function updateOverlay() {
         const isFull = (viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; resetTimer();
         
-        // Handle Scroll Mode vs Interact Mode
-        if(mediaType === 'web' && viewMode !== 'full') {
-            els.capturer.className = isScrollMode ? 'active' : '';
-        } else {
-            els.capturer.className = '';
-        }
-
         const controls = `
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <div class="prog-track"><div class="prog-fill"></div></div>
             </div>
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <button class="btn-icon rw">&laquo;</button><button class="btn-icon pp">▶</button><button class="btn-icon fw">&raquo;</button>
-            </div>
-            <div class="row ${mediaType!=='web'?'hidden':''}">
-                <button class="btn-wide toggle-scroll" style="background:${isScrollMode?'#007bff':'#444'}">${isScrollMode ? 'MODE: LOCKED (READ)' : 'MODE: INTERACT'}</button>
             </div>
             <div class="lbl">View Mode</div>
             <div class="row">
@@ -198,7 +179,7 @@
         screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
         tracker = new Tracker(); tracker.connect();
 
-        // 1. VIDEO (HQ Pipeline - RESTORED)
+        // 1. VIDEO (HQ Pipeline)
         if(mediaType === 'video') {
             videoEl = document.createElement('video'); videoEl.src = srcURL; videoEl.playsinline = true; videoEl.loop = false;
             const tex = new THREE.VideoTexture(videoEl); 
@@ -217,18 +198,16 @@
             renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
             renderer.domElement.id = 'webgl-canvas'; 
             renderer.setSize(window.innerWidth, window.innerHeight);
-            // CRITICAL: Ensure 1:1 pixel mapping for HQ playback on mobile
             renderer.setPixelRatio(window.devicePixelRatio); 
             document.body.appendChild(renderer.domElement);
             
-            // HQ Settings
             tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
             effect = new StereoEffect(renderer, videoEl); effect.setSize(window.innerWidth, window.innerHeight);
             
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Dual Instance + Synced Container Scroll)
+        // 2. WEB (Locked Sync, Left Interaction)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
@@ -249,7 +228,6 @@
             
             updateWebLayout();
             
-            // Synced Scroll Logic
             let lastY = 0;
             const handleMove = (dy) => {
                 webScrollY += dy * 0.005; 
@@ -258,14 +236,13 @@
                 if(webScrollY < -maxS) webScrollY = -maxS;
             };
 
-            els.capturer.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; });
-            els.capturer.addEventListener('touchmove', e => { 
-                e.preventDefault(); 
+            document.body.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; }, {passive:false});
+            document.body.addEventListener('touchmove', e => { 
                 const cy = e.touches[0].clientY; 
                 handleMove(cy - lastY); 
                 lastY = cy; 
             }, {passive:false});
-            document.addEventListener('wheel', e => { if(isScrollMode) handleMove(-e.deltaY * 0.5); });
+            document.addEventListener('wheel', e => { handleMove(-e.deltaY * 0.5); });
         }
 
         window.addEventListener('resize', () => {
@@ -286,20 +263,24 @@
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         if(viewMode === 'full') {
-            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left = '0px'; cssRendererL.domElement.style.display = 'block';
+            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left = '0px'; 
+            cssRendererL.domElement.style.display = 'block'; cssRendererL.domElement.style.pointerEvents = 'auto'; 
             cssRendererR.domElement.style.display = 'none';
         } else {
             const w = window.innerWidth / 2;
-            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left = '0px'; cssRendererL.domElement.style.display = 'block';
-            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left = w + 'px'; cssRendererR.domElement.style.display = 'block';
+            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left = '0px'; 
+            cssRendererL.domElement.style.display = 'block'; cssRendererL.domElement.style.pointerEvents = 'auto'; 
+            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left = w + 'px'; 
+            cssRendererR.domElement.style.display = 'block'; cssRendererR.domElement.style.pointerEvents = 'none'; 
         }
     }
 
     function animate() {
         requestAnimationFrame(animate); tracker.update(); camera.quaternion.copy(tracker.getQ());
         let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
-        let s = ((viewMode === 'full' && mediaType === 'video') ? 0.6 : (mediaType==='video'?1.0:0.013)) * params.z;
-        if(mediaType === 'web' && viewMode === 'full') s = 0.008 * params.z;
+        let s = params.z;
+        if (mediaType === 'video') s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
+        else s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
 
         if(mediaType === 'video') {
             screenGroup.children.forEach(c => { c.position.z = z; c.scale.setScalar(s); });
@@ -316,13 +297,8 @@
         } else {
             renderer.clear();
             webGroupL.quaternion.copy(screenGroup.quaternion); webGroupR.quaternion.copy(screenGroup.quaternion);
-            
-            // Synced Scroll
             const currentY = webScrollY;
-            [webGroupL.children[0], webGroupR.children[0]].forEach(o => { 
-                o.position.set(0, currentY, z); 
-                o.scale.set(s,s,s); 
-            });
+            [webGroupL.children[0], webGroupR.children[0]].forEach(o => { o.position.set(0, currentY, z); o.scale.set(s,s,s); });
 
             if(viewMode === 'full') { cssRendererL.render(cssSceneL, camera); }
             else {
@@ -342,10 +318,6 @@
         if(cl.contains('dinc')) params.d+=0.5; if(cl.contains('ddec')) params.d-=0.5; if(cl.contains('drst')) params.d=defs.d;
         if(cl.contains('iinc')) params.i+=0.005; if(cl.contains('idec')) params.i-=0.005; if(cl.contains('irst')) params.i=defs.i;
         if(cl.contains('rec')) screenGroup.quaternion.copy(camera.quaternion);
-        
-        // Web Toggle
-        if(cl.contains('toggle-scroll')) { isScrollMode = !isScrollMode; updateOverlay(); }
-
         if(videoEl) {
             if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration; }
             if(cl.contains('pp')) videoEl.paused ? videoEl.play() : videoEl.pause();
@@ -369,27 +341,21 @@
         }
     }
 
-    // HQ Stereo Effect (Dynamic Res + Lanczos)
     function StereoEffect(r, videoElement) {
         const _s=new THREE.StereoCamera(); _s.aspect=0.5;
         const dpr=window.devicePixelRatio||1;
         const vidW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
         const vidH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 1080;
-        
         const sz = (sw,sh) => { let b=Math.max(Math.floor(sw*dpr), vidW); return Math.min(b, 4096); };
         let w=sz(window.innerWidth), h=sz(window.innerHeight);
-        
         const opts = { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, depthBuffer:false, stencilBuffer:false };
-        let _tL=new THREE.WebGLRenderTarget(w,h,opts);
-        let _tR=new THREE.WebGLRenderTarget(w,h,opts);
-        
+        let _tL=new THREE.WebGLRenderTarget(w,h,opts); let _tR=new THREE.WebGLRenderTarget(w,h,opts);
         const _m=new THREE.ShaderMaterial({
             uniforms:{tDiffuse:{value:null},texSize:{value:new THREE.Vector2(w,h)},zoom:{value:1},ipd:{value:0}},
             vertexShader:document.getElementById('vs').textContent, fragmentShader:document.getElementById('fs').textContent
         });
         const _sc=new THREE.Scene(); _sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),_m));
         const _c=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
-        
         this.setSize=(sw,sh)=>{
             r.setSize(sw,sh); let nw=sz(sw), nh=sz(sh);
             if(nw!==w || nh!==h) { 
@@ -399,7 +365,6 @@
             }
         };
         this.setUniforms=(i,z)=>{_m.uniforms.ipd.value=i; _m.uniforms.zoom.value=z;};
-        
         this.render=(s,c)=>{
             s.updateMatrixWorld(); _s.update(c);
             if(viewMode==='vr-3d') _s.cameraL.layers.set(1); else _s.cameraL.layers.set(0);
@@ -407,7 +372,6 @@
             if(viewMode==='vr-3d') _s.cameraR.layers.set(2); else _s.cameraR.layers.set(0);
             r.setRenderTarget(_tR); r.clear(); r.render(s,_s.cameraR);
             r.setRenderTarget(null);
-            
             const sw=window.innerWidth, sh=window.innerHeight; r.setScissorTest(true);
             r.setScissor(0,0,sw/2,sh); r.setViewport(0,0,sw/2,sh); 
             _m.uniforms.tDiffuse.value=_tL.texture; _m.uniforms.ipd.value=params.i; r.render(_sc,_c);
