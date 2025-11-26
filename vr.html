@@ -45,10 +45,8 @@
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
         
-        /* MIRROR EFFECT: This ensures the Left Eye Web content is cloned exactly to the Right Eye */
-        .css-renderer.mirror { -webkit-box-reflect: right 0px; box-reflect: right 0px; }
-
-        /* MOBILE WEB CONFIGURATION: Fixed iPhone-like dimensions */
+        /* MOBILE WEB CONFIGURATION */
+        /* Forces standard mobile width on both instances */
         .web-content { width: 375px; height: 667px; background: white; }
         .web-content iframe { width: 100%; height: 100%; border: 0; }
         .hidden { display: none !important; }
@@ -173,7 +171,7 @@
     }
 
     let scene, camera, renderer, effect;
-    let cssScene, cssRenderer, webGroup;
+    let cssSceneL, cssSceneR, cssRendererL, cssRendererR, webGroupL, webGroupR;
     let videoEl, screenGroup, tracker;
 
     function initEngine() {
@@ -208,22 +206,29 @@
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Single Session Mirroring)
+        // 2. WEB (Dual Instance - Non-Mirrored)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
-            cssScene = new THREE.Scene();
-            webGroup = new THREE.Group(); cssScene.add(webGroup);
+            // Create two identical scenes
+            cssSceneL = new THREE.Scene(); 
+            cssSceneR = new THREE.Scene();
             
-            const d = document.createElement('div'); d.className = 'web-content'; 
-            const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
-            const obj = new THREE.CSS3DObject(d);
-            webGroup.add(obj);
+            const mkObj = () => {
+                const d = document.createElement('div'); d.className = 'web-content'; 
+                const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
+                return new THREE.CSS3DObject(d);
+            };
+            
+            webGroupL = new THREE.Group(); cssSceneL.add(webGroupL); webGroupL.add(mkObj());
+            webGroupR = new THREE.Group(); cssSceneR.add(webGroupR); webGroupR.add(mkObj());
 
-            cssRenderer = new THREE.CSS3DRenderer(); 
-            cssRenderer.domElement.className = 'css-renderer'; 
-            document.body.appendChild(cssRenderer.domElement);
+            // Create two renderers
+            const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
+            cssRendererL = mkR(); 
+            cssRendererR = mkR();
+            
             updateWebLayout();
         }
 
@@ -245,15 +250,21 @@
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         if(viewMode === 'full') {
-            // Full screen mode: Width 100%, No mirroring
-            cssRenderer.setSize(window.innerWidth, window.innerHeight); 
-            cssRenderer.domElement.style.left = '0px'; 
-            cssRenderer.domElement.classList.remove('mirror');
+            // Full Screen Mode: Show Left Only (Full Width)
+            cssRendererL.setSize(window.innerWidth, window.innerHeight); 
+            cssRendererL.domElement.style.left = '0px'; 
+            cssRendererL.domElement.style.display = 'block';
+            cssRendererR.domElement.style.display = 'none';
         } else {
-            // VR Mode: Width 50% (Left Eye), Mirror to Right Eye
-            cssRenderer.setSize(window.innerWidth / 2, window.innerHeight); 
-            cssRenderer.domElement.style.left = '0px'; 
-            cssRenderer.domElement.classList.add('mirror');
+            // VR Mode: Split Screen
+            const w = window.innerWidth / 2;
+            cssRendererL.setSize(w, window.innerHeight); 
+            cssRendererL.domElement.style.left = '0px'; 
+            cssRendererL.domElement.style.display = 'block';
+            
+            cssRendererR.setSize(w, window.innerHeight); 
+            cssRendererR.domElement.style.left = w + 'px'; 
+            cssRendererR.domElement.style.display = 'block';
         }
     }
 
@@ -266,7 +277,7 @@
         if (mediaType === 'video') {
              s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
         } else {
-             // Web Scale: Increased for mobile width (375px)
+             // Web Scale: Optimized for 375px width in 3D space
              s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
         }
 
@@ -283,14 +294,32 @@
                 if(effect) { effect.setUniforms(params.i, params.z); effect.render(scene, camera); }
             }
         } else {
-            // Web Render Loop: Single Instance + Mirror
+            // Web Render Loop: Sync position/rotation of both groups
             renderer.clear();
-            webGroup.quaternion.copy(screenGroup.quaternion); 
-            webGroup.children[0].position.set(0,0,z); 
-            webGroup.children[0].scale.set(s,s,s);
+            webGroupL.quaternion.copy(screenGroup.quaternion); 
+            webGroupR.quaternion.copy(screenGroup.quaternion);
             
-            // Just render the single scene. The CSS reflection handles the second eye.
-            cssRenderer.render(cssScene, camera);
+            [webGroupL.children[0], webGroupR.children[0]].forEach(o => { 
+                o.position.set(0,0,z); 
+                o.scale.set(s,s,s); 
+            });
+
+            if(viewMode === 'full') { 
+                // Full: Single Eye
+                cssRendererL.render(cssSceneL, camera); 
+            }
+            else {
+                // VR: Dual Eye Stereo
+                // We render Left Scene to Left Renderer, Right Scene to Right Renderer
+                // This ensures non-mirrored, correct perspective
+                const st = new THREE.StereoCamera(); 
+                st.aspect = 0.5; 
+                st.eyeSep = 0.064 + (params.i * 0.1); 
+                st.update(camera);
+                
+                cssRendererL.render(cssSceneL, st.cameraL);
+                cssRendererR.render(cssSceneR, st.cameraR);
+            }
         }
     }
 
