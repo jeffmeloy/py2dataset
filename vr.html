@@ -170,7 +170,7 @@
     }
 
     let scene, camera, renderer, effect;
-    let cssScene, cssRendererL, cssRendererR, webGroup;
+    let cssSceneL, cssSceneR, cssRendererL, cssRendererR, webGroupL, webGroupR;
     let videoEl, screenGroup, tracker;
 
     function initEngine() {
@@ -207,20 +207,27 @@
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Single synchronized iframe)
+        // 2. WEB (Synchronized dual iframes)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
-            cssScene = new THREE.Scene();
+            cssSceneL = new THREE.Scene(); 
+            cssSceneR = new THREE.Scene();
             
-            const d = document.createElement('div'); d.className = 'web-content'; 
-            const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
-            const webObj = new THREE.CSS3DObject(d);
+            const mkObj = () => {
+                const d = document.createElement('div'); d.className = 'web-content'; 
+                const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
+                return new THREE.CSS3DObject(d);
+            };
             
-            webGroup = new THREE.Group(); 
-            webGroup.add(webObj);
-            cssScene.add(webGroup);
+            webGroupL = new THREE.Group(); 
+            webGroupL.add(mkObj());
+            cssSceneL.add(webGroupL);
+            
+            webGroupR = new THREE.Group(); 
+            webGroupR.add(mkObj());
+            cssSceneR.add(webGroupR);
 
             const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
             cssRendererL = mkR(); cssRendererR = mkR();
@@ -296,16 +303,20 @@
         } else {
             renderer.clear();
             const currentY = webScrollY;
-            webGroup.children[0].position.set(0, currentY, z);
-            webGroup.children[0].scale.set(s,s,s);
+            
+            // Sync both web groups to same position/scale
+            webGroupL.children[0].position.set(0, currentY, z);
+            webGroupL.children[0].scale.set(s,s,s);
+            webGroupR.children[0].position.set(0, currentY, z);
+            webGroupR.children[0].scale.set(s,s,s);
 
             if(viewMode === 'full') { 
-                cssRendererL.render(cssScene, camera); 
+                cssRendererL.render(cssSceneL, camera); 
             }
             else {
                 const st = new THREE.StereoCamera(); st.aspect = 0.5; st.eyeSep = 0.064 + (params.i * 0.1); st.update(camera);
-                cssRendererL.render(cssScene, st.cameraL);
-                cssRendererR.render(cssScene, st.cameraR);
+                cssRendererL.render(cssSceneL, st.cameraL);
+                cssRendererR.render(cssSceneR, st.cameraR);
             }
         }
     }
