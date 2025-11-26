@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>High-Fidelity VR Player & Web</title>
+    <title>VR Player - Final Stable</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -14,16 +14,13 @@
         
         .label { font-size: 11px; text-transform: uppercase; color: #888; font-weight: bold; margin-bottom: 5px; display: block; }
         
-        /* Inputs */
-        .file-btn { display: block; background: #333; padding: 15px; text-align: center; border-radius: 8px; cursor: pointer; border: 1px dashed #555; transition: background 0.2s; }
-        .file-btn:active { background: #444; }
+        .file-btn { display: block; background: #333; padding: 15px; text-align: center; border-radius: 8px; cursor: pointer; border: 1px dashed #555; }
         #fileInput { display: none; }
         
         .url-row { display: flex; gap: 10px; }
         .url-input { flex: 1; padding: 12px; background: #252525; border: 1px solid #444; color: white; border-radius: 8px; }
         .btn-load { background: #444; color: white; border: none; padding: 0 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
 
-        /* Preview */
         .preview-box { height: 180px; background: black; border: 1px solid #333; border-radius: 8px; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; }
         #pVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
         #pFrame { width: 100%; height: 100%; border: 0; background: white; display: none; }
@@ -40,19 +37,22 @@
             transition: opacity 0.3s;
         }
         #overlay.visible { display: flex; opacity: 1; }
+        
+        /* Layouts */
         #overlay.single { justify-content: center; } 
         #overlay.split { justify-content: space-around; }
 
         .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
+        
         .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
         
-        /* Buttons */
         button { cursor: pointer; }
         .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
         .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
         .btn-pill.active { background: #007bff; color: white; }
         .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
-        .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; }
+        
+        .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
         
         .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
         .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
@@ -60,15 +60,13 @@
         /* --- RENDERER LAYERS --- */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
-        
-        /* Web Content Styling */
+        /* White background for WebVR to ensure visibility */
         .web-content { width: 1024px; height: 768px; background: white; }
         .web-content iframe { width: 100%; height: 100%; border: 0; }
+        
         .hidden { display: none !important; }
     </style>
-    <!-- Three.js Core -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- CSS3D Renderer (Required for WebVR) -->
     <script src="https://unpkg.com/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
 </head>
 <body>
@@ -79,13 +77,9 @@
         <h2 style="margin:0; text-align:center;">VR Player</h2>
         
         <div>
-            <span class="label">Option A: Video</span>
             <label for="fileInput" class="file-btn" id="fileLabel">Tap to Select Video</label>
             <input type="file" id="fileInput" accept="video/*">
-            
             <div style="text-align:center; padding:10px; font-size:12px; color:#666;">- OR -</div>
-            
-            <span class="label">Option B: Website</span>
             <div class="url-row">
                 <input type="text" id="urlInput" class="url-input" value="https://en.m.wikipedia.org">
                 <button id="loadUrlBtn" class="btn-load">Load</button>
@@ -105,65 +99,38 @@
 <!-- OVERLAY -->
 <div id="overlay"></div>
 
-<!-- SHADERS (High Quality Video Processing) -->
+<!-- SHADERS -->
 <script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}</script>
 <script id="fs" type="x-shader/x-fragment">
-    /* HIGH PRECISION FOR QUALITY */
     precision highp float;
-
-    uniform sampler2D tDiffuse;
-    uniform vec2 texSize; 
-    uniform float ipd; 
-    uniform float zoom; 
-    varying vec2 vUv;
-
+    uniform sampler2D tDiffuse; uniform float ipd; uniform float zoom; varying vec2 vUv;
+    
+    // Lanczos
     const float PI = 3.14159265359;
-
-    // Lanczos Resampling Logic for Sharpness
-    float sinc(float x) { if (abs(x) < 0.0001) return 1.0; float a = PI * x; return sin(a) / a; }
-    float lanczosWeight(float x) { if (abs(x) >= 2.0) return 0.0; return sinc(x) * sinc(x * 0.5); }
-
-    vec4 textureLanczos(sampler2D sampler, vec2 texCoords, vec2 texSize) {
-        vec2 invTexSize = 1.0 / texSize; vec2 pos = texCoords * texSize;
-        vec2 ipos = floor(pos - 0.5) + 0.5; vec2 f = pos - ipos; 
-        vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
-        vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
-        wX /= dot(wX, vec4(1.0)); wY /= dot(wY, vec4(1.0));
-
-        vec4 row0 = texture2D(sampler, (ipos + vec2(-1, -1)) * invTexSize) * wX.x + texture2D(sampler, (ipos + vec2( 0, -1)) * invTexSize) * wX.y + texture2D(sampler, (ipos + vec2( 1, -1)) * invTexSize) * wX.z + texture2D(sampler, (ipos + vec2( 2, -1)) * invTexSize) * wX.w;
-        vec4 row1 = texture2D(sampler, (ipos + vec2(-1,  0)) * invTexSize) * wX.x + texture2D(sampler, (ipos + vec2( 0,  0)) * invTexSize) * wX.y + texture2D(sampler, (ipos + vec2( 1,  0)) * invTexSize) * wX.z + texture2D(sampler, (ipos + vec2( 2,  0)) * invTexSize) * wX.w;
-        vec4 row2 = texture2D(sampler, (ipos + vec2(-1,  1)) * invTexSize) * wX.x + texture2D(sampler, (ipos + vec2( 0,  1)) * invTexSize) * wX.y + texture2D(sampler, (ipos + vec2( 1,  1)) * invTexSize) * wX.z + texture2D(sampler, (ipos + vec2( 2,  1)) * invTexSize) * wX.w;
-        vec4 row3 = texture2D(sampler, (ipos + vec2(-1,  2)) * invTexSize) * wX.x + texture2D(sampler, (ipos + vec2( 0,  2)) * invTexSize) * wX.y + texture2D(sampler, (ipos + vec2( 1,  2)) * invTexSize) * wX.z + texture2D(sampler, (ipos + vec2( 2,  2)) * invTexSize) * wX.w;
-
-        return row0 * wY.x + row1 * wY.y + row2 * wY.z + row3 * wY.w;
-    }
-
+    float sinc(float x){if(abs(x)<0.0001)return 1.0;float a=PI*x;return sin(a)/a;}
+    float lw(float x){if(abs(x)>=2.0)return 0.0;return sinc(x)*sinc(x*0.5);}
+    
     // Barrel Distortion
-    vec2 distort(vec2 p) {
-        vec2 c = vec2(0.5); vec2 v = p - c; float r2 = dot(v, v);
-        return c + v * (1.0 + r2 * (0.22 + 0.18 * r2));
+    vec2 distort(vec2 p){
+        vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v);
+        return c+v*(1.0+r2*(0.22+0.18*r2));
     }
 
-    void main() {
-        vec2 c = vec2(0.5); vec2 dUV = distort(vUv);
-        vec2 uv = (dUV - c) / zoom; uv.x += ipd; uv += c;
-
-        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        } else {
-            gl_FragColor = textureLanczos(tDiffuse, uv, texSize);
-        }
+    void main(){
+        vec2 d=distort(vUv);
+        vec2 uv=(d-vec2(0.5))/zoom; uv.x+=ipd; uv+=vec2(0.5);
+        if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) gl_FragColor=vec4(0.0);
+        else gl_FragColor=texture2D(tDiffuse,uv); // Linear sampling is sufficient with high res target
     }
 </script>
 
 <script>
     // --- APP STATE ---
-    let mediaType = null; // 'video' | 'web'
-    let viewMode = 'vr-2d'; // 'full' | 'vr-2d' | 'vr-3d'
+    let mediaType = null;
+    let viewMode = 'full'; 
     let srcURL = null;
     let hideTimer = null;
     
-    // Default Params
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
     let params = { ...defs };
 
@@ -176,7 +143,7 @@
         overlay: document.getElementById('overlay')
     };
 
-    // --- SETUP HANDLERS ---
+    // --- SETUP ---
     document.getElementById('fileInput').addEventListener('change', (e) => {
         const f = e.target.files[0];
         if(!f) return;
@@ -206,58 +173,51 @@
         if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
 
         els.setup.style.display = 'none';
-        
-        // Start in 2D mode by default
-        viewMode = 'vr-2d'; 
+        viewMode = 'full'; // Default
         
         initEngine();
         updateOverlay();
     });
 
-    // --- OVERLAY GENERATION ---
+    // --- OVERLAY ---
     function updateOverlay() {
         const isFull = (viewMode === 'full');
-        els.overlay.className = isFull ? 'single' : 'split';
-        
+        els.overlay.className = isFull ? 'visible single' : 'visible split';
+        resetTimer();
+
         const controls = `
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <div class="prog-track"><div class="prog-fill"></div></div>
             </div>
-            
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <button class="btn-icon rw">&laquo;</button>
                 <button class="btn-icon pp">▶</button>
                 <button class="btn-icon fw">&raquo;</button>
             </div>
-
             <div class="lbl">View Mode</div>
             <div class="row">
                 <button class="btn-pill m-full ${viewMode==='full'?'active':''}">FULL</button>
                 <button class="btn-pill m-2d ${viewMode==='vr-2d'?'active':''}">2D</button>
                 <button class="btn-pill m-3d ${viewMode==='vr-3d'?'active':''}">3D</button>
             </div>
-
             <div class="lbl">Zoom</div>
             <div class="row">
                 <button class="btn-icon zout">-</button>
                 <button class="btn-pill zrst">RESET</button>
                 <button class="btn-icon zin">+</button>
             </div>
-
             <div class="lbl">Distance</div>
             <div class="row">
                 <button class="btn-icon ddec">-</button>
                 <button class="btn-pill drst">RESET</button>
                 <button class="btn-icon dinc">+</button>
             </div>
-
             <div class="lbl">IPD</div>
             <div class="row">
                 <button class="btn-icon idec">-</button>
                 <button class="btn-pill irst">RESET</button>
                 <button class="btn-icon iinc">+</button>
             </div>
-
             <button class="btn-wide rec">RE-CENTER</button>
         `;
 
@@ -268,9 +228,9 @@
         }
     }
 
-    // --- ENGINE VARS ---
+    // --- ENGINE ---
     let scene, camera, renderer, effect;
-    let cssScene, cssRendererL, cssRendererR, webGroupL, webGroupR;
+    let cssSceneL, cssSceneR, cssRendererL, cssRendererR, webGroupL, webGroupR;
     let videoEl, screenGroup;
     let tracker;
 
@@ -284,24 +244,21 @@
         tracker = new Tracker();
         tracker.connect();
 
-        // 1. VIDEO SETUP (HIGH QUALITY)
+        // 1. VIDEO (WebGL)
         if(mediaType === 'video') {
             videoEl = document.createElement('video');
             videoEl.src = srcURL; videoEl.playsinline = true; videoEl.loop = false;
             
             const tex = new THREE.VideoTexture(videoEl); 
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            tex.generateMipmaps = false;
-
+            tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
             const geo = new THREE.PlaneGeometry(6, 6/(16/9));
             
-            // Standard Layer (0)
-            const mStandard = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2}));
-            mStandard.name = 'screenStandard';
-            screenGroup.add(mStandard);
+            // 2D/Full Mesh
+            const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2}));
+            mStd.name = 'screenStandard';
+            screenGroup.add(mStd);
             
-            // SBS Layers (1 & 2) for custom stereo mapping
+            // 3D SBS Meshes
             const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
             const fsL = `uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5, vUv.y)); }`;
             const fsR = `uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5+0.5, vUv.y)); }`;
@@ -311,17 +268,11 @@
             mL.name = mR.name = 'screenSBS';
             screenGroup.add(mL); screenGroup.add(mR);
 
-            // WebGL Renderer with High Performance
-            renderer = new THREE.WebGLRenderer({antialias:false, powerPreference: "high-performance"});
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas';
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // Max Anisotropy for sharpness at angles
-            tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-            // HQ Stereo Effect
             effect = new StereoEffect(renderer, videoEl);
             effect.setSize(window.innerWidth, window.innerHeight);
             
@@ -329,14 +280,17 @@
             videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB SETUP (CSS3D)
+        // 2. WEB (CSS3D)
         if(mediaType === 'web') {
-            renderer = new THREE.WebGLRenderer({antialias:false});
+            // Black BG
+            renderer = new THREE.WebGLRenderer();
             renderer.domElement.id = 'webgl-canvas';
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            cssScene = new THREE.Scene();
+            // Two Separate Scenes ensures no intersection bugs
+            cssSceneL = new THREE.Scene();
+            cssSceneR = new THREE.Scene();
 
             const mkObj = () => {
                 const d = document.createElement('div');
@@ -347,21 +301,19 @@
                 return new THREE.CSS3DObject(d);
             };
 
-            webGroupL = new THREE.Group(); cssScene.add(webGroupL);
-            webGroupR = new THREE.Group(); cssScene.add(webGroupR);
-            webGroupL.add(mkObj()); webGroupR.add(mkObj());
+            webGroupL = new THREE.Group(); cssSceneL.add(webGroupL); webGroupL.add(mkObj());
+            webGroupR = new THREE.Group(); cssSceneR.add(webGroupR); webGroupR.add(mkObj());
 
-            const mkR = (l) => {
+            const mkR = () => {
                 const r = new THREE.CSS3DRenderer();
                 r.domElement.className = 'css-renderer';
-                r.domElement.style.left = l;
                 document.body.appendChild(r.domElement);
                 return r;
             };
-            cssRendererL = mkR('0px');
-            cssRendererR = mkR('50%');
+            cssRendererL = mkR();
+            cssRendererR = mkR();
             
-            updateWebLayout(); // Initial Layout
+            updateWebLayout();
         }
 
         window.addEventListener('resize', () => {
@@ -371,7 +323,6 @@
             if(mediaType === 'web') updateWebLayout();
         });
         
-        // --- OVERLAY INTERACTION ---
         document.addEventListener('click', (e) => {
             if(e.target.closest('#overlay')) { resetTimer(); return; }
             if(els.overlay.classList.contains('visible')) hideOverlay(); else showOverlay();
@@ -387,19 +338,21 @@
 
     function updateWebLayout() {
         if(mediaType !== 'web') return;
-        
         if(viewMode === 'full') {
+            // Full: L takes 100%
             cssRendererL.setSize(window.innerWidth, window.innerHeight);
-            cssRendererL.domElement.style.display = 'block';
             cssRendererL.domElement.style.left = '0px';
+            cssRendererL.domElement.style.display = 'block';
             cssRendererR.domElement.style.display = 'none';
         } else {
+            // Split: L 50%, R 50%
             const w = window.innerWidth / 2;
             cssRendererL.setSize(w, window.innerHeight);
+            cssRendererL.domElement.style.left = '0px';
             cssRendererL.domElement.style.display = 'block';
             cssRendererR.setSize(w, window.innerHeight);
+            cssRendererR.domElement.style.left = w + 'px';
             cssRendererR.domElement.style.display = 'block';
-            cssRendererR.domElement.style.left = '50%';
         }
     }
 
@@ -410,7 +363,7 @@
 
         let z, s;
         if(viewMode === 'full') {
-            // Adjust distance for Full mode so screen fills view (FOV match)
+            // FOV Matching logic for 1D
             z = -1.8 * params.d / 3.0; 
             s = (mediaType==='video' ? 0.6 : 0.003) * params.z; 
         } else {
@@ -418,6 +371,7 @@
             s = (mediaType==='video' ? 1.0 : 0.005) * params.z;
         }
 
+        // VIDEO RENDER
         if(mediaType === 'video') {
             screenGroup.children.forEach(c => { c.position.z = z; c.scale.setScalar(s); });
             const mStd = screenGroup.getObjectByName('screenStandard');
@@ -430,17 +384,22 @@
             }
 
             if(viewMode === 'full') {
+                // Standard Fullscreen Render (No Distortion)
                 renderer.setScissorTest(false);
                 renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
                 renderer.render(scene, camera);
             } else {
+                // VR Distortion Render
                 if(effect) {
                     effect.setUniforms(params.i, params.z);
                     effect.render(scene, camera);
                 }
             }
-        } else {
-            renderer.clear();
+        } 
+        
+        // WEB RENDER
+        else {
+            renderer.clear(); // Clear Black
             webGroupL.quaternion.copy(screenGroup.quaternion);
             webGroupR.quaternion.copy(screenGroup.quaternion);
             [webGroupL.children[0], webGroupR.children[0]].forEach(o => {
@@ -448,52 +407,46 @@
             });
 
             if(viewMode === 'full') {
-                cssRendererL.render(cssScene, camera);
+                cssRendererL.render(cssSceneL, camera);
             } else {
                 const stereo = new THREE.StereoCamera();
                 stereo.aspect = 0.5;
                 stereo.eyeSep = 0.064 + (params.i * 0.1);
                 stereo.update(camera);
-                
-                webGroupL.visible = true; webGroupR.visible = false;
-                cssRendererL.render(cssScene, stereo.cameraL);
-                
-                webGroupL.visible = false; webGroupR.visible = true;
-                cssRendererR.render(cssScene, stereo.cameraR);
-                
-                webGroupL.visible = true;
+                cssRendererL.render(cssSceneL, stereo.cameraL);
+                cssRendererR.render(cssSceneR, stereo.cameraR);
             }
         }
     }
 
-    // --- CONTROLS ---
     function handleInput(e) {
         e.stopPropagation();
         const t = e.target.closest('button, .prog-track');
         if(!t) return;
         const cl = t.classList;
 
-        if(cl.contains('m-full')) { viewMode = 'full'; if(viewMode === 'full') { params.z = 1.0; params.d = 3.0; } updateOverlay(); updateWebLayout(); }
-        if(cl.contains('m-2d')) { viewMode = 'vr-2d'; updateOverlay(); updateWebLayout(); }
-        if(cl.contains('m-3d')) { viewMode = 'vr-3d'; updateOverlay(); updateWebLayout(); }
+        if(cl.contains('m-full')) { viewMode='full'; if(viewMode==='full'){params.z=1.0;params.d=3.0;} updateOverlay(); updateWebLayout(); }
+        if(cl.contains('m-2d')) { viewMode='vr-2d'; updateOverlay(); updateWebLayout(); }
+        if(cl.contains('m-3d')) { viewMode='vr-3d'; updateOverlay(); updateWebLayout(); }
 
-        if(cl.contains('zin')) params.z += 0.1;
-        if(cl.contains('zout')) params.z -= 0.1;
-        if(cl.contains('zrst')) params.z = defs.z;
+        if(cl.contains('zin')) params.z+=0.1;
+        if(cl.contains('zout')) params.z-=0.1;
+        if(cl.contains('zrst')) params.z=defs.z;
 
-        if(cl.contains('dinc')) params.d += 0.5;
-        if(cl.contains('ddec')) params.d -= 0.5;
-        if(cl.contains('drst')) params.d = defs.d;
+        if(cl.contains('dinc')) params.d+=0.5;
+        if(cl.contains('ddec')) params.d-=0.5;
+        if(cl.contains('drst')) params.d=defs.d;
 
-        if(cl.contains('iinc')) params.i += 0.005;
-        if(cl.contains('idec')) params.i -= 0.005;
-        if(cl.contains('irst')) params.i = defs.i;
+        if(cl.contains('iinc')) params.i+=0.005;
+        if(cl.contains('idec')) params.i-=0.005;
+        if(cl.contains('irst')) params.i=defs.i;
 
         if(cl.contains('rec')) screenGroup.quaternion.copy(camera.quaternion);
 
         if(videoEl) {
             if(cl.contains('prog-track')) {
-                const r = t.getBoundingClientRect(); videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration;
+                const r = t.getBoundingClientRect(); 
+                videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration;
             }
             if(cl.contains('pp')) videoEl.paused ? videoEl.play() : videoEl.pause();
             if(cl.contains('rw')) videoEl.currentTime -= 10;
@@ -521,73 +474,49 @@
         }
     }
 
-    // --- HQ STEREO EFFECT (With Dynamic Res & Lanczos) ---
-    function StereoEffect(renderer, videoElement) {
-        const _stereo = new THREE.StereoCamera(); _stereo.aspect = 0.5;
-        const dpr = window.devicePixelRatio || 1;
-        
-        // Dynamic Resolution Logic: Use Video Native Res if larger than Screen
-        const videoW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
-        const videoH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 1080;
-        const maxTexSize = 4096;
-
-        const calcOptimalSize = (screenDim, videoDim) => {
-            let baseSize = Math.max(Math.floor(screenDim * dpr), videoDim);
-            return Math.min(baseSize, maxTexSize); 
+    function StereoEffect(r, videoElement) {
+        const _s=new THREE.StereoCamera(); _s.aspect=0.5;
+        const dpr=window.devicePixelRatio||1;
+        const vidW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
+        const vidH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 1080;
+        const sz = (sw,sh) => { 
+            let b=Math.max(Math.floor(sw*dpr), vidW); 
+            return Math.min(b, 4096); 
         };
+        let w=sz(window.innerWidth), h=sz(window.innerHeight);
         
-        let rtWidth = calcOptimalSize(window.innerWidth, videoW);
-        let rtHeight = calcOptimalSize(window.innerHeight, videoH);
+        let _tL=new THREE.WebGLRenderTarget(w,h,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+        let _tR=new THREE.WebGLRenderTarget(w,h,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
         
-        // Disable Depth/Stencil for performance and memory
-        const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false };
-        let _tL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, opts);
-        let _tR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, opts);
-        
-        const _m = new THREE.ShaderMaterial({
-            uniforms: { tDiffuse: { value: null }, texSize: { value: new THREE.Vector2(rtWidth, rtHeight) }, k1: { value: 0.22 }, k2: { value: 0.18 }, ipd: { value: 0.0 }, zoom: { value: 1.0 } },
-            vertexShader: document.getElementById('vertexShader').textContent,
-            fragmentShader: document.getElementById('fs').textContent
+        const _m=new THREE.ShaderMaterial({
+            uniforms:{tDiffuse:{value:null},zoom:{value:1},ipd:{value:0}},
+            vertexShader:document.getElementById('vs').textContent, fragmentShader:document.getElementById('fs').textContent
         });
-        const _sc = new THREE.Scene(); _sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), _m));
-        const _c = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        const _sc=new THREE.Scene(); _sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),_m));
+        const _c=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
         
-        this.setSize = function(width, height) {
-            renderer.setSize(width, height);
-            const newW = calcOptimalSize(width, videoW);
-            const newH = calcOptimalSize(height, videoH);
-            if(newW !== rtWidth || newH !== rtHeight) {
-                _tL.dispose(); _tR.dispose(); rtWidth=newW; rtHeight=newH;
-                _tL = new THREE.WebGLRenderTarget(rtWidth, rtHeight, opts);
-                _tR = new THREE.WebGLRenderTarget(rtWidth, rtHeight, opts);
-                _m.uniforms.texSize.value.set(rtWidth, rtHeight);
-            }
+        this.setSize=(sw,sh)=>{
+            r.setSize(sw,sh); let nw=sz(sw), nh=sz(sh);
+            if(nw!==w || nh!==h) { w=nw; h=nh; _tL.dispose(); _tR.dispose(); _tL=new THREE.WebGLRenderTarget(w,h); _tR=new THREE.WebGLRenderTarget(w,h); }
         };
-        this.setUniforms = function(i, z) { _m.uniforms.ipd.value = i; _m.uniforms.zoom.value = z; };
+        this.setUniforms=(i,z)=>{_m.uniforms.ipd.value=i; _m.uniforms.zoom.value=z;};
         
-        this.render = function(scene, camera) {
-            scene.updateMatrixWorld(); _stereo.update(camera);
+        this.render=(s,c)=>{
+            s.updateMatrixWorld(); _s.update(c);
+            if(viewMode==='vr-3d') _s.cameraL.layers.set(1); else _s.cameraL.layers.set(0);
+            r.setRenderTarget(_tL); r.clear(); r.render(s,_s.cameraL);
+            if(viewMode==='vr-3d') _s.cameraR.layers.set(2); else _s.cameraR.layers.set(0);
+            r.setRenderTarget(_tR); r.clear(); r.render(s,_s.cameraR);
+            r.setRenderTarget(null);
             
-            // Render Left
-            if(viewMode === 'vr-3d') _stereo.cameraL.layers.set(1); else _stereo.cameraL.layers.set(0);
-            renderer.setRenderTarget(_tL); renderer.clear(); renderer.render(scene, _stereo.cameraL);
-            
-            // Render Right
-            if(viewMode === 'vr-3d') _stereo.cameraR.layers.set(2); else _stereo.cameraR.layers.set(0);
-            renderer.setRenderTarget(_tR); renderer.clear(); renderer.render(scene, _stereo.cameraR);
-            renderer.setRenderTarget(null);
-            
-            // Distort to Screen
-            const w=window.innerWidth, h=window.innerHeight; renderer.setScissorTest(true);
-            
-            renderer.setScissor(0,0,w/2,h); renderer.setViewport(0,0,w/2,h); 
-            _m.uniforms.tDiffuse.value=_tL.texture; _m.uniforms.ipd.value=params.i; renderer.render(_sc,_c);
-            
-            renderer.setScissor(w/2,0,w/2,h); renderer.setViewport(w/2,0,w/2,h); 
-            _m.uniforms.tDiffuse.value=_tR.texture; _m.uniforms.ipd.value=-params.i; renderer.render(_sc,_c);
-            renderer.setScissorTest(false);
+            const sw=window.innerWidth, sh=window.innerHeight; r.setScissorTest(true);
+            r.setScissor(0,0,sw/2,sh); r.setViewport(0,0,sw/2,sh); 
+            _m.uniforms.tDiffuse.value=_tL.texture; _m.uniforms.ipd.value=params.i; r.render(_sc,_c);
+            r.setScissor(sw/2,0,sw/2,sh); r.setViewport(sw/2,0,sw/2,sh); 
+            _m.uniforms.tDiffuse.value=_tR.texture; _m.uniforms.ipd.value=-params.i; r.render(_sc,_c);
+            r.setScissorTest(false);
         };
-    };
+    }
 </script>
 </body>
 </html>
