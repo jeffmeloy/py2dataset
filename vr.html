@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Universal VR Player (Final Fix)</title>
+    <title>Universal VR Player (UI Polish)</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -30,8 +30,15 @@
         #startBtn:disabled { background: #333; color: #555; cursor: not-allowed; }
 
         /* --- OVERLAY --- */
-        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.85); z-index: 9999; display: none; padding: 10px 0; }
-        #overlay.visible { display: flex; }
+        /* FIXED: Opacity set to 0.5 (More Transparent) */
+        #overlay { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background: rgba(0, 0, 0, 0.5); 
+            z-index: 9999; display: none; padding: 10px 0; 
+            transition: opacity 0.3s;
+        }
+        #overlay.visible { display: flex; opacity: 1; }
+        #overlay.fading { opacity: 0; }
         
         /* Layout Handling */
         #overlay.single { justify-content: center; } 
@@ -44,31 +51,21 @@
         /* Buttons */
         button { cursor: pointer; }
         .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+        .btn-icon:active { background: #007bff; }
         .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
         .btn-pill.active { background: #007bff; color: white; }
         .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
         
-        .lbl { font-size: 10px; color: #888; text-transform: uppercase; margin-top: 5px; font-weight: bold; }
+        .lbl { font-size: 10px; color: #ddd; text-shadow: 0 1px 2px black; text-transform: uppercase; margin-top: 5px; font-weight: bold; }
         
-        .prog-track { width: 100%; height: 10px; background: #444; border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
+        .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
         .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
 
         /* --- RENDERER LAYERS --- */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
-        
-        /* CSS3D Container Logic */
-        .css-renderer { 
-            position: absolute; top: 0; z-index: 2; overflow: hidden;
-            /* Allow clicking iframe? Usually no for VR, but yes for Fullscreen browsing? 
-               Let's set pointer-events:none so overlay works. */
-            pointer-events: none; 
-        }
-        
-        /* Force white background on iframes so they don't disappear in the void */
+        .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
         .web-content { width: 1024px; height: 768px; background: white; }
         .web-content iframe { width: 100%; height: 100%; border: 0; }
-
-        /* Hide elements dynamically */
         .hidden { display: none !important; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -101,7 +98,7 @@
     </div>
 </div>
 
-<!-- OVERLAY (Injected) -->
+<!-- OVERLAY -->
 <div id="overlay"></div>
 
 <!-- SHADERS -->
@@ -119,9 +116,10 @@ void main(){
 
 <script>
     // --- APP STATE ---
-    let mediaType = null; // 'video' | 'web'
-    let viewMode = 'full'; // 'full' | 'vr-2d' | 'vr-3d'
+    let mediaType = null;
+    let viewMode = 'full';
     let srcURL = null;
+    let hideTimer = null;
     
     // Params
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
@@ -166,8 +164,6 @@ void main(){
         if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
 
         els.setup.style.display = 'none';
-        
-        // Default start mode
         viewMode = 'full'; 
         
         initEngine();
@@ -176,9 +172,8 @@ void main(){
 
     // --- OVERLAY GENERATION ---
     function updateOverlay() {
-        // Toggle single/split classes for CSS centering
         const isFull = (viewMode === 'full');
-        els.overlay.className = isFull ? 'visible single' : 'visible split';
+        els.overlay.className = isFull ? 'single' : 'split';
         
         const controls = `
             <div class="row ${mediaType==='web'?'hidden':''}">
@@ -282,18 +277,16 @@ void main(){
 
         // 2. WEB SETUP
         if(mediaType === 'web') {
-            // Background
             renderer = new THREE.WebGLRenderer();
             renderer.domElement.id = 'webgl-canvas';
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            // CSS Scenes
             cssScene = new THREE.Scene();
 
             const mkObj = () => {
                 const d = document.createElement('div');
-                d.className = 'web-content'; // White BG
+                d.className = 'web-content'; 
                 const i = document.createElement('iframe');
                 i.src = srcURL;
                 d.appendChild(i);
@@ -302,11 +295,8 @@ void main(){
 
             webGroupL = new THREE.Group(); cssScene.add(webGroupL);
             webGroupR = new THREE.Group(); cssScene.add(webGroupR);
-            
-            webGroupL.add(mkObj());
-            webGroupR.add(mkObj());
+            webGroupL.add(mkObj()); webGroupR.add(mkObj());
 
-            // Renderers
             const mkR = (l) => {
                 const r = new THREE.CSS3DRenderer();
                 r.domElement.className = 'css-renderer';
@@ -317,8 +307,7 @@ void main(){
             
             cssRendererL = mkR('0px');
             cssRendererR = mkR('50%');
-            
-            updateWebLayout(); // Initial Size
+            updateWebLayout();
         }
 
         window.addEventListener('resize', () => {
@@ -328,30 +317,52 @@ void main(){
             if(mediaType === 'web') updateWebLayout();
         });
         
+        // --- OVERLAY INTERACTION & TIMER ---
         document.addEventListener('click', (e) => {
-            if(!e.target.closest('#overlay')) els.overlay.classList.toggle('visible');
+            // If clicking controls, just reset timer
+            if(e.target.closest('#overlay')) {
+                resetOverlayTimer();
+                return;
+            }
+            // Toggle
+            if(els.overlay.classList.contains('visible')) {
+                hideOverlay();
+            } else {
+                showOverlay();
+            }
         });
+        
         els.overlay.addEventListener('click', handleInput);
 
         animate();
+    }
+
+    function showOverlay() {
+        els.overlay.classList.add('visible');
+        resetOverlayTimer();
+    }
+
+    function hideOverlay() {
+        els.overlay.classList.remove('visible');
+    }
+
+    function resetOverlayTimer() {
+        if(hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(hideOverlay, 3000); // 3 Seconds
     }
 
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         
         if(viewMode === 'full') {
-            // FULL MODE: Left Renderer takes 100%, Right Hidden
             cssRendererL.setSize(window.innerWidth, window.innerHeight);
             cssRendererL.domElement.style.display = 'block';
             cssRendererL.domElement.style.left = '0px';
-            
             cssRendererR.domElement.style.display = 'none';
         } else {
-            // VR MODE: Split 50/50
             const w = window.innerWidth / 2;
             cssRendererL.setSize(w, window.innerHeight);
             cssRendererL.domElement.style.display = 'block';
-            
             cssRendererR.setSize(w, window.innerHeight);
             cssRendererR.domElement.style.display = 'block';
             cssRendererR.domElement.style.left = '50%';
@@ -363,35 +374,24 @@ void main(){
         tracker.update();
         camera.quaternion.copy(tracker.getQ());
 
-        // --- CALCULATE TRANSFORM ---
-        // For Full mode, calculate distance to fill height
         let z, s;
         if(viewMode === 'full') {
-            // FOV Matching Logic: Fit height to screen
-            // Plane height = 6 / aspect (approx 3.375)
-            // Distance = (h/2) / tan(fov/2)
-            // But we can just simply move it closer for Full mode
-            z = -1.8 * params.d / 3.0; // Closer base distance
+            z = -1.8 * params.d / 3.0; 
             s = (mediaType==='video' ? 0.6 : 0.003) * params.z; 
         } else {
-            // VR Mode: Standard Distance
             z = -params.d; 
             s = (mediaType==='video' ? 1.0 : 0.005) * params.z;
         }
 
-        // --- RENDER VIDEO ---
         if(mediaType === 'video') {
             screenGroup.children.forEach(c => { c.position.z = z; c.scale.setScalar(s); });
-            
             const mStd = screenGroup.getObjectByName('screenStandard');
             const mSBS = screenGroup.children.filter(c=>c.name==='screenSBS');
 
             if(viewMode === 'vr-3d') {
-                if(mStd) mStd.visible = false;
-                mSBS.forEach(m=>m.visible=true);
+                if(mStd) mStd.visible = false; mSBS.forEach(m=>m.visible=true);
             } else {
-                if(mStd) mStd.visible = true;
-                mSBS.forEach(m=>m.visible=false);
+                if(mStd) mStd.visible = true; mSBS.forEach(m=>m.visible=false);
             }
 
             if(viewMode === 'full') {
@@ -402,40 +402,27 @@ void main(){
                     effect.render(scene, camera);
                 }
             }
-        } 
-        
-        // --- RENDER WEB ---
-        else {
+        } else {
             renderer.clear();
-            
-            // Sync rotation
             webGroupL.quaternion.copy(screenGroup.quaternion);
             webGroupR.quaternion.copy(screenGroup.quaternion);
             
-            // Sync Scale/Pos
             [webGroupL.children[0], webGroupR.children[0]].forEach(o => {
                 o.position.set(0,0,z); o.scale.set(s,s,s);
             });
 
             if(viewMode === 'full') {
-                // Render SceneL using Main Camera to RendererL
                 cssRendererL.render(cssScene, camera);
             } else {
-                // Stereo Cameras
                 const stereo = new THREE.StereoCamera();
                 stereo.aspect = 0.5;
                 stereo.eyeSep = 0.064 + (params.i * 0.1);
                 stereo.update(camera);
-                
-                // Show L group, Hide R group
                 webGroupL.visible = true; webGroupR.visible = false;
                 cssRendererL.render(cssScene, stereo.cameraL);
-                
-                // Show R group, Hide L group
                 webGroupL.visible = false; webGroupR.visible = true;
                 cssRendererR.render(cssScene, stereo.cameraR);
-                
-                webGroupL.visible = true; // Reset
+                webGroupL.visible = true;
             }
         }
     }
@@ -447,21 +434,10 @@ void main(){
         if(!t) return;
         const cl = t.classList;
 
-        // MODE
-        if(cl.contains('m-full') || cl.contains('m-2d') || cl.contains('m-3d')) {
-            if(cl.contains('m-full')) viewMode = 'full';
-            if(cl.contains('m-2d')) viewMode = 'vr-2d';
-            if(cl.contains('m-3d')) viewMode = 'vr-3d';
-            
-            // Reset params slightly when switching to avoid jarring jumps
-            if(viewMode === 'full') { params.z = 1.0; params.d = 3.0; } 
-            
-            updateOverlay();
-            updateWebLayout(); // Trigger resize logic for Web
-            return;
-        }
+        if(cl.contains('m-full')) { viewMode = 'full'; if(viewMode === 'full') { params.z = 1.0; params.d = 3.0; } updateOverlay(); updateWebLayout(); }
+        if(cl.contains('m-2d')) { viewMode = 'vr-2d'; updateOverlay(); updateWebLayout(); }
+        if(cl.contains('m-3d')) { viewMode = 'vr-3d'; updateOverlay(); updateWebLayout(); }
 
-        // PARAMS
         if(cl.contains('zin')) params.z += 0.1;
         if(cl.contains('zout')) params.z -= 0.1;
         if(cl.contains('zrst')) params.z = defs.z;
@@ -476,7 +452,6 @@ void main(){
 
         if(cl.contains('rec')) screenGroup.quaternion.copy(camera.quaternion);
 
-        // VIDEO PLAYBACK
         if(videoEl) {
             if(cl.contains('prog-track')) {
                 const r = t.getBoundingClientRect(); 
@@ -521,15 +496,11 @@ void main(){
         this.setUniforms=(i,z)=>{_m.uniforms.ipd.value=i; _m.uniforms.zoom.value=z;};
         this.render=(s,c)=>{
             s.updateMatrixWorld(); _s.update(c);
-            
-            // Video Layering for SBS
             if(viewMode === 'vr-3d') _s.cameraL.layers.set(1); else _s.cameraL.layers.set(0);
             r.setRenderTarget(_tL); r.clear(); r.render(s,_s.cameraL);
-            
             if(viewMode === 'vr-3d') _s.cameraR.layers.set(2); else _s.cameraR.layers.set(0);
             r.setRenderTarget(_tR); r.clear(); r.render(s,_s.cameraR);
             r.setRenderTarget(null);
-            
             const w=window.innerWidth, h=window.innerHeight; r.setScissorTest(true);
             r.setScissor(0,0,w/2,h); r.setViewport(0,0,w/2,h); _m.uniforms.tDiffuse.value=_tL.texture; _m.uniforms.ipd.value=params.i; r.render(_sc,_c);
             r.setScissor(w/2,0,w/2,h); r.setViewport(w/2,0,w/2,h); _m.uniforms.tDiffuse.value=_tR.texture; _m.uniforms.ipd.value=-params.i; r.render(_sc,_c);
