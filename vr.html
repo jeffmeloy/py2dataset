@@ -1,80 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player - Split Web Setup</title>
+    <title>VR Player - High Fidelity</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#000000">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        /* CORE STYLES */
         body { margin: 0; overflow: hidden; background: #000; color: white; font-family: system-ui, -apple-system, sans-serif; user-select: none; -webkit-user-select: none; }
         
-        /* --- SPLIT SETUP SCREEN --- */
-        #setup { 
-            position: fixed; inset: 0; z-index: 10000; background: #121212; 
-            display: flex; flex-direction: row; /* Split Horizontal */
-            width: 100vw; height: 100vh;
-        }
+        /* SETUP UI */
+        #setup { position: fixed; inset: 0; z-index: 10000; background: #121212; display: flex; align-items: center; justify-content: center; padding: 20px; }
         #setup.hidden { display: none !important; }
-
-        /* Eye Container */
-        .setup-eye {
-            width: 50vw; height: 100vh;
-            display: flex; align-items: center; justify-content: center;
-            border-right: 1px solid #333;
-            box-sizing: border-box;
-            padding: 10px;
-            overflow-y: auto;
-        }
-
-        /* Mobile Menu Card */
-        .menu-card {
-            width: 100%; max-width: 400px;
-            background: #1e1e1e; border-radius: 16px; padding: 20px;
-            display: flex; flex-direction: column; gap: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-
-        h2 { margin: 0 0 10px 0; text-align: center; font-size: 18px; color: #fff; letter-spacing: 1px; }
+        .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
         
-        /* Controls */
+        h2 { margin: 0; text-align: center; color: #fff; text-transform: uppercase; letter-spacing: 1px; font-size: 18px; }
         .radio-group { display: flex; background: #2c2c2c; border-radius: 8px; padding: 4px; }
-        .radio-label { 
-            flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; 
-            color: #888; font-weight: 600; transition: 0.2s; font-size: 14px; 
-        }
-        .radio-label.selected { background: #007BFF; color: white; }
+        .radio-group label { flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; color: #888; font-weight: 600; transition: 0.2s; }
+        .radio-group input:checked + label { background: #007BFF; color: white; }
+        
+        .file-btn { background: #333; color: #ddd; padding: 16px; border-radius: 8px; text-align: center; font-weight: 600; border: 1px dashed #555; cursor: pointer; display: block; }
+        .preview { background: #000; border-radius: 8px; height: 220px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; overflow: hidden; position: relative; }
+        #testVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
+        #testVideo.active { display: block; }
+        
+        .btn-main { background: #007BFF; color: white; border: none; padding: 16px; font-size: 16px; font-weight: bold; border-radius: 8px; width: 100%; text-transform: uppercase; letter-spacing: 1px; }
+        .btn-main:disabled { background: #333; color: #555; }
 
-        /* Shared File Input Label */
-        .file-btn { 
-            display: block; background: #333; color: #ddd; padding: 16px; border-radius: 8px; 
-            text-align: center; font-weight: 600; border: 1px dashed #555; cursor: pointer; 
+        /* VR OVERLAY */
+        #overlay { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background: linear-gradient(to top, rgba(0,0,0,0.95), transparent); 
+            padding: 40px 0 20px 0; display: none; z-index: 9999; 
+            transition: opacity 0.2s; 
         }
-        #sharedFileInput { display: none; } /* The actual input is hidden and shared */
-
-        /* Preview */
-        .preview-box {
-            background: #000; border-radius: 8px; height: 140px; 
-            display: flex; align-items: center; justify-content: center; 
-            border: 1px solid #333; overflow: hidden; position: relative;
-        }
-        .preview-vid { width: 100%; height: 100%; object-fit: contain; display: none; }
-        .preview-vid.active { display: block; }
-        .placeholder { position: absolute; color: #555; font-size: 14px; }
-
-        /* Start Button */
-        .start-btn { 
-            background: #007BFF; color: white; border: none; padding: 16px; 
-            font-size: 16px; font-weight: bold; border-radius: 8px; width: 100%; 
-            text-transform: uppercase; letter-spacing: 1px; 
-        }
-        .start-btn:disabled { background: #333; color: #555; }
-
-        /* --- VR OVERLAY --- */
-        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.95), transparent); padding: 40px 0 20px 0; display: none; z-index: 9999; transition: opacity 0.2s; }
         #overlay.visible { display: flex; }
         #overlay.fading { opacity: 0; pointer-events: none; }
         
@@ -85,60 +45,38 @@
         .bar-fill { height: 100%; background: #007BFF; width: 0%; pointer-events: none; }
         
         .row { display: flex; gap: 15px; margin-bottom: 15px; }
-        .btn-icon { width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); cursor: pointer; }
+        .btn-icon { 
+            width: 60px; height: 60px; border-radius: 50%; 
+            background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.1); 
+            color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; 
+            backdrop-filter: blur(5px); cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
         .btn-icon:active { background: rgba(0,123,255,0.8); transform: scale(0.95); }
         .btn-pill { height: 44px; padding: 0 24px; border-radius: 22px; background: rgba(255,255,255,0.15); border: none; color: white; font-weight: bold; backdrop-filter: blur(5px); }
     </style>
 </head>
 <body>
 
-<!-- SHARED HIDDEN INPUT -->
-<input type="file" id="sharedFileInput" accept="video/*">
-
-<!-- SPLIT SETUP SCREEN -->
 <div id="setup">
-    <!-- LEFT EYE -->
-    <div class="setup-eye">
-        <div class="menu-card">
-            <h2>VR Player</h2>
-            <div class="radio-group">
-                <div class="radio-label selected" data-mode="2d" onclick="setMode('2d')">2D</div>
-                <div class="radio-label" data-mode="3d" onclick="setMode('3d')">3D SBS</div>
-            </div>
-            <label for="sharedFileInput" class="file-btn file-lbl">Select Video</label>
-            <div class="preview-box">
-                <span class="placeholder">Preview</span>
-                <video class="preview-vid" id="pvL" muted playsinline></video>
-            </div>
-            <button class="start-btn" disabled onclick="launchVR()">ENTER VR</button>
+    <div class="setup-box">
+        <h2>VR Player</h2>
+        <div class="radio-group">
+            <input type="radio" id="mode2d" name="mode" value="2d" checked><label for="mode2d">2D</label>
+            <input type="radio" id="mode3d" name="mode" value="3d"><label for="mode3d">3D SBS</label>
         </div>
-    </div>
-
-    <!-- RIGHT EYE (Duplicate) -->
-    <div class="setup-eye">
-        <div class="menu-card">
-            <h2>VR Player</h2>
-            <div class="radio-group">
-                <div class="radio-label selected" data-mode="2d" onclick="setMode('2d')">2D</div>
-                <div class="radio-label" data-mode="3d" onclick="setMode('3d')">3D SBS</div>
-            </div>
-            <label for="sharedFileInput" class="file-btn file-lbl">Select Video</label>
-            <div class="preview-box">
-                <span class="placeholder">Preview</span>
-                <video class="preview-vid" id="pvR" muted playsinline></video>
-            </div>
-            <button class="start-btn" disabled onclick="launchVR()">ENTER VR</button>
-        </div>
+        <label for="fIn" class="file-btn" id="fLbl">Select Video</label>
+        <input type="file" id="fIn" accept="video/*" style="display:none">
+        <div class="preview"><span id="pTxt" style="color:#555">No Video</span><video id="testVideo" controls playsinline></video></div>
+        <button id="goBtn" class="btn-main" disabled>Enter VR</button>
     </div>
 </div>
 
-<!-- IN-GAME OVERLAY -->
 <div id="overlay">
     <div class="eye-ui" id="uiL"></div>
     <div class="eye-ui" id="uiR"></div>
 </div>
 
-<!-- TEMPLATE FOR OVERLAY -->
 <template id="uiTemplate">
     <div class="bar-track">
         <div class="bar-bg"><div class="bar-fill"></div></div>
@@ -160,7 +98,6 @@
     </div>
 </template>
 
-<!-- SHADERS (UNCHANGED) -->
 <script id="vert" type="x-shader/x-vertex">
     precision highp float;
     varying vec2 vUv;
@@ -189,6 +126,7 @@
     void main() {
         vec2 eyeCenter = vec2(0.5, 0.5);
         vec2 distortedUV = distort(vUv);
+        
         vec2 uv = (distortedUV - eyeCenter) / zoomLevel;
         uv.x += headYawOffset + manualPanOffset;
         uv.y += headPitchOffset + manualTiltOffset;
@@ -203,75 +141,45 @@
 </script>
 
 <script>
-    // --- GLOBAL STATE ---
+    const el = (id) => document.getElementById(id);
+    const tmpl = el('uiTemplate').content;
+    el('uiL').appendChild(tmpl.cloneNode(true));
+    el('uiR').appendChild(tmpl.cloneNode(true));
+
     let videoURL = null, activeVRVideo = null, isPlaying = false;
-    let selectedMode = '2d';
+
+    el('fIn').onchange = (e) => {
+        const f = e.target.files[0]; if(!f) return;
+        el('fLbl').textContent = f.name;
+        if(videoURL) URL.revokeObjectURL(videoURL);
+        videoURL = URL.createObjectURL(f);
+        const v = el('testVideo');
+        v.src = videoURL; v.style.display='block'; el('pTxt').style.display='none';
+        v.onloadedmetadata = () => el('goBtn').disabled = false;
+    };
+
+    el('goBtn').onclick = async () => {
+        el('testVideo').pause(); 
+        const mode = document.querySelector('input[name="mode"]:checked').value;
+        if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+            try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
+        }
+        const d = document.documentElement;
+        if(d.requestFullscreen) d.requestFullscreen();
+        screen.orientation?.lock('landscape').catch(()=>{});
+        el('setup').classList.add('hidden');
+        init3D(mode);
+    };
+
     let renderer, scene, camera, effect, tracker;
     let zIdx = 4; 
     const zLvls = [0.2,0.4,0.6,0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.4, 3.0];
     let pan = {x:0, y:0}, head = {y:0, p:0}, offset = {y:0, p:0};
 
-    // --- SETUP SCREEN LOGIC (SYNCED) ---
-    
-    // 1. Inject UI Template
-    const tmpl = document.getElementById('uiTemplate').content;
-    document.getElementById('uiL').appendChild(tmpl.cloneNode(true));
-    document.getElementById('uiR').appendChild(tmpl.cloneNode(true));
-
-    // 2. Sync Mode Selection
-    window.setMode = (mode) => {
-        selectedMode = mode;
-        document.querySelectorAll('.radio-label').forEach(el => {
-            if (el.dataset.mode === mode) el.classList.add('selected');
-            else el.classList.remove('selected');
-        });
-    };
-
-    // 3. Sync File Selection
-    document.getElementById('sharedFileInput').onchange = (e) => {
-        const f = e.target.files[0]; if(!f) return;
-        
-        // Update text in both eyes
-        document.querySelectorAll('.file-lbl').forEach(el => el.textContent = f.name);
-        
-        if(videoURL) URL.revokeObjectURL(videoURL);
-        videoURL = URL.createObjectURL(f);
-
-        // Update preview in both eyes
-        document.querySelectorAll('.placeholder').forEach(el => el.style.display = 'none');
-        document.querySelectorAll('.preview-vid').forEach(vid => {
-            vid.src = videoURL;
-            vid.classList.add('active');
-            vid.currentTime = 1; // Load frame
-        });
-
-        document.querySelectorAll('.start-btn').forEach(btn => btn.disabled = false);
-    };
-
-    // 4. Launch
-    window.launchVR = async () => {
-        if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
-            try { await DeviceOrientationEvent.requestPermission(); } catch(e){}
-        }
-        
-        const d = document.documentElement;
-        if(d.requestFullscreen) d.requestFullscreen();
-        screen.orientation?.lock('landscape').catch(()=>{});
-        
-        document.getElementById('setup').classList.add('hidden');
-        
-        // Stop previews
-        document.querySelectorAll('.preview-vid').forEach(v => { v.src = ''; v.load(); });
-        
-        initVR();
-    };
-
-    // --- 3D ENGINE (UNCHANGED) ---
-    function initVR() {
+    function init3D(mode) {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 100);
-        camera.position.set(0, 0, 0);
-
+        
         activeVRVideo = document.createElement('video');
         activeVRVideo.src = videoURL;
         activeVRVideo.loop = false;
@@ -280,37 +188,40 @@
 
         activeVRVideo.onloadeddata = () => {
             const videoTex = new THREE.VideoTexture(activeVRVideo);
+            // 1. MEMORY EFFICIENCY: RGB Format (No Alpha)
             videoTex.format = THREE.RGBFormat;
             videoTex.minFilter = THREE.LinearFilter;
             videoTex.magFilter = THREE.LinearFilter;
             videoTex.generateMipmaps = false;
             
             renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            // 2. RESOLUTION: Full resolution for sharp video
+            renderer.setPixelRatio(window.devicePixelRatio); 
             renderer.setSize(window.innerWidth, window.innerHeight);
             
+            // 3. QUALITY: Max Anisotropy (Sharper angles)
             const maxAniso = renderer.capabilities.getMaxAnisotropy();
             if(maxAniso > 1) videoTex.anisotropy = maxAniso;
             
             document.body.appendChild(renderer.domElement);
 
-            // Standard Aspect Logic
-            const aspect = selectedMode==='3d' ? (activeVRVideo.videoWidth/2)/activeVRVideo.videoHeight : activeVRVideo.videoWidth/activeVRVideo.videoHeight;
+            // --- GEOMETRY SCALING (This controls the Aspect Ratio) ---
+            const aspect = mode==='3d' ? (activeVRVideo.videoWidth/2)/activeVRVideo.videoHeight : activeVRVideo.videoWidth/activeVRVideo.videoHeight;
             const width = 6;
             const height = width / aspect; 
             const distance = -2.5;
 
             const mkEye = (l, off) => {
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.ShaderMaterial({
-                    uniforms: { tDiffuse:{value:videoTex} },
+                    uniforms: { t:{value:videoTex} },
                     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
-                    fragmentShader: `precision highp float; uniform sampler2D tDiffuse; varying vec2 vUv; void main() { vec2 uv = vUv; uv.x = uv.x * 0.5 + ${off}; gl_FragColor = texture2D(tDiffuse, uv); }`,
+                    fragmentShader: `precision highp float; uniform sampler2D t; varying vec2 vUv; void main() { gl_FragColor = texture2D(t, vec2(vUv.x*0.5+${off}, vUv.y)); }`,
                     side: THREE.DoubleSide
                 }));
                 m.position.z = distance; m.layers.set(l); return m;
             };
             
-            if(selectedMode==='2d') {
+            if(mode==='2d') {
                 const m = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({map:videoTex}));
                 m.position.z = distance; camera.add(m);
             } else {
@@ -318,7 +229,7 @@
             }
             scene.add(camera);
 
-            effect = new StereoEffect(renderer);
+            effect = new StereoEffect(renderer, mode);
             tracker = new Tracker(); tracker.start();
 
             activeVRVideo.play(); 
@@ -333,25 +244,38 @@
         if(effect) effect.render(scene, camera);
     }
 
-    function StereoEffect(ren) {
+    function StereoEffect(ren, mode) {
         const _s = new THREE.StereoCamera(); _s.aspect = 0.5;
         const dpr = window.devicePixelRatio;
+        
+        // 4. QUALITY BOOST: Increase render buffer to 4K (4096)
+        // This prevents "oversmoothing" when zooming via shader
         const w = Math.min(window.innerWidth*dpr/2, 4096); 
         const h = Math.min(window.innerHeight*dpr, 4096);
 
-        const rtConf = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBFormat, generateMipmaps: false, depthBuffer: false, stencilBuffer: false };
+        // 5. PERFORMANCE: Disable Depth/Stencil since we render a flat plane
+        const rtConf = { 
+            minFilter: THREE.LinearFilter, 
+            magFilter: THREE.LinearFilter, 
+            format: THREE.RGBFormat, 
+            generateMipmaps: false, 
+            depthBuffer: false, 
+            stencilBuffer: false 
+        };
+        
         const rtL = new THREE.WebGLRenderTarget(w, h, rtConf);
         const rtR = new THREE.WebGLRenderTarget(w, h, rtConf);
 
         const mat = new THREE.ShaderMaterial({
             uniforms: { 
-                tDiffuse:{value:null}, k1:{value:0.22}, k2:{value:0.18}, 
+                tDiffuse:{value:null}, 
+                k1:{value:0.22}, k2:{value:0.18}, 
                 headYawOffset:{value:0}, headPitchOffset:{value:0}, 
                 manualPanOffset:{value:0}, manualTiltOffset:{value:0}, 
                 zoomLevel:{value:1}
             },
-            vertexShader: document.getElementById('vert').textContent,
-            fragmentShader: document.getElementById('frag').textContent
+            vertexShader: el('vert').textContent,
+            fragmentShader: el('frag').textContent
         });
         
         const sceneQ = new THREE.Scene();
@@ -364,7 +288,7 @@
 
         this.render = (scn, cam) => {
             scn.updateMatrixWorld(); _s.update(cam);
-            if(selectedMode==='3d') { _s.cameraL.layers.set(1); _s.cameraR.layers.set(2); }
+            if(mode==='3d') { _s.cameraL.layers.set(1); _s.cameraR.layers.set(2); }
 
             ren.setRenderTarget(rtL); ren.clear(); ren.render(scn, _s.cameraL);
             ren.setRenderTarget(rtR); ren.clear(); ren.render(scn, _s.cameraR);
@@ -415,16 +339,11 @@
         }
     }
 
-    // --- CONTROLS ---
-    const ui = document.getElementById('overlay');
+    const ui = el('overlay');
     let fadeT;
     const showUI = () => { ui.classList.add('visible'); ui.classList.remove('fading'); clearTimeout(fadeT); fadeT = setTimeout(hideUI, 3000); };
     const hideUI = () => { if(isPlaying) { ui.classList.add('fading'); setTimeout(()=>ui.classList.remove('visible'), 200); } };
-    
-    document.addEventListener('click', (e) => { 
-        if(e.target.closest('.eye-ui')) return; 
-        if(ui.classList.contains('visible')) hideUI(); else showUI(); 
-    });
+    document.addEventListener('click', (e) => { if(e.target.closest('.eye-ui')) return; if(ui.classList.contains('visible')) hideUI(); else showUI(); });
 
     const bind = (sel, fn) => {
         document.querySelectorAll(sel).forEach(b => {
@@ -458,7 +377,6 @@
         const p = (activeVRVideo.currentTime / activeVRVideo.duration) * 100;
         document.querySelectorAll('.bar-fill').forEach(f => f.style.width = p+'%');
     }, 200);
-
 </script>
 </body>
 </html>
