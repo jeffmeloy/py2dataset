@@ -1,78 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player Fixed</title>
+    <title>VR Player Stable</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-    <meta name="mobile-web-app-capable" content="yes">
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         
         /* SETUP SCREEN */
         #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
         .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; gap: 15px; }
-        
-        /* Inputs */
         .label { font-size: 11px; text-transform: uppercase; color: #888; font-weight: bold; margin-bottom: 5px; display: block; }
-        
-        /* FIX 1: Added 'for' attribute to make label clickable */
         .file-btn { display: block; background: #333; padding: 12px; text-align: center; border-radius: 8px; cursor: pointer; border: 1px dashed #555; }
         #fileInput { display: none; }
-        
         .url-row { display: flex; gap: 10px; }
         .url-input { flex: 1; padding: 10px; background: #252525; border: 1px solid #444; color: white; border-radius: 8px; }
         .preview-btn { background: #444; color: white; border: none; padding: 0 15px; border-radius: 8px; cursor: pointer; }
-
-        /* Single Preview Area */
         .preview-window { height: 200px; background: black; border: 1px solid #333; border-radius: 8px; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; }
         #pVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
         #pFrame { width: 100%; height: 100%; border: 0; background: white; display: none; }
         .placeholder { position: absolute; color: #555; pointer-events: none; }
-
         #enterBtn { width: 100%; padding: 15px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 10px; cursor: pointer; }
         #enterBtn:disabled { background: #333; color: #555; }
 
-        /* VR OVERLAY */
+        /* VR CONTROLS */
         #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); z-index: 9999; display: none; padding: 10px 0; }
         #overlay.visible { display: flex; }
         .eye { width: 50%; padding: 0 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; box-sizing: border-box; }
         .row { display: flex; gap: 5px; justify-content: center; width: 100%; }
-        
-        /* Controls */
         button { cursor: pointer; }
         .btn-icon { width: 30px; height: 30px; border-radius: 50%; background: #333; color: white; border: none; font-size: 14px; }
         .btn-pill { padding: 5px 10px; border-radius: 15px; background: #333; color: white; border: none; font-size: 10px; }
-        .btn-pill.active { background: #007bff; }
         .btn-wide { width: 90%; padding: 8px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; }
         .lbl { font-size: 9px; color: #888; text-transform: uppercase; margin-top: 5px; }
-
-        /* Progress Bar (Video Only) */
         .prog-track { width: 100%; height: 8px; background: #333; border-radius: 4px; display: none; }
         .prog-fill { height: 100%; background: #007bff; width: 0%; }
         .time-txt { font-size: 10px; color: #ccc; display: none; }
 
-        /* FIX 2: Z-Index Layering for Web VR */
+        /* RENDERERS */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
-        .css-renderer { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; }
+        .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; }
     </style>
+    <!-- Three.js + CSS3DRenderer -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/three@0.128.0/examples/js/renderers/CSS3DRenderer.js"></script>
 </head>
 <body>
 
-<!-- SETUP -->
 <div id="setup">
     <div class="setup-box">
         <h2>VR Player</h2>
-        
-        <!-- Video Input -->
         <div>
             <span class="label">Option A: Video File</span>
             <label for="fileInput" class="file-btn" id="fileLabel">Select Video</label>
             <input type="file" id="fileInput" accept="video/*">
         </div>
-
-        <!-- Web Input -->
         <div>
             <span class="label">Option B: Website</span>
             <div class="url-row">
@@ -80,87 +62,51 @@
                 <button id="preBtn" class="preview-btn">Preview</button>
             </div>
         </div>
-
-        <!-- Preview -->
         <div class="preview-window">
             <span class="placeholder" id="placeholder">No Media</span>
             <video id="pVideo" playsinline muted controls></video>
             <iframe id="pFrame"></iframe>
         </div>
-
         <button id="enterBtn" disabled>ENTER VR</button>
     </div>
 </div>
 
-<!-- OVERLAY -->
 <div id="overlay">
-    <!-- Left Eye -->
-    <div class="eye">
-        <div class="prog-track"><div class="prog-fill"></div></div>
-        <div class="time-txt">0:00</div>
-        
-        <div class="row vid-ctrls">
-            <button class="btn-icon rw-btn">&laquo;</button>
-            <button class="btn-icon pp-btn">▶</button>
-            <button class="btn-icon fw-btn">&raquo;</button>
-        </div>
-
-        <div class="lbl">Zoom</div>
-        <div class="row">
-            <button class="btn-icon z-out">-</button>
-            <button class="btn-pill z-rst">RESET</button>
-            <button class="btn-icon z-in">+</button>
-        </div>
-
-        <div class="lbl">Distance</div>
-        <div class="row">
-            <button class="btn-icon d-dec">-</button>
-            <button class="btn-pill d-rst">RESET</button>
-            <button class="btn-icon d-inc">+</button>
-        </div>
-
-        <div class="lbl">IPD (Eye Dist)</div>
-        <div class="row">
-            <button class="btn-icon i-dec">-</button>
-            <button class="btn-pill i-rst">RESET</button>
-            <button class="btn-icon i-inc">+</button>
-        </div>
-
-        <button class="btn-wide rec-btn">RE-CENTER SCREEN</button>
-    </div>
-    
-    <!-- Right Eye (Duplicate for simplicity) -->
-    <div class="eye">
-        <div class="prog-track"><div class="prog-fill"></div></div>
-        <div class="time-txt">0:00</div>
-        <div class="row vid-ctrls">
-            <button class="btn-icon rw-btn">&laquo;</button>
-            <button class="btn-icon pp-btn">▶</button>
-            <button class="btn-icon fw-btn">&raquo;</button>
-        </div>
-        <div class="lbl">Zoom</div>
-        <div class="row">
-            <button class="btn-icon z-out">-</button>
-            <button class="btn-pill z-rst">RESET</button>
-            <button class="btn-icon z-in">+</button>
-        </div>
-        <div class="lbl">Distance</div>
-        <div class="row">
-            <button class="btn-icon d-dec">-</button>
-            <button class="btn-pill d-rst">RESET</button>
-            <button class="btn-icon d-inc">+</button>
-        </div>
-        <div class="lbl">IPD (Eye Dist)</div>
-        <div class="row">
-            <button class="btn-icon i-dec">-</button>
-            <button class="btn-pill i-rst">RESET</button>
-            <button class="btn-icon i-inc">+</button>
-        </div>
-        <button class="btn-wide rec-btn">RE-CENTER SCREEN</button>
-    </div>
+    <!-- UI generation for Left/Right eyes -->
+    <script>
+        const controlsHTML = `
+            <div class="prog-track"><div class="prog-fill"></div></div>
+            <div class="time-txt">0:00</div>
+            <div class="row vid-ctrls">
+                <button class="btn-icon rw-btn">&laquo;</button>
+                <button class="btn-icon pp-btn">▶</button>
+                <button class="btn-icon fw-btn">&raquo;</button>
+            </div>
+            <div class="lbl">Zoom</div>
+            <div class="row">
+                <button class="btn-icon z-out">-</button>
+                <button class="btn-pill z-rst">RESET</button>
+                <button class="btn-icon z-in">+</button>
+            </div>
+            <div class="lbl">Distance</div>
+            <div class="row">
+                <button class="btn-icon d-dec">-</button>
+                <button class="btn-pill d-rst">RESET</button>
+                <button class="btn-icon d-inc">+</button>
+            </div>
+            <div class="lbl">IPD (Eye Dist)</div>
+            <div class="row">
+                <button class="btn-icon i-dec">-</button>
+                <button class="btn-pill i-rst">RESET</button>
+                <button class="btn-icon i-inc">+</button>
+            </div>
+            <button class="btn-wide rec-btn">RE-CENTER</button>
+        `;
+        document.write(`<div class="eye">${controlsHTML}</div><div class="eye">${controlsHTML}</div>`);
+    </script>
 </div>
 
-<!-- SHADERS (Video Distortion) -->
+<!-- SHADERS -->
 <script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}</script>
 <script id="fs" type="x-shader/x-fragment">
 uniform sampler2D tDiffuse; uniform float ipd; uniform float zoom; varying vec2 vUv;
@@ -174,69 +120,63 @@ void main(){
 </script>
 
 <script>
-    // --- UI LOGIC ---
+    // --- APP STATE ---
     let mode = null; // 'video' or 'web'
     let vidURL = null, webURL = null;
-    
+    let params = { z: 1.0, d: 3.0, i: 0.0 };
+    const defs = { z: 1.0, d: 3.0, i: 0.0 };
+
     const els = {
         setup: document.getElementById('setup'),
-        fileIn: document.getElementById('fileInput'),
-        urlIn: document.getElementById('urlInput'),
         pVid: document.getElementById('pVideo'),
         pFrame: document.getElementById('pFrame'),
-        ph: document.getElementById('placeholder'),
-        enter: document.getElementById('enterBtn'),
-        lbl: document.getElementById('fileLabel')
+        enter: document.getElementById('enterBtn')
     };
 
-    // 1. Video Selection
-    els.fileIn.addEventListener('change', (e) => {
+    // --- SETUP HANDLERS ---
+    document.getElementById('fileInput').addEventListener('change', (e) => {
         const f = e.target.files[0];
         if(!f) return;
-        mode = 'video';
-        vidURL = URL.createObjectURL(f);
-        els.pVid.src = vidURL;
-        els.pVid.style.display = 'block';
-        els.pFrame.style.display = 'none';
-        els.ph.style.display = 'none';
-        els.lbl.textContent = f.name;
+        mode = 'video'; vidURL = URL.createObjectURL(f);
+        els.pVid.src = vidURL; els.pVid.style.display='block'; els.pFrame.style.display='none';
+        document.getElementById('placeholder').style.display='none';
+        document.getElementById('fileLabel').textContent = f.name;
         els.enter.disabled = false;
-        // Show video controls in VR
         document.querySelectorAll('.prog-track, .time-txt, .vid-ctrls').forEach(e=>e.style.display='flex');
     });
 
-    // 2. Web Preview
     document.getElementById('preBtn').addEventListener('click', () => {
-        const u = els.urlIn.value;
+        const u = document.getElementById('urlInput').value;
         if(!u) return;
-        mode = 'web';
-        webURL = u;
-        els.pFrame.src = webURL;
-        els.pFrame.style.display = 'block';
-        els.pVid.style.display = 'none';
+        mode = 'web'; webURL = u;
+        els.pFrame.src = webURL; els.pFrame.style.display='block'; els.pVid.style.display='none';
         els.pVid.pause();
-        els.ph.style.display = 'none';
+        document.getElementById('placeholder').style.display='none';
         els.enter.disabled = false;
-        // Hide video controls in VR
         document.querySelectorAll('.prog-track, .time-txt, .vid-ctrls').forEach(e=>e.style.display='none');
     });
 
-    els.enter.addEventListener('click', () => {
-        els.setup.style.display = 'none';
-        const de = document.documentElement;
-        if(de.requestFullscreen) de.requestFullscreen();
+    els.enter.addEventListener('click', async () => {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+        }
+        const el = document.documentElement;
+        if(el.requestFullscreen) el.requestFullscreen();
         if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
+        els.setup.style.display = 'none';
         initVR();
     });
 
     // --- VR ENGINE ---
-    let scene, camera, renderer, effect; // Video
-    let cssScene, cssL, cssR, cssGroup, cssLObj, cssRObj; // Web
+    let scene, camera, renderer, effect; // Video Vars
     let tracker, videoEl, screenGroup;
     
-    // Params
-    const defs = { z: 1.0, d: 3.0, i: 0.0 };
-    let params = { ...defs };
+    // Web Vars - Dual Scene Architecture
+    let cssRendererL, cssRendererR;
+    let cssSceneL, cssSceneR;
+    let cssGroupL, cssGroupR; // Rotatable containers
+    let cssObjL, cssObjR;     // Actual DOM objects
+    let stereo;
 
     function initVR() {
         scene = new THREE.Scene();
@@ -245,49 +185,32 @@ void main(){
         scene.add(screenGroup);
         scene.add(camera);
 
-        // Tracking
         tracker = new Tracker();
         tracker.connect();
 
-        if(mode === 'video') {
-            initVideo();
-        } else {
-            initWeb();
-        }
+        if(mode === 'video') initVideo();
+        else initWeb();
 
-        // Animation Loop
-        animate();
-        
-        // Listeners
         window.addEventListener('resize', onResize);
         document.addEventListener('click', e => {
-            if(!e.target.closest('#overlay')) {
-                const o = document.getElementById('overlay');
-                o.classList.toggle('visible');
-            }
+            if(!e.target.closest('#overlay')) document.getElementById('overlay').classList.toggle('visible');
         });
         document.getElementById('overlay').addEventListener('click', handleInput);
+        
+        animate();
     }
 
     function initVideo() {
         videoEl = document.createElement('video');
-        videoEl.src = vidURL;
-        videoEl.playsinline = true;
-        videoEl.loop = false;
-        const tex = new THREE.VideoTexture(videoEl);
-        tex.minFilter = THREE.LinearFilter;
+        videoEl.src = vidURL; videoEl.playsinline = true; videoEl.loop = false;
+        const tex = new THREE.VideoTexture(videoEl); tex.minFilter = THREE.LinearFilter;
         
-        const asp = 16/9;
-        const geo = new THREE.PlaneGeometry(6, 6/asp);
-        
-        // Simple 2D Mesh for now (can expand to 3D SBS if needed)
+        const geo = new THREE.PlaneGeometry(6, 6/(16/9));
         const mat = new THREE.MeshBasicMaterial({ map: tex, side: 2 });
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.z = -params.d;
         mesh.name = 'screen';
         screenGroup.add(mesh);
 
-        // WebGL Renderer with Stereo Effect
         renderer = new THREE.WebGLRenderer({antialias:false});
         renderer.domElement.id = 'webgl-canvas';
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -295,131 +218,116 @@ void main(){
 
         effect = new StereoEffect(renderer);
         effect.setSize(window.innerWidth, window.innerHeight);
-        
         videoEl.play();
         videoEl.addEventListener('timeupdate', updateProg);
     }
 
     function initWeb() {
-        // 1. Create WebGL Background (Black)
+        // 1. Black Background (WebGL)
         renderer = new THREE.WebGLRenderer();
         renderer.domElement.id = 'webgl-canvas';
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 2. CSS Scene
-        cssScene = new THREE.Scene();
-        cssGroup = new THREE.Group(); // Holds the DOM objects
-        cssScene.add(cssGroup);
+        // 2. Stereo Camera Helper
+        stereo = new THREE.StereoCamera();
+        stereo.aspect = 0.5;
 
-        // 3. Renderers
-        const mkR = (p) => {
+        // 3. Create TWO Separate CSS Scenes (Left & Right)
+        cssSceneL = new THREE.Scene();
+        cssSceneR = new THREE.Scene();
+        
+        cssGroupL = new THREE.Group(); cssSceneL.add(cssGroupL);
+        cssGroupR = new THREE.Group(); cssSceneR.add(cssGroupR);
+
+        // 4. Create TWO Renderers
+        const mkR = (left) => {
             const r = new THREE.CSS3DRenderer();
             r.setSize(window.innerWidth/2, window.innerHeight);
-            r.domElement.className = 'css-renderer';
-            r.domElement.style.left = p;
+            r.domElement.style.position = 'absolute';
+            r.domElement.style.left = left;
+            r.domElement.style.top = 0;
             document.body.appendChild(r.domElement);
             return r;
         };
-        cssL = mkR('0px');
-        cssR = mkR('50%');
+        cssRendererL = mkR('0px');
+        cssRendererR = mkR('50%');
 
-        // 4. Content
-        const w = 1024, h = 768;
+        // 5. Create DOM Content
         const mkObj = () => {
             const d = document.createElement('div');
-            d.style.width = w+'px'; d.style.height = h+'px'; d.style.background = 'white';
+            d.style.width = '1024px'; d.style.height = '768px'; d.style.background = 'white';
             const i = document.createElement('iframe');
             i.src = webURL; i.style.width='100%'; i.style.height='100%'; i.style.border='0';
             d.appendChild(i);
-            const o = new THREE.CSS3DObject(d);
-            return o;
+            return new THREE.CSS3DObject(d);
         };
-        cssLObj = mkObj();
-        cssRObj = mkObj();
         
-        // Add separate objects for L/R eyes into the group
-        cssGroup.add(cssLObj);
-        cssGroup.add(cssRObj);
-        
+        cssObjL = mkObj(); cssGroupL.add(cssObjL);
+        cssObjR = mkObj(); cssGroupR.add(cssObjR);
+
         updateWebTransform();
     }
 
     function updateWebTransform() {
-        if(!cssGroup) return;
+        if(!cssObjL) return;
         const s = 0.005 * params.z;
         const z = -params.d;
-        
-        // Scale and Z-Position
-        [cssLObj, cssRObj].forEach(o => {
+        // Update both L and R objects
+        [cssObjL, cssObjR].forEach(o => {
             o.scale.set(s, s, s);
             o.position.set(0, 0, z);
         });
-        
-        // IPD Offset for Stereo
-        const ipdShift = params.i * 2.0; 
-        cssLObj.position.x = -ipdShift;
-        cssRObj.position.x = ipdShift;
+        // Apply IPD offset conceptually by shifting objects opposite to eye
+        // But better handled by the StereoCamera. 
+        // We will just place them centrally and let the camera matrices do the work.
     }
 
     function animate() {
         requestAnimationFrame(animate);
         tracker.update();
-        const q = tracker.getQ();
-        camera.quaternion.copy(q);
+        camera.quaternion.copy(tracker.getQ());
 
         if(mode === 'video') {
-            // Update Uniforms
             if(effect) effect.setUniforms(params.i, params.z);
-            // Update Distance
             const s = screenGroup.getObjectByName('screen');
             if(s) { s.position.z = -params.d; s.scale.setScalar(params.z); }
             effect.render(scene, camera);
         } else {
             // Web Mode
-            renderer.clear(); // Clear WebGL black
+            renderer.clear();
             
-            // Sync Web rotation with "Screen" (Recenter logic)
-            // We copy the ScreenGroup quaternion to the CSSGroup
-            cssGroup.quaternion.copy(screenGroup.quaternion);
+            // Sync rotation groups with the Recenter logic
+            // (We treat screenGroup.quaternion as the "offset" from forward)
+            cssGroupL.quaternion.copy(screenGroup.quaternion);
+            cssGroupR.quaternion.copy(screenGroup.quaternion);
+            
+            // Update stereo cameras
+            camera.updateWorldMatrix(true, false); // Ensure main camera is fresh
+            stereo.eyeSep = 0.064 + (params.i * 0.1); // Adjust eye separation
+            stereo.update(camera);
 
-            // Render CSS
-            // We use simple camera offsets for stereo
-            const eyeSep = 0.03; 
+            // Render Left Scene with Left Camera
+            cssRendererL.render(cssSceneL, stereo.cameraL);
             
-            // Left
-            camera.position.set(-eyeSep, 0, 0);
-            camera.quaternion.copy(q);
-            cssLObj.visible = true; cssRObj.visible = false;
-            cssL.render(cssScene, camera);
-            
-            // Right
-            camera.position.set(eyeSep, 0, 0);
-            camera.quaternion.copy(q);
-            cssLObj.visible = false; cssRObj.visible = true;
-            cssR.render(cssScene, camera);
-            
-            camera.position.set(0,0,0); // Reset
+            // Render Right Scene with Right Camera
+            cssRendererR.render(cssSceneR, stereo.cameraR);
         }
     }
 
-    // --- CONTROLS ---
     function handleInput(e) {
         e.stopPropagation();
         const t = e.target.closest('button, .prog-track');
         if(!t) return;
         const cl = t.classList;
 
-        // Video
         if(cl.contains('prog-track') && videoEl) {
-            const r = t.getBoundingClientRect();
-            videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration;
+            const r = t.getBoundingClientRect(); videoEl.currentTime = ((e.clientX-r.left)/r.width)*videoEl.duration;
         }
         if(cl.contains('pp-btn') && videoEl) videoEl.paused ? videoEl.play() : videoEl.pause();
         if(cl.contains('rw-btn') && videoEl) videoEl.currentTime -= 10;
         if(cl.contains('fw-btn') && videoEl) videoEl.currentTime += 10;
 
-        // Params
         if(cl.contains('z-in')) params.z += 0.1;
         if(cl.contains('z-out')) params.z -= 0.1;
         if(cl.contains('z-rst')) params.z = defs.z;
@@ -432,36 +340,27 @@ void main(){
         if(cl.contains('i-dec')) params.i -= 0.005;
         if(cl.contains('i-rst')) params.i = defs.i;
 
-        // Recenter
-        if(cl.contains('rec-btn')) {
-            screenGroup.quaternion.copy(camera.quaternion);
-        }
+        if(cl.contains('rec-btn')) screenGroup.quaternion.copy(camera.quaternion);
 
         if(mode === 'web') updateWebTransform();
-        updateUI();
+        if(videoEl) document.querySelectorAll('.pp-btn').forEach(b => b.textContent = videoEl.paused ? '▶' : '||');
     }
 
-    function updateUI() {
-        if(!videoEl) return;
-        document.querySelectorAll('.pp-btn').forEach(b => b.textContent = videoEl.paused ? '▶' : '||');
-    }
-    
     function updateProg() {
         if(!videoEl) return;
-        const p = (videoEl.currentTime / videoEl.duration) * 100;
-        document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p+'%');
-        const fmt = s => { const m=Math.floor(s/60), ss=Math.floor(s%60); return `${m}:${ss.toString().padStart(2,'0')}`; };
-        document.querySelectorAll('.time-txt').forEach(t => t.textContent = `${fmt(videoEl.currentTime)}`);
+        const p = (videoEl.currentTime/videoEl.duration)*100;
+        document.querySelectorAll('.prog-fill').forEach(f => f.style.width=p+'%');
+        const m=Math.floor(videoEl.currentTime/60), s=Math.floor(videoEl.currentTime%60);
+        document.querySelectorAll('.time-txt').forEach(t => t.textContent=`${m}:${s.toString().padStart(2,'0')}`);
     }
 
     function onResize() {
         camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
         if(effect) effect.setSize(window.innerWidth, window.innerHeight);
-        if(cssL) { cssL.setSize(window.innerWidth/2, window.innerHeight); cssR.setSize(window.innerWidth/2, window.innerHeight); }
+        if(cssRendererL) { cssRendererL.setSize(window.innerWidth/2, window.innerHeight); cssRendererR.setSize(window.innerWidth/2, window.innerHeight); }
     }
 
-    // --- HELPERS ---
     class Tracker {
         constructor() { this.q=new THREE.Quaternion(); this.e=null; }
         connect() { window.addEventListener('deviceorientation', e=>this.e=e); }
