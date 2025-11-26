@@ -42,9 +42,10 @@
         /* RENDERER LAYERS */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
+        .css-renderer.interactive { pointer-events: auto; }
         
         /* MOBILE WEB CONFIGURATION */
-        .web-content { width: 375px; height: 2000px; background: white; overflow: hidden; }
+        .web-content { width: 375px; height: 2000px; background: white; overflow: hidden; pointer-events: none; }
         .web-content iframe { width: 100%; height: 100%; border: 0; pointer-events: auto; }
         .hidden { display: none !important; }
     </style>
@@ -218,16 +219,38 @@
             const mkObj = () => {
                 const d = document.createElement('div'); d.className = 'web-content'; 
                 const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
-                return new THREE.CSS3DObject(d);
+                return { element: new THREE.CSS3DObject(d), iframe: i };
             };
             
+            const objL = mkObj();
+            const objR = mkObj();
+            
             webGroupL = new THREE.Group(); 
-            webGroupL.add(mkObj());
+            webGroupL.add(objL.element);
             cssSceneL.add(webGroupL);
             
             webGroupR = new THREE.Group(); 
-            webGroupR.add(mkObj());
+            webGroupR.add(objR.element);
             cssSceneR.add(webGroupR);
+            
+            // Sync iframe scroll positions
+            const syncScroll = () => {
+                if (objL.iframe.contentWindow && objR.iframe.contentWindow) {
+                    try {
+                        const scrollLeft = objL.iframe.contentWindow.scrollX || objL.iframe.contentWindow.pageXOffset || 0;
+                        const scrollTop = objL.iframe.contentWindow.scrollY || objL.iframe.contentWindow.pageYOffset || 0;
+                        objR.iframe.contentWindow.scrollTo(scrollLeft, scrollTop);
+                    } catch(e) { /* Cross-origin - can't sync */ }
+                }
+            };
+            
+            objL.iframe.addEventListener('load', () => {
+                try {
+                    objL.iframe.contentWindow.addEventListener('scroll', syncScroll);
+                } catch(e) { /* Cross-origin */ }
+            });
+            
+            setInterval(syncScroll, 100); // Backup sync every 100ms
 
             const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
             cssRendererL = mkR(); cssRendererR = mkR();
@@ -235,6 +258,10 @@
             updateWebLayout();
             
             let lastY = 0;
+            let startY = 0;
+            let isTouching = false;
+            let hasMoved = false;
+            
             const handleMove = (dy) => {
                 webScrollY += dy * 0.005; 
                 const maxS = 8.0; 
@@ -242,13 +269,47 @@
                 if(webScrollY < -maxS) webScrollY = -maxS;
             };
 
-            document.body.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; }, {passive:false});
-            document.body.addEventListener('touchmove', e => { 
-                const cy = e.touches[0].clientY; 
-                handleMove(cy - lastY); 
-                lastY = cy; 
-            }, {passive:false});
-            document.addEventListener('wheel', e => { handleMove(-e.deltaY * 0.5); });
+            const handleTouchStart = (e) => {
+                isTouching = true;
+                hasMoved = false;
+                lastY = e.touches[0].clientY;
+                startY = e.touches[0].clientY;
+            };
+            
+            const handleTouchMove = (e) => {
+                if (!isTouching) return;
+                const cy = e.touches[0].clientY;
+                const diff = Math.abs(cy - startY);
+                
+                // If moved more than 10px, it's a scroll not a tap
+                if (diff > 10) {
+                    hasMoved = true;
+                    e.preventDefault();
+                    handleMove(cy - lastY); 
+                }
+                lastY = cy;
+            };
+            
+            const handleTouchEnd = () => {
+                isTouching = false;
+                hasMoved = false;
+            };
+            
+            const handleWheel = (e) => {
+                handleMove(-e.deltaY * 0.5);
+                e.preventDefault();
+            };
+
+            // Add listeners to both renderers
+            cssRendererL.domElement.addEventListener('touchstart', handleTouchStart, {passive:true});
+            cssRendererL.domElement.addEventListener('touchmove', handleTouchMove, {passive:false});
+            cssRendererL.domElement.addEventListener('touchend', handleTouchEnd, {passive:true});
+            cssRendererL.domElement.addEventListener('wheel', handleWheel, {passive:false});
+            
+            cssRendererR.domElement.addEventListener('touchstart', handleTouchStart, {passive:true});
+            cssRendererR.domElement.addEventListener('touchmove', handleTouchMove, {passive:false});
+            cssRendererR.domElement.addEventListener('touchend', handleTouchEnd, {passive:true});
+            cssRendererR.domElement.addEventListener('wheel', handleWheel, {passive:false});
         }
 
         window.addEventListener('resize', () => {
@@ -269,15 +330,21 @@
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         if(viewMode === 'full') {
-            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left = '0px'; 
-            cssRendererL.domElement.style.display = 'block'; cssRendererL.domElement.style.pointerEvents = 'auto'; 
+            cssRendererL.setSize(window.innerWidth, window.innerHeight); 
+            cssRendererL.domElement.style.left = '0px'; 
+            cssRendererL.domElement.style.display = 'block';
+            cssRendererL.domElement.classList.add('interactive');
             cssRendererR.domElement.style.display = 'none';
         } else {
             const w = window.innerWidth / 2;
-            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left = '0px'; 
-            cssRendererL.domElement.style.display = 'block'; cssRendererL.domElement.style.pointerEvents = 'auto'; 
-            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left = w + 'px'; 
-            cssRendererR.domElement.style.display = 'block'; cssRendererR.domElement.style.pointerEvents = 'none'; 
+            cssRendererL.setSize(w, window.innerHeight); 
+            cssRendererL.domElement.style.left = '0px'; 
+            cssRendererL.domElement.style.display = 'block';
+            cssRendererL.domElement.classList.add('interactive');
+            cssRendererR.setSize(w, window.innerHeight); 
+            cssRendererR.domElement.style.left = w + 'px'; 
+            cssRendererR.domElement.style.display = 'block';
+            cssRendererR.domElement.classList.remove('interactive');
         }
     }
 
