@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR</title>
+    <title>HQ VR Player + Web</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="mobile-web-app-capable" content="yes">
@@ -42,10 +42,8 @@
         /* RENDERER LAYERS */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
         .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: none; }
-        
-        /* MOBILE WEB CONFIGURATION */
-        .web-content { width: 375px; height: 2000px; background: white; overflow: hidden; }
-        .web-content iframe { width: 100%; height: 100%; border: 0; pointer-events: auto; }
+        .web-content { width: 1024px; height: 768px; background: white; }
+        .web-content iframe { width: 100%; height: 100%; border: 0; }
         .hidden { display: none !important; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -56,6 +54,7 @@
 <!-- SETUP -->
 <div id="setup">
     <div class="setup-box">
+        <h2 style="margin:0; text-align:center;">HQ VR Player</h2>
         <div>
             <label for="fileInput" class="file-btn" id="fileLabel">Tap to Select Video</label>
             <input type="file" id="fileInput" accept="video/*">
@@ -113,7 +112,6 @@
 
 <script>
     let mediaType = null, viewMode = 'full', srcURL = null, hideTimer = null;
-    let webScrollY = 0;
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
     let params = { ...defs };
 
@@ -143,7 +141,6 @@
 
     function updateOverlay() {
         const isFull = (viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; resetTimer();
-        
         const controls = `
             <div class="row ${mediaType==='web'?'hidden':''}">
                 <div class="prog-track"><div class="prog-fill"></div></div>
@@ -163,7 +160,7 @@
             <div class="row"><button class="btn-icon ddec">-</button><button class="btn-pill drst">RESET</button><button class="btn-icon dinc">+</button></div>
             <div class="lbl">IPD</div>
             <div class="row"><button class="btn-icon idec">-</button><button class="btn-pill irst">RESET</button><button class="btn-icon iinc">+</button></div>
-            <button class="btn-wide rec ${mediaType==='web'?'hidden':''}">RE-CENTER</button>
+            <button class="btn-wide rec">RE-CENTER</button>
         `;
         els.overlay.innerHTML = isFull ? `<div class="ctrl-panel">${controls}</div>` : `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
     }
@@ -195,56 +192,32 @@
             mL.name = mR.name = 'screenSBS'; screenGroup.add(mL); screenGroup.add(mR);
 
             renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
-            renderer.domElement.id = 'webgl-canvas'; 
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio); 
-            document.body.appendChild(renderer.domElement);
+            renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
+            // HQ Settings
             tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
             effect = new StereoEffect(renderer, videoEl); effect.setSize(window.innerWidth, window.innerHeight);
             
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Locked Sync, Left Interaction)
+        // 2. WEB (Dual Scene)
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
             
             cssSceneL = new THREE.Scene(); cssSceneR = new THREE.Scene();
-            
             const mkObj = () => {
                 const d = document.createElement('div'); d.className = 'web-content'; 
-                const i = document.createElement('iframe'); 
-                i.src = srcURL; 
-                i.scrolling = "no"; // FIX ADDED: Forces sync by disabling internal scrolling
-                d.appendChild(i);
+                const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
                 return new THREE.CSS3DObject(d);
             };
-            
             webGroupL = new THREE.Group(); cssSceneL.add(webGroupL); webGroupL.add(mkObj());
             webGroupR = new THREE.Group(); cssSceneR.add(webGroupR); webGroupR.add(mkObj());
 
             const mkR = () => { const r = new THREE.CSS3DRenderer(); r.domElement.className = 'css-renderer'; document.body.appendChild(r.domElement); return r; };
             cssRendererL = mkR(); cssRendererR = mkR();
-            
             updateWebLayout();
-            
-            let lastY = 0;
-            const handleMove = (dy) => {
-                webScrollY += dy * 0.005; 
-                const maxS = 8.0; 
-                if(webScrollY > maxS) webScrollY = maxS;
-                if(webScrollY < -maxS) webScrollY = -maxS;
-            };
-
-            document.body.addEventListener('touchstart', e => { lastY = e.touches[0].clientY; }, {passive:false});
-            document.body.addEventListener('touchmove', e => { 
-                const cy = e.touches[0].clientY; 
-                handleMove(cy - lastY); 
-                lastY = cy; 
-            }, {passive:false});
-            document.addEventListener('wheel', e => { handleMove(-e.deltaY * 0.5); });
         }
 
         window.addEventListener('resize', () => {
@@ -265,24 +238,20 @@
     function updateWebLayout() {
         if(mediaType !== 'web') return;
         if(viewMode === 'full') {
-            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left = '0px'; 
-            cssRendererL.domElement.style.display = 'block'; cssRendererL.domElement.style.pointerEvents = 'auto'; 
-            cssRendererR.domElement.style.display = 'none';
+            cssRendererL.setSize(window.innerWidth, window.innerHeight); cssRendererL.domElement.style.left='0px'; cssRendererL.domElement.style.display='block';
+            cssRendererR.domElement.style.display='none';
         } else {
-            const w = window.innerWidth / 2;
-            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left = '0px'; 
-            cssRendererL.domElement.style.display = 'block'; cssRendererL.domElement.style.pointerEvents = 'auto'; 
-            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left = w + 'px'; 
-            cssRendererR.domElement.style.display = 'block'; cssRendererR.domElement.style.pointerEvents = 'none'; 
+            const w = window.innerWidth/2;
+            cssRendererL.setSize(w, window.innerHeight); cssRendererL.domElement.style.left='0px'; cssRendererL.domElement.style.display='block';
+            cssRendererR.setSize(w, window.innerHeight); cssRendererR.domElement.style.left=w+'px'; cssRendererR.domElement.style.display='block';
         }
     }
 
     function animate() {
         requestAnimationFrame(animate); tracker.update(); camera.quaternion.copy(tracker.getQ());
         let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
-        let s = params.z;
-        if (mediaType === 'video') s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
-        else s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
+        let s = ((viewMode === 'full' && mediaType === 'video') ? 0.6 : (mediaType==='video'?1.0:0.005)) * params.z;
+        if(mediaType === 'web' && viewMode === 'full') s = 0.003 * params.z;
 
         if(mediaType === 'video') {
             screenGroup.children.forEach(c => { c.position.z = z; c.scale.setScalar(s); });
@@ -298,21 +267,14 @@
             }
         } else {
             renderer.clear();
-            const currentY = webScrollY;
-            
-            // Sync both web groups to same position/scale
-            webGroupL.children[0].position.set(0, currentY, z);
-            webGroupL.children[0].scale.set(s,s,s);
-            webGroupR.children[0].position.set(0, currentY, z);
-            webGroupR.children[0].scale.set(s,s,s);
-
-            if(viewMode === 'full') { 
-                cssRendererL.render(cssSceneL, camera); 
-            }
+            webGroupL.quaternion.copy(screenGroup.quaternion); webGroupR.quaternion.copy(screenGroup.quaternion);
+            [webGroupL.children[0], webGroupR.children[0]].forEach(o => { o.position.set(0,0,z); o.scale.set(s,s,s); });
+            if(viewMode === 'full') { cssRendererL.render(cssSceneL, camera); }
             else {
                 const st = new THREE.StereoCamera(); st.aspect = 0.5; st.eyeSep = 0.064 + (params.i * 0.1); st.update(camera);
-                cssRendererL.render(cssSceneL, st.cameraL);
-                cssRendererR.render(cssSceneR, st.cameraR);
+                webGroupL.visible = true; webGroupR.visible = false; cssRendererL.render(cssSceneL, st.cameraL);
+                webGroupL.visible = false; webGroupR.visible = true; cssRendererR.render(cssSceneR, st.cameraR);
+                webGroupL.visible = true;
             }
         }
     }
@@ -349,21 +311,27 @@
         }
     }
 
+    // HQ Stereo Effect (Dynamic Res + Lanczos)
     function StereoEffect(r, videoElement) {
         const _s=new THREE.StereoCamera(); _s.aspect=0.5;
         const dpr=window.devicePixelRatio||1;
         const vidW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
         const vidH = videoElement && videoElement.videoHeight ? videoElement.videoHeight : 1080;
+        
         const sz = (sw,sh) => { let b=Math.max(Math.floor(sw*dpr), vidW); return Math.min(b, 4096); };
         let w=sz(window.innerWidth), h=sz(window.innerHeight);
+        
         const opts = { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, depthBuffer:false, stencilBuffer:false };
-        let _tL=new THREE.WebGLRenderTarget(w,h,opts); let _tR=new THREE.WebGLRenderTarget(w,h,opts);
+        let _tL=new THREE.WebGLRenderTarget(w,h,opts);
+        let _tR=new THREE.WebGLRenderTarget(w,h,opts);
+        
         const _m=new THREE.ShaderMaterial({
             uniforms:{tDiffuse:{value:null},texSize:{value:new THREE.Vector2(w,h)},zoom:{value:1},ipd:{value:0}},
             vertexShader:document.getElementById('vs').textContent, fragmentShader:document.getElementById('fs').textContent
         });
         const _sc=new THREE.Scene(); _sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),_m));
         const _c=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+        
         this.setSize=(sw,sh)=>{
             r.setSize(sw,sh); let nw=sz(sw), nh=sz(sh);
             if(nw!==w || nh!==h) { 
@@ -373,6 +341,7 @@
             }
         };
         this.setUniforms=(i,z)=>{_m.uniforms.ipd.value=i; _m.uniforms.zoom.value=z;};
+        
         this.render=(s,c)=>{
             s.updateMatrixWorld(); _s.update(c);
             if(viewMode==='vr-3d') _s.cameraL.layers.set(1); else _s.cameraL.layers.set(0);
@@ -380,6 +349,7 @@
             if(viewMode==='vr-3d') _s.cameraR.layers.set(2); else _s.cameraR.layers.set(0);
             r.setRenderTarget(_tR); r.clear(); r.render(s,_s.cameraR);
             r.setRenderTarget(null);
+            
             const sw=window.innerWidth, sh=window.innerHeight; r.setScissorTest(true);
             r.setScissor(0,0,sw/2,sh); r.setViewport(0,0,sw/2,sh); 
             _m.uniforms.tDiffuse.value=_tL.texture; _m.uniforms.ipd.value=params.i; r.render(_sc,_c);
