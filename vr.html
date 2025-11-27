@@ -76,26 +76,33 @@
 
 <div id="overlay"></div>
 
-<!-- ULTRA QUALITY SHADER (LANCZOS) -->
+<!-- ULTRA QUALITY SHADER (LANCZOS + HIGH PRECISION) -->
 <script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}</script>
 <script id="fs" type="x-shader/x-fragment">
     precision highp float;
     uniform sampler2D tDiffuse; uniform vec2 texSize; uniform float ipd; uniform float zoom; varying vec2 vUv;
     const float PI = 3.14159265359;
+    
+    // Lanczos Weights
     float sinc(float x){ if(abs(x)<0.0001)return 1.0; float a=PI*x; return sin(a)/a; }
     float lw(float x){ if(abs(x)>=2.0)return 0.0; return sinc(x)*sinc(x*0.5); }
+
+    // High Quality Resampling
     vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
         vec2 inv = 1.0/size; vec2 pos = uv*size; vec2 ipos = floor(pos-0.5)+0.5; vec2 f = pos-ipos;
         vec4 wX = vec4(lw(1.0+f.x), lw(f.x), lw(1.0-f.x), lw(2.0-f.x));
         vec4 wY = vec4(lw(1.0+f.y), lw(f.y), lw(1.0-f.y), lw(2.0-f.y));
         wX /= dot(wX, vec4(1.0)); wY /= dot(wY, vec4(1.0));
+        
         vec4 r0 = texture2D(smp, (ipos+vec2(-1,-1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0,-1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1,-1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2,-1))*inv)*wX.w;
         vec4 r1 = texture2D(smp, (ipos+vec2(-1, 0))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 0))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 0))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 0))*inv)*wX.w;
         vec4 r2 = texture2D(smp, (ipos+vec2(-1, 1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 1))*inv)*wX.w;
         vec4 r3 = texture2D(smp, (ipos+vec2(-1, 2))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 2))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 2))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 2))*inv)*wX.w;
         return r0*wY.x + r1*wY.y + r2*wY.z + r3*wY.w;
     }
+
     vec2 distort(vec2 p){ vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v); return c+v*(1.0+r2*(0.22+0.18*r2)); }
+
     void main(){
         vec2 d = distort(vUv);
         vec2 uv = (d-vec2(0.5))/zoom; uv.x+=ipd; uv+=vec2(0.5);
@@ -109,8 +116,7 @@
     let webScrollY = 0;
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
     let params = { ...defs };
-    // FIX 2: Track video aspect ratio dynamically. Default to 16:9.
-    let videoAspect = 16/9; 
+    let videoAspect = 16/9; // Default
 
     const els = { setup: document.getElementById('setup'), pVid: document.getElementById('pVideo'), pFrame: document.getElementById('pFrame'), enter: document.getElementById('startBtn'), lbl: document.getElementById('fileLabel'), overlay: document.getElementById('overlay') };
 
@@ -173,11 +179,11 @@
         screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
         tracker = new Tracker(); tracker.connect();
 
-        // 1. VIDEO (HQ Pipeline)
+        // 1. VIDEO
         if(mediaType === 'video') {
             videoEl = document.createElement('video'); videoEl.src = srcURL; videoEl.playsinline = true; videoEl.loop = false;
             
-            // FIX 2: Listener to capture correct aspect ratio from video file
+            // Capture accurate Aspect Ratio
             videoEl.addEventListener('loadedmetadata', () => {
                 if(videoEl.videoHeight) videoAspect = videoEl.videoWidth / videoEl.videoHeight;
             });
@@ -185,13 +191,13 @@
             const tex = new THREE.VideoTexture(videoEl); 
             tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
             
-            // FIX 2: Use Square Geometry (6x6). Aspect ratio will be applied via scale in animate()
+            // Square plane, aspect ratio applied via Scale in animate()
             const geo = new THREE.PlaneGeometry(6, 6); 
             
             const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2})); mStd.name = 'screenStandard'; screenGroup.add(mStd);
             
+            // HIGH PRECISION SHADERS
             const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-            // FIX 1: Add 'precision highp float' to fix blurry/wobbly video on mobile
             const fsL = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5, vUv.y)); }`;
             const fsR = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5+0.5, vUv.y)); }`;
             
@@ -211,7 +217,7 @@
             videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         }
 
-        // 2. WEB (Locked Sync, Left Interaction)
+        // 2. WEB
         if(mediaType === 'web') {
             renderer = new THREE.WebGLRenderer({antialias:false});
             renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
@@ -222,7 +228,7 @@
                 const d = document.createElement('div'); d.className = 'web-content'; 
                 const i = document.createElement('iframe'); 
                 i.src = srcURL; 
-                i.scrolling = "no"; 
+                i.scrolling = "no"; // SYNC FIX
                 d.appendChild(i);
                 return new THREE.CSS3DObject(d);
             };
@@ -290,10 +296,14 @@
         else s = ((viewMode === 'full') ? 0.008 : 0.013) * params.z;
 
         if(mediaType === 'video') {
-            // FIX 2: Apply zoom (s) normally to X/Z, but use videoAspect for Y scale to fix distortion
+            // FIX: Aspect Ratio Calculation
+            // If VR-3D, use "Half width" logic (columns/2)
+            let effectiveAspect = videoAspect;
+            if(viewMode === 'vr-3d') effectiveAspect = videoAspect / 2.0;
+
             screenGroup.children.forEach(c => { 
                 c.position.z = z; 
-                c.scale.set(s, s / videoAspect, s); 
+                c.scale.set(s, s / effectiveAspect, s); 
             });
             
             const mStd = screenGroup.getObjectByName('screenStandard');
