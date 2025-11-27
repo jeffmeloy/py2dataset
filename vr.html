@@ -215,7 +215,10 @@
             
             const mkObj = () => {
                 const d = document.createElement('div'); d.className = 'web-content'; 
-                const i = document.createElement('iframe'); i.src = srcURL; d.appendChild(i);
+                const i = document.createElement('iframe'); 
+                i.src = srcURL; 
+                i.scrolling = "no"; // FIX ADDED: Forces sync by disabling internal scrolling
+                d.appendChild(i);
                 return new THREE.CSS3DObject(d);
             };
             
