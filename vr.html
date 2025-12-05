@@ -31,11 +31,13 @@
         #startBtn { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         #startBtn:disabled { background: #333; color: #555; cursor: not-allowed; }
 
-        /* OVERLAY (Cardboard mode only) */
+        /* OVERLAY */
         #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; padding: 10px 0; transition: opacity 0.3s; }
         #overlay.visible { display: flex; opacity: 1; }
         #overlay.single { justify-content: center; } 
         #overlay.split { justify-content: space-around; }
+        #overlay.stereo { justify-content: space-around; padding: 5px 0; }
+        #overlay.stereo .ctrl-panel { width: 45%; max-width: 280px; transform: scale(0.8); transform-origin: bottom center; }
         .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
         .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
         button { cursor: pointer; }
@@ -349,11 +351,8 @@
     // WEBXR ENGINE WITH 3D UI
     // ============================================
     let xrScene, xrCamera, xrRenderer, xrVideoEl, xrScreenGroup, xrVideoTexture;
-    let xrControllerL, xrControllerR, xrUIPanel, xrButtons = [];
-    let xrRaycaster, hoveredButton = null;
-    let xrProgressBar, xrProgressFill;
-    let xrUIVisible = true;
-    let xrHideTimer = null;
+    let xrControllerL, xrControllerR;
+    let xrRaycaster;
 
     async function initWebXREngine() {
         // Create renderer first with high quality settings
@@ -364,13 +363,9 @@
         xrRenderer.domElement.id = 'webgl-canvas';
         document.body.appendChild(xrRenderer.domElement);
 
-        // Add touch/click listeners immediately after canvas is added
-        xrRenderer.domElement.addEventListener('touchstart', onScreenTouch, { passive: false, capture: true });
-        xrRenderer.domElement.addEventListener('click', onScreenClick, { capture: true });
-        xrRenderer.domElement.addEventListener('pointerdown', onPointerDown, { capture: true });
+        // Add touch/click listeners for toggling overlay
         document.addEventListener('touchstart', onScreenTouch, { passive: false });
         document.addEventListener('click', onScreenClick);
-        document.addEventListener('pointerdown', onPointerDown);
 
         // Create scene
         xrScene = new THREE.Scene();
@@ -595,9 +590,6 @@
         // Position screen
         updateXRScreenGeometry();
 
-        // Create 3D UI Panel
-        createXRUIPanel();
-
         // Raycaster for UI interaction
         xrRaycaster = new THREE.Raycaster();
 
@@ -624,6 +616,12 @@
 
             // Start video
             xrVideoEl.play();
+            
+            // Update progress bar periodically
+            xrVideoEl.addEventListener('timeupdate', updateXRProgress);
+            
+            // Show overlay initially
+            showXROverlay();
 
             // Start render loop
             xrRenderer.setAnimationLoop(animateWebXR);
@@ -641,159 +639,6 @@
         });
     }
 
-    function createTextTexture(text, width, height, bgColor, textColor, fontSize, active) {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        
-        // Background
-        ctx.fillStyle = active ? '#007bff' : bgColor;
-        ctx.beginPath();
-        ctx.roundRect(0, 0, width, height, 8);
-        ctx.fill();
-        
-        // Text
-        ctx.fillStyle = textColor;
-        ctx.font = `bold ${fontSize}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, width/2, height/2);
-        
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        return texture;
-    }
-
-    function createXRButton(text, action, x, y, w, h, active = false) {
-        const texture = createTextTexture(text, 256, 64, '#333333', '#ffffff', 28, active);
-        const geo = new THREE.PlaneGeometry(w, h);
-        const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(x, y, 0.01);
-        mesh.userData = { action, text, active, w, h };
-        return mesh;
-    }
-
-    function createXRUIPanel() {
-        xrUIPanel = new THREE.Group();
-        // Position will be updated each frame to follow camera
-        
-        // Selection indicator at top
-        const indicatorGeo = new THREE.PlaneGeometry(1.2, 0.12);
-        const indicatorMat = new THREE.MeshBasicMaterial({ transparent: true });
-        xrSelectionIndicator = new THREE.Mesh(indicatorGeo, indicatorMat);
-        xrSelectionIndicator.position.set(0, 0.55, 0.02);
-        xrUIPanel.add(xrSelectionIndicator);
-        
-        // Panel background
-        const bgGeo = new THREE.PlaneGeometry(1.4, 1.3);
-        const bgMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.9 });
-        const bgMesh = new THREE.Mesh(bgGeo, bgMat);
-        bgMesh.position.z = -0.01;
-        xrUIPanel.add(bgMesh);
-
-        // Progress bar background
-        const progBgGeo = new THREE.PlaneGeometry(1.2, 0.05);
-        const progBgMat = new THREE.MeshBasicMaterial({ color: 0x444444 });
-        xrProgressBar = new THREE.Mesh(progBgGeo, progBgMat);
-        xrProgressBar.position.set(0, 0.45, 0.01);
-        xrProgressBar.userData = { action: 'seek', isProgressBar: true };
-        xrUIPanel.add(xrProgressBar);
-
-        // Progress bar fill
-        const progFillGeo = new THREE.PlaneGeometry(0.01, 0.04);
-        const progFillMat = new THREE.MeshBasicMaterial({ color: 0x007bff });
-        xrProgressFill = new THREE.Mesh(progFillGeo, progFillMat);
-        xrProgressFill.position.set(-0.595, 0.45, 0.02);
-        xrUIPanel.add(xrProgressFill);
-
-        // Playback controls row
-        const playRow = 0.32;
-        xrButtons.push(createXRButton('⏪', 'rw', -0.25, playRow, 0.18, 0.1));
-        xrButtons.push(createXRButton('▶', 'pp', 0, playRow, 0.18, 0.1));
-        xrButtons.push(createXRButton('⏩', 'fw', 0.25, playRow, 0.18, 0.1));
-
-        // View mode label
-        const labelY = 0.2;
-        const viewLabelTex = createTextTexture('VIEW MODE', 256, 32, 'transparent', '#888888', 18, false);
-        const viewLabelGeo = new THREE.PlaneGeometry(0.4, 0.05);
-        const viewLabelMat = new THREE.MeshBasicMaterial({ map: viewLabelTex, transparent: true });
-        const viewLabel = new THREE.Mesh(viewLabelGeo, viewLabelMat);
-        viewLabel.position.set(0, labelY, 0.01);
-        xrUIPanel.add(viewLabel);
-
-        // View mode buttons
-        const viewRow = 0.1;
-        xrButtons.push(createXRButton('2D', 'm-2d', -0.22, viewRow, 0.2, 0.1, viewMode === 'vr-2d'));
-        xrButtons.push(createXRButton('3D', 'm-3d', 0.22, viewRow, 0.2, 0.1, viewMode === 'vr-3d'));
-
-        // Zoom label
-        const zoomLabelTex = createTextTexture('ZOOM', 256, 32, 'transparent', '#888888', 18, false);
-        const zoomLabelGeo = new THREE.PlaneGeometry(0.3, 0.05);
-        const zoomLabelMat = new THREE.MeshBasicMaterial({ map: zoomLabelTex, transparent: true });
-        const zoomLabel = new THREE.Mesh(zoomLabelGeo, zoomLabelMat);
-        zoomLabel.position.set(0, -0.02, 0.01);
-        xrUIPanel.add(zoomLabel);
-
-        // Zoom buttons
-        const zoomRow = -0.12;
-        xrButtons.push(createXRButton('-', 'zout', -0.3, zoomRow, 0.15, 0.1));
-        xrButtons.push(createXRButton('RESET', 'zrst', 0, zoomRow, 0.25, 0.1));
-        xrButtons.push(createXRButton('+', 'zin', 0.3, zoomRow, 0.15, 0.1));
-
-        // Distance label
-        const distLabelTex = createTextTexture('DISTANCE', 256, 32, 'transparent', '#888888', 18, false);
-        const distLabelGeo = new THREE.PlaneGeometry(0.35, 0.05);
-        const distLabelMat = new THREE.MeshBasicMaterial({ map: distLabelTex, transparent: true });
-        const distLabel = new THREE.Mesh(distLabelGeo, distLabelMat);
-        distLabel.position.set(0, -0.24, 0.01);
-        xrUIPanel.add(distLabel);
-
-        // Distance buttons
-        const distRow = -0.34;
-        xrButtons.push(createXRButton('-', 'ddec', -0.3, distRow, 0.15, 0.1));
-        xrButtons.push(createXRButton('RESET', 'drst', 0, distRow, 0.25, 0.1));
-        xrButtons.push(createXRButton('+', 'dinc', 0.3, distRow, 0.15, 0.1));
-
-        // Re-center button
-        xrButtons.push(createXRButton('RE-CENTER', 'rec', 0, -0.48, 0.5, 0.1));
-
-        // Add all buttons to panel
-        xrButtons.forEach(btn => xrUIPanel.add(btn));
-
-        xrScene.add(xrUIPanel);
-        
-        // Initialize menu highlight
-        xrMenuIndex = 0;
-        updateXRMenuHighlight();
-        
-        // Start auto-hide timer
-        resetXRHideTimer();
-    }
-
-    function updateXRButtonStates() {
-        xrButtons.forEach(btn => {
-            const { action, text, w, h } = btn.userData;
-            let active = false;
-            
-            if (action === 'm-2d') active = (viewMode === 'vr-2d');
-            if (action === 'm-3d') active = (viewMode === 'vr-3d');
-            if (action === 'pp') {
-                const newText = xrVideoEl && xrVideoEl.paused ? '▶' : '⏸';
-                btn.material.map = createTextTexture(newText, 256, 64, '#333333', '#ffffff', 28, false);
-                btn.material.needsUpdate = true;
-                return;
-            }
-            
-            if (btn.userData.active !== active) {
-                btn.userData.active = active;
-                btn.material.map = createTextTexture(text, 256, 64, '#333333', '#ffffff', 28, active);
-                btn.material.needsUpdate = true;
-            }
-        });
-    }
-
     function setupXRControllers() {
         // Controller 0 (usually right) - for VR controllers
         xrControllerR = xrRenderer.xr.getController(0);
@@ -808,97 +653,234 @@
         // Touch listeners are added in initWebXREngine
     }
 
-    // XR menu state for tap-to-cycle navigation
-    let xrMenuIndex = 0;
-    const xrMenuItems = ['pp', 'rw', 'fw', 'm-2d', 'm-3d', 'zin', 'zout', 'dinc', 'ddec', 'rec'];
-    const xrMenuLabels = ['▶ PLAY/PAUSE', '⏪ SKIP -10s', '⏩ SKIP +10s', '2D MODE', '3D MODE', 'ZOOM IN', 'ZOOM OUT', 'FARTHER', 'CLOSER', 'RE-CENTER'];
-    let xrSelectionIndicator = null;
+    // XR UI uses HTML overlay instead of 3D menu
+    let xrOverlayVisible = false;
+    let xrOverlayTimer = null;
 
     function onScreenTouch(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        handleXRTap();
+        // If tap is not on overlay, toggle it
+        if (!event.target.closest('#overlay')) {
+            event.preventDefault();
+            if (xrOverlayVisible) {
+                hideXROverlay();
+            } else {
+                showXROverlay();
+            }
+        } else {
+            // Reset timer when interacting with overlay
+            resetXROverlayTimer();
+        }
     }
 
     function onScreenClick(event) {
-        handleXRTap();
-    }
-
-    function onPointerDown(event) {
-        handleXRTap();
-    }
-
-    function handleXRTap() {
-        // If UI is hidden, show it
-        if (!xrUIVisible) {
-            showXRUI();
-            xrMenuIndex = 0;
-            updateXRMenuHighlight();
-            return;
+        // If click is not on overlay, toggle it
+        if (!event.target.closest('#overlay')) {
+            if (xrOverlayVisible) {
+                hideXROverlay();
+            } else {
+                showXROverlay();
+            }
+        } else {
+            resetXROverlayTimer();
         }
-        
-        // Execute current selection
-        const action = xrMenuItems[xrMenuIndex];
-        handleXRAction(action);
-        
-        // Move to next menu item
-        xrMenuIndex = (xrMenuIndex + 1) % xrMenuItems.length;
-        updateXRMenuHighlight();
-        
-        resetXRHideTimer();
     }
 
-    function updateXRMenuHighlight() {
-        // Update button appearances to show current selection
-        xrButtons.forEach((btn) => {
-            const action = btn.userData.action;
-            const isHighlighted = (action === xrMenuItems[xrMenuIndex]);
-            
-            const text = btn.userData.text;
-            
-            let isActive = false;
-            if (action === 'm-2d') isActive = (viewMode === 'vr-2d');
-            if (action === 'm-3d') isActive = (viewMode === 'vr-3d');
-            
-            const bgColor = isHighlighted ? '#ffff00' : (isActive ? '#007bff' : '#333333');
-            const textColor = isHighlighted ? '#000000' : '#ffffff';
-            
-            btn.material.map = createTextTexture(text, 256, 64, bgColor, textColor, 28, false);
-            btn.material.needsUpdate = true;
+    function showXROverlay() {
+        updateXROverlay();
+        els.overlay.classList.add('visible');
+        els.overlay.classList.remove('single', 'split');
+        els.overlay.classList.add('stereo');
+        xrOverlayVisible = true;
+        resetXROverlayTimer();
+    }
+
+    function hideXROverlay() {
+        els.overlay.classList.remove('visible');
+        xrOverlayVisible = false;
+    }
+
+    function resetXROverlayTimer() {
+        if (xrOverlayTimer) clearTimeout(xrOverlayTimer);
+        xrOverlayTimer = setTimeout(hideXROverlay, 3000);
+    }
+
+    function buildXRControls() {
+        return `
+            <div class="row">
+                <div class="prog-track xr-prog"><div class="prog-fill xr-prog-fill"></div></div>
+            </div>
+            <div class="row">
+                <button class="btn-icon xr-rw">&laquo;</button>
+                <button class="btn-icon xr-pp">${xrVideoEl && !xrVideoEl.paused ? '||' : '▶'}</button>
+                <button class="btn-icon xr-fw">&raquo;</button>
+            </div>
+            <div class="lbl">View Mode</div>
+            <div class="row">
+                <button class="btn-pill xr-2d ${viewMode==='vr-2d'?'active':''}">2D</button>
+                <button class="btn-pill xr-3d ${viewMode==='vr-3d'?'active':''}">3D</button>
+            </div>
+            <div class="lbl">Zoom</div>
+            <div class="row">
+                <button class="btn-icon xr-zout">-</button>
+                <button class="btn-pill xr-zrst">RST</button>
+                <button class="btn-icon xr-zin">+</button>
+            </div>
+            <div class="lbl">Distance</div>
+            <div class="row">
+                <button class="btn-icon xr-ddec">-</button>
+                <button class="btn-pill xr-drst">RST</button>
+                <button class="btn-icon xr-dinc">+</button>
+            </div>
+            <button class="btn-wide xr-rec">RE-CENTER</button>
+        `;
+    }
+
+    function updateXROverlay() {
+        const controls = buildXRControls();
+        // Duplicate for stereo view - one for each eye
+        els.overlay.innerHTML = `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
+        
+        // Add event listeners to ALL matching buttons (both panels)
+        els.overlay.querySelectorAll('.xr-pp').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (xrVideoEl) xrVideoEl.paused ? xrVideoEl.play() : xrVideoEl.pause();
+                updateXROverlay();
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-rw').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (xrVideoEl) xrVideoEl.currentTime -= 10;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-fw').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (xrVideoEl) xrVideoEl.currentTime += 10;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-2d').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                viewMode = 'vr-2d';
+                updateXROverlay();
+                updateXRScreenGeometry();
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-3d').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                viewMode = 'vr-3d';
+                updateXROverlay();
+                updateXRScreenGeometry();
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-zin').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.z += 0.1;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-zout').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.z -= 0.1;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-zrst').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.z = defs.z;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-dinc').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.d += 0.5;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-ddec').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.d -= 0.5;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-drst').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                params.d = defs.d;
+                resetXROverlayTimer();
+            });
+        });
+        els.overlay.querySelectorAll('.xr-rec').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (xrCamera && xrScreenGroup) {
+                    const camPos = new THREE.Vector3();
+                    const camDir = new THREE.Vector3();
+                    xrCamera.getWorldPosition(camPos);
+                    xrCamera.getWorldDirection(camDir);
+                    xrScreenGroup.position.copy(camPos);
+                    xrScreenGroup.position.add(camDir.clone().multiplyScalar(params.d));
+                    xrScreenGroup.position.y = camPos.y;
+                    xrScreenGroup.lookAt(camPos);
+                }
+                resetXROverlayTimer();
+            });
         });
         
-        // Update selection indicator text
-        updateXRSelectionIndicator();
+        // Progress bar seek
+        els.overlay.querySelectorAll('.xr-prog').forEach(progTrack => {
+            progTrack.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const rect = progTrack.getBoundingClientRect();
+                const ratio = (e.clientX - rect.left) / rect.width;
+                if (xrVideoEl && xrVideoEl.duration) {
+                    xrVideoEl.currentTime = ratio * xrVideoEl.duration;
+                }
+                resetXROverlayTimer();
+            });
+        });
+        
+        // Update progress fill
+        updateXRProgress();
     }
 
-    function updateXRSelectionIndicator() {
-        if (!xrSelectionIndicator || !xrUIPanel) return;
-        
-        const label = 'TAP TO: ' + xrMenuLabels[xrMenuIndex];
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 48;
-        const ctx = canvas.getContext('2d');
-        
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, 512, 48);
-        
-        ctx.fillStyle = '#ffff00';
-        ctx.font = 'bold 24px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, 256, 24);
-        
-        xrSelectionIndicator.material.map = new THREE.CanvasTexture(canvas);
-        xrSelectionIndicator.material.needsUpdate = true;
+    function updateXRProgress() {
+        if (!xrVideoEl || !xrVideoEl.duration) return;
+        const p = (xrVideoEl.currentTime / xrVideoEl.duration) * 100;
+        els.overlay.querySelectorAll('.xr-prog-fill').forEach(fill => {
+            fill.style.width = p + '%';
+        });
     }
 
     function onXRSelect(event) {
-        handleXRTap();
+        // Toggle overlay visibility
+        if (xrOverlayVisible) {
+            hideXROverlay();
+        } else {
+            showXROverlay();
+        }
     }
 
     function onXRSessionSelect(event) {
-        handleXRTap();
+        // Toggle overlay visibility
+        if (xrOverlayVisible) {
+            hideXROverlay();
+        } else {
+            showXROverlay();
+        }
     }
 
     function handleXRAction(action) {
@@ -954,7 +936,6 @@
         }
         
         updateXRScreenGeometry();
-        updateXRButtonStates();
     }
 
     function updateXRScreenGeometry() {
@@ -980,15 +961,6 @@
         }
     }
 
-    function updateXRProgress() {
-        if (!xrVideoEl || !xrVideoEl.duration || !xrProgressFill) return;
-        const ratio = xrVideoEl.currentTime / xrVideoEl.duration;
-        const fullWidth = 1.19;
-        const newWidth = Math.max(0.01, ratio * fullWidth);
-        xrProgressFill.scale.x = newWidth / 0.01;
-        xrProgressFill.position.x = -0.595 + (newWidth / 2);
-    }
-
     function updateXRControllerHover() {
         // No hover effects - touch only
     }
@@ -997,9 +969,11 @@
         if (!frame) return;
 
         updateXRScreenGeometry();
-        updateXRProgress();
-        updateXRButtonStates();
-        updateXRControllerHover();
+        
+        // Update HTML overlay progress bar if visible
+        if (xrOverlayVisible) {
+            updateXRProgress();
+        }
 
         // Position screen at correct distance
         const camPos = new THREE.Vector3();
@@ -1010,15 +984,6 @@
         // Keep screen at distance if not re-centered manually
         if (xrScreenGroup.position.lengthSq() === 0) {
             xrScreenGroup.position.set(0, 1.5, -params.d);
-        }
-
-        // Always position UI panel in front of user (head-locked)
-        if (xrUIPanel && xrUIVisible) {
-            const uiDistance = 1.5;
-            
-            xrUIPanel.position.copy(camPos);
-            xrUIPanel.position.add(camDir.clone().multiplyScalar(uiDistance));
-            xrUIPanel.quaternion.copy(xrCamera.quaternion);
         }
 
         const pose = frame.getViewerPose(xrRefSpace);
@@ -1064,40 +1029,12 @@
         if (xrVideoEl) {
             xrVideoEl.pause();
         }
-        // Reset XR UI state
-        xrButtons = [];
-        xrUIPanel = null;
-        xrProgressBar = null;
-        xrProgressFill = null;
-        xrSelectionIndicator = null;
-        xrUIVisible = true;
-        xrMenuIndex = 0;
-        if (xrHideTimer) clearTimeout(xrHideTimer);
+        // Reset state
+        xrOverlayVisible = false;
+        if (xrOverlayTimer) clearTimeout(xrOverlayTimer);
         
         els.setup.style.display = 'flex';
         els.overlay.classList.remove('visible');
-    }
-
-    function showXRUI() {
-        if (xrUIPanel) {
-            xrUIPanel.visible = true;
-            xrUIVisible = true;
-            xrMenuIndex = 0;
-            updateXRMenuHighlight();
-        }
-        resetXRHideTimer();
-    }
-
-    function hideXRUI() {
-        if (xrUIPanel) {
-            xrUIPanel.visible = false;
-            xrUIVisible = false;
-        }
-    }
-
-    function resetXRHideTimer() {
-        if (xrHideTimer) clearTimeout(xrHideTimer);
-        xrHideTimer = setTimeout(hideXRUI, 3000);
     }
 
     // ============================================
