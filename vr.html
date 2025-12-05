@@ -352,6 +352,8 @@
     let xrControllerL, xrControllerR, xrUIPanel, xrButtons = [];
     let xrRaycaster, hoveredButton = null;
     let xrProgressBar, xrProgressFill;
+    let xrUIVisible = true;
+    let xrHideTimer = null;
 
     async function initWebXREngine() {
         // Create renderer first
@@ -575,6 +577,9 @@
         xrButtons.forEach(btn => xrUIPanel.add(btn));
 
         xrScene.add(xrUIPanel);
+        
+        // Start auto-hide timer
+        resetXRHideTimer();
     }
 
     function updateXRButtonStates() {
@@ -636,6 +641,12 @@
     function onXRSelect(event) {
         const controller = event.target;
         
+        // If UI is hidden, show it and return
+        if (!xrUIVisible) {
+            showXRUI();
+            return;
+        }
+        
         // Raycast from controller
         const tempMatrix = new THREE.Matrix4();
         tempMatrix.identity().extractRotation(controller.matrixWorld);
@@ -661,6 +672,12 @@
             } else {
                 handleXRAction(action);
             }
+            
+            // Reset hide timer after any button interaction
+            resetXRHideTimer();
+        } else {
+            // Clicked empty space - hide UI
+            hideXRUI();
         }
     }
 
@@ -761,6 +778,11 @@
         [xrControllerR, xrControllerL].forEach(controller => {
             if (!controller || !controller.userData.laser) return;
             
+            // Hide laser when UI is hidden
+            controller.userData.laser.visible = xrUIVisible;
+            
+            if (!xrUIVisible) return;
+            
             const tempMatrix = new THREE.Matrix4();
             tempMatrix.identity().extractRotation(controller.matrixWorld);
             
@@ -844,9 +866,31 @@
         xrUIPanel = null;
         xrProgressBar = null;
         xrProgressFill = null;
+        xrUIVisible = true;
+        if (xrHideTimer) clearTimeout(xrHideTimer);
         
         els.setup.style.display = 'flex';
         els.overlay.classList.remove('visible');
+    }
+
+    function showXRUI() {
+        if (xrUIPanel) {
+            xrUIPanel.visible = true;
+            xrUIVisible = true;
+        }
+        resetXRHideTimer();
+    }
+
+    function hideXRUI() {
+        if (xrUIPanel) {
+            xrUIPanel.visible = false;
+            xrUIVisible = false;
+        }
+    }
+
+    function resetXRHideTimer() {
+        if (xrHideTimer) clearTimeout(xrHideTimer);
+        xrHideTimer = setTimeout(hideXRUI, 3000);
     }
 
     // ============================================
