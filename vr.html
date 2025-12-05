@@ -1,1194 +1,313 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Player</title>
+    <title>VR Cinema Player (WebXR)</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-    <meta name="mobile-web-app-capable" content="yes">
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         
+        /* CANVAS (Stripchat approach: touch-action none for drag controls) */
+        canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
         /* SETUP SCREEN */
         #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-        .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; gap: 20px; border: 1px solid #333; }
-        .file-btn { display: block; background: #333; padding: 15px; text-align: center; border-radius: 8px; cursor: pointer; border: 1px dashed #555; }
+        .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 25px; border-radius: 16px; border: 1px solid #333; text-align: center; }
+        .file-btn { display: block; background: #252525; padding: 20px; text-align: center; border-radius: 12px; cursor: pointer; border: 2px dashed #444; transition: 0.2s; }
+        .file-btn:hover { border-color: #007bff; background: #2a2a2a; }
         #fileInput { display: none; }
-        .preview-box { height: 180px; background: black; border: 1px solid #333; border-radius: 8px; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; }
-        #pVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
-        #placeholder { color: #555; pointer-events: none; }
         
-        /* MODE SELECTION */
-        .mode-select { background: #252525; padding: 15px; border-radius: 8px; border: 1px solid #333; }
-        .mode-select-label { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 10px; font-weight: bold; }
-        .mode-options { display: flex; flex-direction: column; gap: 10px; }
-        .mode-option { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border-radius: 6px; transition: background 0.2s; }
-        .mode-option:hover { background: #333; }
-        .mode-option input[type="radio"] { width: 18px; height: 18px; accent-color: #007bff; cursor: pointer; }
-        .mode-option-text { display: flex; flex-direction: column; }
-        .mode-option-title { font-weight: bold; font-size: 14px; }
-        .mode-option-desc { font-size: 11px; color: #888; }
+        #startBtn { 
+            width: 100%; padding: 16px; margin-top: 20px;
+            background: #007bff; color: white; border: none; border-radius: 8px; 
+            font-size: 16px; font-weight: bold; cursor: pointer; 
+            opacity: 0.5; pointer-events: none; transition: 0.3s;
+        }
+        #startBtn.ready { opacity: 1; pointer-events: auto; }
+
+        /* OVERLAY UI (Matches the "Shutter" style) */
+        #overlay { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 10px; background: rgba(20,20,20,0.8); padding: 10px; border-radius: 30px; backdrop-filter: blur(5px); transition: opacity 0.3s; }
+        #overlay.hidden { opacity: 0; pointer-events: none; }
         
-        #startBtn { width: 100%; padding: 16px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        #startBtn:disabled { background: #333; color: #555; cursor: not-allowed; }
-
-        /* OVERLAY */
-        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.7); z-index: 99999; display: none; padding: 10px 0; transition: opacity 0.3s; pointer-events: auto; }
-        #overlay.visible { display: flex; opacity: 1; }
-        #overlay.single { justify-content: center; } 
-        #overlay.split { justify-content: space-around; }
-        #overlay.stereo { justify-content: space-around; padding: 5px 0; }
-        #overlay.stereo .ctrl-panel { width: 45%; max-width: 280px; transform: scale(0.8); transform-origin: bottom center; }
-        .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
-        .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
-        button { cursor: pointer; }
-        .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
-        .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
-        .btn-pill.active { background: #007bff; color: white; }
-        .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
-        .btn-wide.exit { background: #dc3545; }
-        .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
-        .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
-        .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
-
-        #webgl-canvas { position: absolute; top: 0; left: 0; }
+        .btn { background: #333; color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .btn:hover { background: #555; }
+        .btn.active { background: #007bff; }
+        
+        /* VR BUTTON (Custom styled to match Stripchat's "Enter VR") */
+        #vrButton {
+            position: fixed; bottom: 30px; right: 30px; z-index: 101;
+            background: #007bff; color: white; border: none;
+            padding: 12px 24px; border-radius: 30px; font-weight: bold;
+            cursor: pointer; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Modern Three.js (r150+) -->
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    </script>
 </head>
 <body>
 
 <!-- SETUP -->
 <div id="setup">
     <div class="setup-box">
-        <div>
-            <label for="fileInput" class="file-btn" id="fileLabel">Tap to Select Video</label>
-            <input type="file" id="fileInput" accept="video/*">
-        </div>
-        <div class="preview-box">
-            <span id="placeholder">No Video Selected</span>
-            <video id="pVideo" playsinline muted controls></video>
-        </div>
-        
-        <!-- MODE SELECTION -->
-        <div class="mode-select">
-            <div class="mode-select-label">VR Mode</div>
-            <div class="mode-options">
-                <label class="mode-option">
-                    <input type="radio" name="vrmode" value="cardboard" checked>
-                    <div class="mode-option-text">
-                        <span class="mode-option-title">Cardboard (Gyro)</span>
-                        <span class="mode-option-desc">Phone in headset, uses device orientation</span>
-                    </div>
-                </label>
-                <label class="mode-option">
-                    <input type="radio" name="vrmode" value="webxr">
-                    <div class="mode-option-text">
-                        <span class="mode-option-title">WebXR (Headset)</span>
-                        <span class="mode-option-desc">Quest, Vive, or other XR device</span>
-                    </div>
-                </label>
-            </div>
-        </div>
-        
-        <button id="startBtn" disabled>START</button>
+        <h2>VR Cinema</h2>
+        <label for="fileInput" class="file-btn" id="fileLabel">Select Video File</label>
+        <input type="file" id="fileInput" accept="video/*">
+        <button id="startBtn">LOAD PLAYER</button>
     </div>
 </div>
 
-<div id="overlay"></div>
+<!-- CONTROLS OVERLAY -->
+<div id="overlay" class="hidden">
+    <button class="btn" id="btn2D">2D</button>
+    <button class="btn" id="btn3D">3D</button>
+    <div style="width:1px; background:#555; margin:0 5px;"></div>
+    <button class="btn" id="btnPlay">⏯</button>
+    <button class="btn" id="btnRecenter">⌖</button>
+</div>
 
-<!-- ULTRA QUALITY SHADER (LANCZOS + HIGH PRECISION) -->
-<script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}</script>
-<script id="fs" type="x-shader/x-fragment">
-    precision highp float;
-    uniform sampler2D tDiffuse; uniform vec2 texSize; uniform float ipd; uniform float zoom; varying vec2 vUv;
-    const float PI = 3.14159265359;
-    
-    float sinc(float x){ if(abs(x)<0.0001)return 1.0; float a=PI*x; return sin(a)/a; }
-    float lw(float x){ if(abs(x)>=2.0)return 0.0; return sinc(x)*sinc(x*0.5); }
+<button id="vrButton">ENTER VR</button>
 
-    vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
-        vec2 inv = 1.0/size; vec2 pos = uv*size; vec2 ipos = floor(pos-0.5)+0.5; vec2 f = pos-ipos;
-        vec4 wX = vec4(lw(1.0+f.x), lw(f.x), lw(1.0-f.x), lw(2.0-f.x));
-        vec4 wY = vec4(lw(1.0+f.y), lw(f.y), lw(1.0-f.y), lw(2.0-f.y));
-        wX /= dot(wX, vec4(1.0)); wY /= dot(wY, vec4(1.0));
-        
-        vec4 r0 = texture2D(smp, (ipos+vec2(-1,-1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0,-1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1,-1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2,-1))*inv)*wX.w;
-        vec4 r1 = texture2D(smp, (ipos+vec2(-1, 0))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 0))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 0))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 0))*inv)*wX.w;
-        vec4 r2 = texture2D(smp, (ipos+vec2(-1, 1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 1))*inv)*wX.w;
-        vec4 r3 = texture2D(smp, (ipos+vec2(-1, 2))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 2))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 2))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 2))*inv)*wX.w;
-        return r0*wY.x + r1*wY.y + r2*wY.z + r3*wY.w;
-    }
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-    vec2 distort(vec2 p){ vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v); return c+v*(1.0+r2*(0.22+0.18*r2)); }
+    // GLOBAL VARIABLES
+    let scene, camera, renderer, controls;
+    let video, videoTexture;
+    let screenGroup; // Holds the screen meshes
+    let mesh2D, meshLeft, meshRight; // The screen geometries
+    let is3D = false; // Toggle state
 
-    void main(){
-        vec2 d = distort(vUv);
-        vec2 uv = (d-vec2(0.5))/zoom; uv.x+=ipd; uv+=vec2(0.5);
-        if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) gl_FragColor=vec4(0.0);
-        else gl_FragColor=textureLanczos(tDiffuse, uv, texSize);
-    }
-</script>
-
-<script>
-    let viewMode = 'full', srcURL = null, hideTimer = null;
-    let vrMode = 'cardboard'; // 'cardboard' or 'webxr'
-    const defs = { z: 1.0, d: 3.0, i: 0.0 };
-    let params = { ...defs };
-    let videoAspect = 16/9;
-
-    // WebXR state
-    let xrSession = null;
-    let xrRefSpace = null;
-
-    const els = { 
-        setup: document.getElementById('setup'), 
-        pVid: document.getElementById('pVideo'), 
-        enter: document.getElementById('startBtn'), 
-        lbl: document.getElementById('fileLabel'), 
-        overlay: document.getElementById('overlay') 
+    const els = {
+        setup: document.getElementById('setup'),
+        fileInput: document.getElementById('fileInput'),
+        startBtn: document.getElementById('startBtn'),
+        label: document.getElementById('fileLabel'),
+        overlay: document.getElementById('overlay'),
+        vrBtn: document.getElementById('vrButton'),
+        btn2D: document.getElementById('btn2D'),
+        btn3D: document.getElementById('btn3D'),
+        btnPlay: document.getElementById('btnPlay'),
+        btnRecenter: document.getElementById('btnRecenter')
     };
 
-    document.getElementById('fileInput').addEventListener('change', (e) => {
-        const f = e.target.files[0]; if(!f) return;
-        srcURL = URL.createObjectURL(f);
-        els.pVid.src = srcURL; 
-        els.pVid.style.display = 'block';
-        document.getElementById('placeholder').style.display = 'none'; 
-        els.lbl.textContent = f.name; 
-        els.enter.disabled = false;
+    // 1. FILE HANDLING
+    let videoSrc = null;
+    els.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        videoSrc = URL.createObjectURL(file);
+        els.label.textContent = file.name;
+        els.startBtn.classList.add('ready');
     });
 
-    // Listen for mode selection
-    document.querySelectorAll('input[name="vrmode"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            vrMode = e.target.value;
-        });
-    });
-
-    els.enter.addEventListener('click', async () => {
-        if (vrMode === 'cardboard') {
-            await startCardboardMode();
-        } else {
-            await startWebXRMode();
-        }
-    });
-
-    async function startCardboardMode() {
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { 
-            try { await DeviceOrientationEvent.requestPermission(); } catch (e) {} 
-        }
-        const de = document.documentElement; 
-        if(de.requestFullscreen) de.requestFullscreen();
-        if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
-        els.setup.style.display = 'none'; 
-        viewMode = 'full'; 
-        initCardboardEngine(); 
-        updateOverlay();
-    }
-
-    async function startWebXRMode() {
+    els.startBtn.addEventListener('click', () => {
+        if (!videoSrc) return;
         els.setup.style.display = 'none';
-        viewMode = 'vr-2d';
-        await initWebXREngine();
-    }
+        els.overlay.classList.remove('hidden');
+        init();
+    });
 
-    function updateOverlay() {
-        const isFull = (viewMode === 'full'); 
-        els.overlay.className = isFull ? 'visible single' : 'visible split'; 
-        resetTimer();
-        
-        const controls = `
-            <div class="row">
-                <div class="prog-track"><div class="prog-fill"></div></div>
-            </div>
-            <div class="row">
-                <button class="btn-icon rw">&laquo;</button>
-                <button class="btn-icon pp">▶</button>
-                <button class="btn-icon fw">&raquo;</button>
-            </div>
-            <div class="lbl">View Mode</div>
-            <div class="row">
-                <button class="btn-pill m-full ${viewMode==='full'?'active':''}">FULL</button>
-                <button class="btn-pill m-2d ${viewMode==='vr-2d'?'active':''}">2D</button>
-                <button class="btn-pill m-3d ${viewMode==='vr-3d'?'active':''}">3D</button>
-            </div>
-            <div class="lbl">Zoom</div>
-            <div class="row">
-                <button class="btn-icon zout">-</button>
-                <button class="btn-pill zrst">RESET</button>
-                <button class="btn-icon zin">+</button>
-            </div>
-            <div class="lbl">Distance</div>
-            <div class="row">
-                <button class="btn-icon ddec">-</button>
-                <button class="btn-pill drst">RESET</button>
-                <button class="btn-icon dinc">+</button>
-            </div>
-            <div class="lbl">IPD</div>
-            <div class="row">
-                <button class="btn-icon idec">-</button>
-                <button class="btn-pill irst">RESET</button>
-                <button class="btn-icon iinc">+</button>
-            </div>
-            <button class="btn-wide rec">RE-CENTER</button>
-        `;
-        els.overlay.innerHTML = isFull 
-            ? `<div class="ctrl-panel">${controls}</div>` 
-            : `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
-    }
+    // 2. INITIALIZATION (The "Stripchat" Approach)
+    function init() {
+        // A. Setup Video
+        video = document.createElement('video');
+        video.src = videoSrc;
+        video.crossOrigin = "anonymous";
+        video.playsInline = true;
+        video.loop = true; // Optional: loop video
+        video.play();
 
-    // ============================================
-    // CARDBOARD ENGINE (original implementation)
-    // ============================================
-    let scene, camera, renderer, effect, videoEl, screenGroup, tracker;
-
-    function initCardboardEngine() {
+        // B. Setup Three.js Scene
         scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
-        screenGroup = new THREE.Group(); 
-        scene.add(screenGroup); 
-        scene.add(camera);
-        tracker = new Tracker(); 
-        tracker.connect();
+        scene.background = new THREE.Color(0x050505); // Dark grey background
 
-        videoEl = document.createElement('video'); 
-        videoEl.src = srcURL; 
-        videoEl.playsInline = true; 
-        videoEl.loop = false;
-        
-        videoEl.addEventListener('loadedmetadata', () => {
-            if(videoEl.videoHeight) videoAspect = videoEl.videoWidth / videoEl.videoHeight;
-        });
+        camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 0); // User is at center
 
-        const tex = new THREE.VideoTexture(videoEl); 
-        tex.minFilter = THREE.LinearFilter; 
-        tex.magFilter = THREE.LinearFilter;
-        
-        const geo = new THREE.PlaneGeometry(6, 6); 
-        
-        const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2})); 
-        mStd.name = 'screenStandard'; 
-        screenGroup.add(mStd);
-        
-        const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-        const fsL = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5, vUv.y)); }`;
-        const fsR = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5+0.5, vUv.y)); }`;
-        
-        const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsL, side:2})); 
-        mL.layers.set(1);
-        const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsR, side:2})); 
-        mR.layers.set(2);
-        mL.name = mR.name = 'screenSBS'; 
-        screenGroup.add(mL); 
-        screenGroup.add(mR);
-
-        renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
-        renderer.domElement.id = 'webgl-canvas'; 
+        // C. Renderer with WebXR enabled
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio); 
+        renderer.xr.enabled = true; // MAGIC LINE: Enables WebXR
+        renderer.xr.setReferenceSpaceType('local'); // "Local" = Seated/Standing in one spot
         document.body.appendChild(renderer.domElement);
-        
-        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        effect = new StereoEffect(renderer, videoEl); 
-        effect.setSize(window.innerWidth, window.innerHeight);
-        
-        videoEl.play(); 
-        videoEl.addEventListener('timeupdate', updateProg);
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth/window.innerHeight; 
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            if(effect) effect.setSize(window.innerWidth, window.innerHeight);
-        });
+        // D. VR Button (Using Three.js Helper, styled custom)
+        // We replace the default button with our custom one functionality
+        const sessionInit = { optionalFeatures: [ 'local-floor', 'bounded-floor' ] };
+        const vrBtnLogic = VRButton.createButton(renderer, sessionInit);
+        // Hide standard button, wire up ours
+        vrBtnLogic.style.display = 'none'; 
+        document.body.appendChild(vrBtnLogic);
         
-        document.addEventListener('click', (e) => { 
-            if(e.target.closest('#overlay')) { resetTimer(); return; } 
-            if(els.overlay.classList.contains('visible')) hideOverlay(); 
-            else showOverlay(); 
+        els.vrBtn.style.display = 'block';
+        els.vrBtn.addEventListener('click', () => {
+            // Trigger the hidden Three.js VR button
+            vrBtnLogic.click(); 
         });
-        els.overlay.addEventListener('click', handleCardboardInput);
-        animateCardboard();
+
+        // E. Magic Window Controls (OrbitControls)
+        // This replicates the "Left-click & drag" behavior
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, -5); // Look forward
+        controls.enableZoom = false;
+        controls.enablePan = false;
+        controls.rotateSpeed = -0.5; // Invert drag to feel like "looking"
+        controls.update();
+
+        // F. Create the Cinema Screen
+        createScreen();
+
+        // G. Animation Loop
+        renderer.setAnimationLoop(render);
+
+        // H. Events
+        window.addEventListener('resize', onResize);
+        setupUI();
     }
 
-    function animateCardboard() {
-        requestAnimationFrame(animateCardboard); 
-        tracker.update(); 
-        camera.quaternion.copy(tracker.getQ());
-        
-        let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
-        let s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
+    // 3. SCREEN GEOMETRY & LAYERS
+    function createScreen() {
+        videoTexture = new THREE.VideoTexture(video);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.colorSpace = THREE.SRGBColorSpace;
 
-        let effectiveAspect = videoAspect;
-        if(viewMode === 'vr-3d') effectiveAspect = videoAspect / 2.0;
+        screenGroup = new THREE.Group();
+        // Move screen 5 meters away
+        screenGroup.position.set(0, 0, -5); 
+        scene.add(screenGroup);
 
-        screenGroup.children.forEach(c => { 
-            c.position.z = z; 
-            c.scale.set(s, s / effectiveAspect, s); 
-        });
-        
-        const mStd = screenGroup.getObjectByName('screenStandard');
-        const mSBS = screenGroup.children.filter(c => c.name === 'screenSBS');
-        
-        if(viewMode === 'vr-3d') { 
-            if(mStd) mStd.visible = false; 
-            mSBS.forEach(m => m.visible = true); 
-        } else { 
-            if(mStd) mStd.visible = true; 
-            mSBS.forEach(m => m.visible = false); 
+        // Aspect Ratio logic (default 16:9, adjusts on metadata)
+        const aspect = 16/9;
+        const width = 8; 
+        const height = width / aspect;
+        const geometry = new THREE.PlaneGeometry(width, height);
+
+        // --- MESH 1: 2D MODE (Magic Window / Non-VR) ---
+        // Visible on Layer 0 (Default)
+        const mat2D = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
+        mesh2D = new THREE.Mesh(geometry, mat2D);
+        mesh2D.layers.set(0); 
+        screenGroup.add(mesh2D);
+
+        // --- MESH 2: LEFT EYE (VR 3D) ---
+        // Visible on Layer 1
+        const matLeft = mat2D.clone();
+        // UV Mapping: 0.0 to 0.5 (Left half of video)
+        const uvAttributeL = geometry.clone().attributes.uv;
+        for ( let i = 0; i < uvAttributeL.count; i ++ ) {
+            uvAttributeL.setX( i, uvAttributeL.getX( i ) * 0.5 );
         }
+        meshLeft = new THREE.Mesh(new THREE.PlaneGeometry(width, height), matLeft);
+        meshLeft.geometry.setAttribute('uv', uvAttributeL);
+        meshLeft.layers.set(1); // Left Eye
+        screenGroup.add(meshLeft);
 
-        if(viewMode === 'full') {
-            renderer.setScissorTest(false); 
-            renderer.setViewport(0, 0, window.innerWidth, window.innerHeight); 
-            renderer.render(scene, camera);
-        } else {
-            effect.setUniforms(params.i, params.z); 
-            effect.render(scene, camera);
+        // --- MESH 3: RIGHT EYE (VR 3D) ---
+        // Visible on Layer 2
+        const matRight = mat2D.clone();
+        // UV Mapping: 0.5 to 1.0 (Right half of video)
+        const uvAttributeR = geometry.clone().attributes.uv;
+        for ( let i = 0; i < uvAttributeR.count; i ++ ) {
+            uvAttributeR.setX( i, (uvAttributeR.getX( i ) * 0.5) + 0.5 );
         }
+        meshRight = new THREE.Mesh(new THREE.PlaneGeometry(width, height), matRight);
+        meshRight.geometry.setAttribute('uv', uvAttributeR);
+        meshRight.layers.set(2); // Right Eye
+        screenGroup.add(meshRight);
+
+        // Default to 2D visibility
+        setMode2D();
+
+        // Update aspect ratio when video loads
+        video.addEventListener('loadedmetadata', () => {
+            const vidAspect = video.videoWidth / video.videoHeight;
+            // Scale the group to match aspect
+            const newH = width / vidAspect;
+            screenGroup.scale.set(1, (16/9) / vidAspect, 1); 
+        });
     }
 
-    // ============================================
-    // WEBXR ENGINE WITH 3D UI
-    // ============================================
-    let xrScene, xrCamera, xrRenderer, xrVideoEl, xrScreenGroup, xrVideoTexture;
-    let xrControllerL, xrControllerR;
-    let xrRaycaster;
-
-    async function initWebXREngine() {
-        // Create renderer first with high quality settings
-        xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-        xrRenderer.setPixelRatio(window.devicePixelRatio);
-        xrRenderer.setSize(window.innerWidth, window.innerHeight);
-        xrRenderer.xr.enabled = true;
-        xrRenderer.domElement.id = 'webgl-canvas';
-        document.body.appendChild(xrRenderer.domElement);
-
-        // Add touch/click listeners for toggling overlay
-        document.addEventListener('touchstart', onScreenTouch, { passive: false });
-        document.addEventListener('click', onScreenClick);
-
-        // Create scene
-        xrScene = new THREE.Scene();
-        xrScene.background = new THREE.Color(0x000000);
-
-        // Create camera
-        xrCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-        xrScene.add(xrCamera);
-
-        // Create screen group
-        xrScreenGroup = new THREE.Group();
-        xrScene.add(xrScreenGroup);
-
-        // Create video element
-        xrVideoEl = document.createElement('video');
-        xrVideoEl.src = srcURL;
-        xrVideoEl.crossOrigin = 'anonymous';
-        xrVideoEl.playsInline = true;
-        xrVideoEl.loop = false;
-
-        xrVideoEl.addEventListener('loadedmetadata', () => {
-            if (xrVideoEl.videoHeight) {
-                videoAspect = xrVideoEl.videoWidth / xrVideoEl.videoHeight;
-                
-                // Update shader texSize uniforms with actual video dimensions
-                xrScreenGroup.children.forEach(mesh => {
-                    if (mesh.material && mesh.material.uniforms && mesh.material.uniforms.texSize) {
-                        mesh.material.uniforms.texSize.value.set(xrVideoEl.videoWidth, xrVideoEl.videoHeight);
-                    }
-                });
-                
-                updateXRScreenGeometry();
-            }
-        });
-
-        // Create video texture
-        xrVideoTexture = new THREE.VideoTexture(xrVideoEl);
-        xrVideoTexture.minFilter = THREE.LinearFilter;
-        xrVideoTexture.magFilter = THREE.LinearFilter;
-        xrVideoTexture.generateMipmaps = false;
-        xrVideoTexture.anisotropy = xrRenderer.capabilities.getMaxAnisotropy();
-
-        // Create screen meshes with higher resolution geometry for better quality
-        const geo = new THREE.PlaneGeometry(4, 4, 32, 32);
-
-        // Lanczos shader for high-quality upscaling
-        const lanczosVS = `
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `;
+    // 4. RENDERING & LOGIC
+    function render() {
+        // Standard Texture update is automatic in Three.js VideoTexture
         
-        const lanczosFS = `
-            precision highp float;
-            uniform sampler2D map;
-            uniform vec2 texSize;
-            varying vec2 vUv;
-            
-            const float PI = 3.14159265359;
-            
-            float sinc(float x) {
-                if (abs(x) < 0.0001) return 1.0;
-                float a = PI * x;
-                return sin(a) / a;
-            }
-            
-            float lanczosWeight(float x) {
-                if (abs(x) >= 2.0) return 0.0;
-                return sinc(x) * sinc(x * 0.5);
-            }
-            
-            vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
-                vec2 inv = 1.0 / size;
-                vec2 pos = uv * size;
-                vec2 ipos = floor(pos - 0.5) + 0.5;
-                vec2 f = pos - ipos;
-                
-                vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
-                vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
-                wX /= dot(wX, vec4(1.0));
-                wY /= dot(wY, vec4(1.0));
-                
-                vec4 r0 = texture2D(smp, (ipos + vec2(-1, -1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, -1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, -1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, -1)) * inv) * wX.w;
-                vec4 r1 = texture2D(smp, (ipos + vec2(-1, 0)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 0)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 0)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 0)) * inv) * wX.w;
-                vec4 r2 = texture2D(smp, (ipos + vec2(-1, 1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 1)) * inv) * wX.w;
-                vec4 r3 = texture2D(smp, (ipos + vec2(-1, 2)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 2)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 2)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 2)) * inv) * wX.w;
-                
-                return r0 * wY.x + r1 * wY.y + r2 * wY.z + r3 * wY.w;
-            }
-            
-            void main() {
-                gl_FragColor = textureLanczos(map, vUv, texSize);
-            }
-        `;
+        // Handle Magic Window controls
+        controls.update();
 
-        // Standard screen (2D) with Lanczos filtering
-        const stdMat = new THREE.ShaderMaterial({
-            uniforms: {
-                map: { value: xrVideoTexture },
-                texSize: { value: new THREE.Vector2(1920, 1080) }
-            },
-            vertexShader: lanczosVS,
-            fragmentShader: lanczosFS,
-            side: THREE.DoubleSide
-        });
-        const mStd = new THREE.Mesh(geo, stdMat);
-        mStd.name = 'screenStandard';
-        xrScreenGroup.add(mStd);
+        renderer.render(scene, camera);
+    }
 
-        // SBS screens (3D) with Lanczos filtering
-        const lanczosFS_L = `
-            precision highp float;
-            uniform sampler2D map;
-            uniform vec2 texSize;
-            varying vec2 vUv;
-            
-            const float PI = 3.14159265359;
-            
-            float sinc(float x) {
-                if (abs(x) < 0.0001) return 1.0;
-                float a = PI * x;
-                return sin(a) / a;
-            }
-            
-            float lanczosWeight(float x) {
-                if (abs(x) >= 2.0) return 0.0;
-                return sinc(x) * sinc(x * 0.5);
-            }
-            
-            vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
-                vec2 inv = 1.0 / size;
-                vec2 pos = uv * size;
-                vec2 ipos = floor(pos - 0.5) + 0.5;
-                vec2 f = pos - ipos;
-                
-                vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
-                vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
-                wX /= dot(wX, vec4(1.0));
-                wY /= dot(wY, vec4(1.0));
-                
-                vec4 r0 = texture2D(smp, (ipos + vec2(-1, -1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, -1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, -1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, -1)) * inv) * wX.w;
-                vec4 r1 = texture2D(smp, (ipos + vec2(-1, 0)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 0)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 0)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 0)) * inv) * wX.w;
-                vec4 r2 = texture2D(smp, (ipos + vec2(-1, 1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 1)) * inv) * wX.w;
-                vec4 r3 = texture2D(smp, (ipos + vec2(-1, 2)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 2)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 2)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 2)) * inv) * wX.w;
-                
-                return r0 * wY.x + r1 * wY.y + r2 * wY.z + r3 * wY.w;
-            }
-            
-            void main() {
-                vec2 uv = vec2(vUv.x * 0.5, vUv.y);
-                gl_FragColor = textureLanczos(map, uv, texSize);
-            }
-        `;
+    function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // 5. UI & LOGIC
+    function setupUI() {
+        els.btn2D.addEventListener('click', () => { setMode2D(); });
+        els.btn3D.addEventListener('click', () => { setMode3D(); });
         
-        const lanczosFS_R = `
-            precision highp float;
-            uniform sampler2D map;
-            uniform vec2 texSize;
-            varying vec2 vUv;
-            
-            const float PI = 3.14159265359;
-            
-            float sinc(float x) {
-                if (abs(x) < 0.0001) return 1.0;
-                float a = PI * x;
-                return sin(a) / a;
+        els.btnPlay.addEventListener('click', () => {
+            if(video.paused) { video.play(); els.btnPlay.textContent = '⏸'; }
+            else { video.pause(); els.btnPlay.textContent = '▶'; }
+        });
+
+        els.btnRecenter.addEventListener('click', () => {
+            // Reset orbit controls
+            controls.reset();
+            // Recenter VR view
+            if(renderer.xr.isPresenting) {
+                 // WebXR recentering is handled by the device mostly, 
+                 // but we can reset the camera group offset if we had one.
             }
-            
-            float lanczosWeight(float x) {
-                if (abs(x) >= 2.0) return 0.0;
-                return sinc(x) * sinc(x * 0.5);
-            }
-            
-            vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
-                vec2 inv = 1.0 / size;
-                vec2 pos = uv * size;
-                vec2 ipos = floor(pos - 0.5) + 0.5;
-                vec2 f = pos - ipos;
-                
-                vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
-                vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
-                wX /= dot(wX, vec4(1.0));
-                wY /= dot(wY, vec4(1.0));
-                
-                vec4 r0 = texture2D(smp, (ipos + vec2(-1, -1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, -1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, -1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, -1)) * inv) * wX.w;
-                vec4 r1 = texture2D(smp, (ipos + vec2(-1, 0)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 0)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 0)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 0)) * inv) * wX.w;
-                vec4 r2 = texture2D(smp, (ipos + vec2(-1, 1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 1)) * inv) * wX.w;
-                vec4 r3 = texture2D(smp, (ipos + vec2(-1, 2)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 2)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 2)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 2)) * inv) * wX.w;
-                
-                return r0 * wY.x + r1 * wY.y + r2 * wY.z + r3 * wY.w;
-            }
-            
-            void main() {
-                vec2 uv = vec2(vUv.x * 0.5 + 0.5, vUv.y);
-                gl_FragColor = textureLanczos(map, uv, texSize);
-            }
-        `;
-
-        const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({
-            uniforms: { map: { value: xrVideoTexture }, texSize: { value: new THREE.Vector2(1920, 1080) } },
-            vertexShader: lanczosVS,
-            fragmentShader: lanczosFS_L,
-            side: THREE.DoubleSide
-        }));
-        mL.layers.set(1);
-        mL.name = 'screenSBS';
-
-        const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({
-            uniforms: { map: { value: xrVideoTexture }, texSize: { value: new THREE.Vector2(1920, 1080) } },
-            vertexShader: lanczosVS,
-            fragmentShader: lanczosFS_R,
-            side: THREE.DoubleSide
-        }));
-        mR.layers.set(2);
-        mR.name = 'screenSBS';
-
-        xrScreenGroup.add(mL);
-        xrScreenGroup.add(mR);
-
-        // Position screen
-        updateXRScreenGeometry();
-
-        // Raycaster for UI interaction
-        xrRaycaster = new THREE.Raycaster();
-
-        // Start XR session
-        try {
-            // Request dom-overlay to show HTML controls on top of XR
-            const sessionOptions = {
-                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay'],
-                domOverlay: { root: els.overlay }
-            };
-            
-            xrSession = await navigator.xr.requestSession('immersive-vr', sessionOptions);
-
-            xrSession.addEventListener('end', onXRSessionEnded);
-            
-            // Listen for select events on the session directly (for screen taps in cardboard mode)
-            xrSession.addEventListener('select', onXRSessionSelect);
-            xrSession.addEventListener('selectstart', onXRSessionSelect);
-
-            await xrRenderer.xr.setSession(xrSession);
-
-            xrRefSpace = await xrSession.requestReferenceSpace('local-floor').catch(() => 
-                xrSession.requestReferenceSpace('local')
-            );
-
-            // Setup controllers
-            setupXRControllers();
-
-            // Start video
-            xrVideoEl.play();
-            
-            // Update progress bar periodically
-            xrVideoEl.addEventListener('timeupdate', updateXRProgress);
-            
-            // Show overlay initially - keep it visible for now
-            showXROverlay();
-            
-            // Debug: log that we got here
-            console.log('XR session started, overlay should be visible');
-            console.log('domOverlay supported:', xrSession.domOverlayState);
-
-            // Start render loop
-            xrRenderer.setAnimationLoop(animateWebXR);
-
-        } catch (err) {
-            console.error('WebXR failed:', err);
-            alert('WebXR failed to start: ' + err.message);
-            els.setup.style.display = 'flex';
-        }
-
-        window.addEventListener('resize', () => {
-            xrCamera.aspect = window.innerWidth / window.innerHeight;
-            xrCamera.updateProjectionMatrix();
-            xrRenderer.setSize(window.innerWidth, window.innerHeight);
         });
     }
 
-    function setupXRControllers() {
-        // Controller 0 (usually right) - for VR controllers
-        xrControllerR = xrRenderer.xr.getController(0);
-        xrControllerR.addEventListener('selectstart', onXRSelect);
-        xrScene.add(xrControllerR);
-
-        // Controller 1 (usually left)
-        xrControllerL = xrRenderer.xr.getController(1);
-        xrControllerL.addEventListener('selectstart', onXRSelect);
-        xrScene.add(xrControllerL);
+    function setMode2D() {
+        is3D = false;
+        els.btn2D.classList.add('active');
+        els.btn3D.classList.remove('active');
         
-        // Touch listeners are added in initWebXREngine
-    }
-
-    // XR UI uses HTML overlay instead of 3D menu
-    let xrOverlayVisible = false;
-    let xrOverlayTimer = null;
-
-    function onScreenTouch(event) {
-        // If tap is not on overlay, toggle it
-        if (!event.target.closest('#overlay')) {
-            event.preventDefault();
-            if (xrOverlayVisible) {
-                hideXROverlay();
-            } else {
-                showXROverlay();
-            }
-        } else {
-            // Reset timer when interacting with overlay
-            resetXROverlayTimer();
-        }
-    }
-
-    function onScreenClick(event) {
-        // If click is not on overlay, toggle it
-        if (!event.target.closest('#overlay')) {
-            if (xrOverlayVisible) {
-                hideXROverlay();
-            } else {
-                showXROverlay();
-            }
-        } else {
-            resetXROverlayTimer();
-        }
-    }
-
-    function showXROverlay() {
-        updateXROverlay();
-        els.overlay.classList.add('visible');
-        els.overlay.classList.remove('single', 'split');
-        els.overlay.classList.add('stereo');
-        xrOverlayVisible = true;
-        resetXROverlayTimer();
-    }
-
-    function hideXROverlay() {
-        els.overlay.classList.remove('visible');
-        xrOverlayVisible = false;
-    }
-
-    function resetXROverlayTimer() {
-        // Disabled for debugging - keep overlay visible
-        // if (xrOverlayTimer) clearTimeout(xrOverlayTimer);
-        // xrOverlayTimer = setTimeout(hideXROverlay, 3000);
-    }
-
-    function buildXRControls() {
-        return `
-            <div class="row">
-                <div class="prog-track xr-prog"><div class="prog-fill xr-prog-fill"></div></div>
-            </div>
-            <div class="row">
-                <button class="btn-icon xr-rw">&laquo;</button>
-                <button class="btn-icon xr-pp">${xrVideoEl && !xrVideoEl.paused ? '||' : '▶'}</button>
-                <button class="btn-icon xr-fw">&raquo;</button>
-            </div>
-            <div class="lbl">View Mode</div>
-            <div class="row">
-                <button class="btn-pill xr-2d ${viewMode==='vr-2d'?'active':''}">2D</button>
-                <button class="btn-pill xr-3d ${viewMode==='vr-3d'?'active':''}">3D</button>
-            </div>
-            <div class="lbl">Zoom</div>
-            <div class="row">
-                <button class="btn-icon xr-zout">-</button>
-                <button class="btn-pill xr-zrst">RST</button>
-                <button class="btn-icon xr-zin">+</button>
-            </div>
-            <div class="lbl">Distance</div>
-            <div class="row">
-                <button class="btn-icon xr-ddec">-</button>
-                <button class="btn-pill xr-drst">RST</button>
-                <button class="btn-icon xr-dinc">+</button>
-            </div>
-            <button class="btn-wide xr-rec">RE-CENTER</button>
-        `;
-    }
-
-    function updateXROverlay() {
-        const controls = buildXRControls();
-        // Duplicate for stereo view - one for each eye
-        els.overlay.innerHTML = `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
+        // In 2D Mode:
+        // Magic Window (Layer 0) sees mesh2D (Full video)
+        // VR Left (Layer 1) sees mesh2D (Full video) - Monoscopic VR
+        // VR Right (Layer 2) sees mesh2D (Full video) - Monoscopic VR
         
-        // Add event listeners to ALL matching buttons (both panels)
-        els.overlay.querySelectorAll('.xr-pp').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (xrVideoEl) xrVideoEl.paused ? xrVideoEl.play() : xrVideoEl.pause();
-                updateXROverlay();
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-rw').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (xrVideoEl) xrVideoEl.currentTime -= 10;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-fw').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (xrVideoEl) xrVideoEl.currentTime += 10;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-2d').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                viewMode = 'vr-2d';
-                updateXROverlay();
-                updateXRScreenGeometry();
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-3d').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                viewMode = 'vr-3d';
-                updateXROverlay();
-                updateXRScreenGeometry();
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-zin').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                params.z += 0.1;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-zout').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                params.z -= 0.1;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-zrst').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                params.z = defs.z;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-dinc').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                params.d += 0.5;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-ddec').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                params.d -= 0.5;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-drst').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                params.d = defs.d;
-                resetXROverlayTimer();
-            });
-        });
-        els.overlay.querySelectorAll('.xr-rec').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (xrCamera && xrScreenGroup) {
-                    const camPos = new THREE.Vector3();
-                    const camDir = new THREE.Vector3();
-                    xrCamera.getWorldPosition(camPos);
-                    xrCamera.getWorldDirection(camDir);
-                    xrScreenGroup.position.copy(camPos);
-                    xrScreenGroup.position.add(camDir.clone().multiplyScalar(params.d));
-                    xrScreenGroup.position.y = camPos.y;
-                    xrScreenGroup.lookAt(camPos);
-                }
-                resetXROverlayTimer();
-            });
-        });
-        
-        // Progress bar seek
-        els.overlay.querySelectorAll('.xr-prog').forEach(progTrack => {
-            progTrack.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const rect = progTrack.getBoundingClientRect();
-                const ratio = (e.clientX - rect.left) / rect.width;
-                if (xrVideoEl && xrVideoEl.duration) {
-                    xrVideoEl.currentTime = ratio * xrVideoEl.duration;
-                }
-                resetXROverlayTimer();
-            });
-        });
-        
-        // Update progress fill
-        updateXRProgress();
+        mesh2D.visible = true;
+        meshLeft.visible = false;
+        meshRight.visible = false;
+
+        // Make mesh2D visible to all layers so it looks correct in VR headset too (Mono)
+        mesh2D.layers.enable(1);
+        mesh2D.layers.enable(2);
     }
 
-    function updateXRProgress() {
-        if (!xrVideoEl || !xrVideoEl.duration) return;
-        const p = (xrVideoEl.currentTime / xrVideoEl.duration) * 100;
-        els.overlay.querySelectorAll('.xr-prog-fill').forEach(fill => {
-            fill.style.width = p + '%';
-        });
+    function setMode3D() {
+        is3D = true;
+        els.btn3D.classList.add('active');
+        els.btn2D.classList.remove('active');
+
+        // In 3D Mode:
+        // Magic Window (Layer 0) sees meshLeft (Left eye only, to avoid squashed look)
+        // VR Left (Layer 1) sees meshLeft
+        // VR Right (Layer 2) sees meshRight
+
+        mesh2D.visible = false;
+        meshLeft.visible = true;
+        meshRight.visible = true;
+
+        // Ensure meshLeft is visible on desktop (Layer 0)
+        meshLeft.layers.enable(0); 
     }
 
-    function onXRSelect(event) {
-        console.log('XR Select fired');
-        // Toggle overlay visibility
-        if (xrOverlayVisible) {
-            hideXROverlay();
-        } else {
-            showXROverlay();
-        }
-    }
-
-    function onXRSessionSelect(event) {
-        console.log('XR Session Select fired');
-        // Toggle overlay visibility
-        if (xrOverlayVisible) {
-            hideXROverlay();
-        } else {
-            showXROverlay();
-        }
-    }
-
-    function handleXRAction(action) {
-        switch(action) {
-            case 'pp':
-                if (xrVideoEl) xrVideoEl.paused ? xrVideoEl.play() : xrVideoEl.pause();
-                break;
-            case 'rw':
-                if (xrVideoEl) xrVideoEl.currentTime -= 10;
-                break;
-            case 'fw':
-                if (xrVideoEl) xrVideoEl.currentTime += 10;
-                break;
-            case 'm-2d':
-                viewMode = 'vr-2d';
-                break;
-            case 'm-3d':
-                viewMode = 'vr-3d';
-                break;
-            case 'zin':
-                params.z += 0.1;
-                break;
-            case 'zout':
-                params.z -= 0.1;
-                break;
-            case 'zrst':
-                params.z = defs.z;
-                break;
-            case 'dinc':
-                params.d += 0.5;
-                break;
-            case 'ddec':
-                params.d -= 0.5;
-                break;
-            case 'drst':
-                params.d = defs.d;
-                break;
-            case 'rec':
-                // Re-center: position screen in front of user
-                if (xrCamera) {
-                    const camPos = new THREE.Vector3();
-                    const camDir = new THREE.Vector3();
-                    xrCamera.getWorldPosition(camPos);
-                    xrCamera.getWorldDirection(camDir);
-                    
-                    // Position screen group in front of user
-                    xrScreenGroup.position.copy(camPos);
-                    xrScreenGroup.position.add(camDir.clone().multiplyScalar(params.d));
-                    xrScreenGroup.position.y = camPos.y; // Keep at eye level
-                    xrScreenGroup.lookAt(camPos);
-                }
-                break;
-        }
-        
-        updateXRScreenGeometry();
-    }
-
-    function updateXRScreenGeometry() {
-        if (!xrScreenGroup) return;
-
-        let s = params.z;
-        let effectiveAspect = videoAspect;
-        if (viewMode === 'vr-3d') effectiveAspect = videoAspect / 2.0;
-
-        xrScreenGroup.children.forEach(c => {
-            c.scale.set(s, s / effectiveAspect, s);
-        });
-
-        const mStd = xrScreenGroup.getObjectByName('screenStandard');
-        const mSBS = xrScreenGroup.children.filter(c => c.name === 'screenSBS');
-
-        if (viewMode === 'vr-3d') {
-            if (mStd) mStd.visible = false;
-            mSBS.forEach(m => m.visible = true);
-        } else {
-            if (mStd) mStd.visible = true;
-            mSBS.forEach(m => m.visible = false);
-        }
-    }
-
-    function updateXRControllerHover() {
-        // No hover effects - touch only
-    }
-
-    function animateWebXR(timestamp, frame) {
-        if (!frame) return;
-
-        updateXRScreenGeometry();
-        
-        // Update HTML overlay progress bar if visible
-        if (xrOverlayVisible) {
-            updateXRProgress();
-        }
-
-        // Position screen at correct distance
-        const camPos = new THREE.Vector3();
-        const camDir = new THREE.Vector3();
-        xrCamera.getWorldPosition(camPos);
-        xrCamera.getWorldDirection(camDir);
-
-        // Keep screen at distance if not re-centered manually
-        if (xrScreenGroup.position.lengthSq() === 0) {
-            xrScreenGroup.position.set(0, 1.5, -params.d);
-        }
-
-        const pose = frame.getViewerPose(xrRefSpace);
-        if (pose) {
-            for (const view of pose.views) {
-                const viewport = xrSession.renderState.baseLayer.getViewport(view);
-                xrRenderer.setViewport(viewport.x, viewport.y, viewport.width, viewport.height);
-
-                xrCamera.matrix.fromArray(view.transform.matrix);
-                xrCamera.matrix.decompose(xrCamera.position, xrCamera.quaternion, xrCamera.scale);
-                xrCamera.projectionMatrix.fromArray(view.projectionMatrix);
-                xrCamera.updateMatrixWorld(true);
-
-                // Set layer for 3D mode
-                if (viewMode === 'vr-3d') {
-                    if (view.eye === 'left') {
-                        xrCamera.layers.enable(0);
-                        xrCamera.layers.enable(1);
-                        xrCamera.layers.disable(2);
-                    } else if (view.eye === 'right') {
-                        xrCamera.layers.enable(0);
-                        xrCamera.layers.disable(1);
-                        xrCamera.layers.enable(2);
-                    }
-                } else {
-                    xrCamera.layers.enableAll();
-                }
-
-                xrRenderer.render(xrScene, xrCamera);
-            }
-        }
-    }
-
-    function onXRSessionEnded() {
-        xrSession = null;
-        xrRefSpace = null;
-        if (xrRenderer) {
-            xrRenderer.setAnimationLoop(null);
-            if (xrRenderer.domElement && xrRenderer.domElement.parentNode) {
-                xrRenderer.domElement.parentNode.removeChild(xrRenderer.domElement);
-            }
-        }
-        if (xrVideoEl) {
-            xrVideoEl.pause();
-        }
-        // Reset state
-        xrOverlayVisible = false;
-        if (xrOverlayTimer) clearTimeout(xrOverlayTimer);
-        
-        els.setup.style.display = 'flex';
-        els.overlay.classList.remove('visible');
-    }
-
-    // ============================================
-    // CARDBOARD SHARED FUNCTIONS
-    // ============================================
-
-    function showOverlay() { els.overlay.classList.add('visible'); resetTimer(); }
-    function hideOverlay() { els.overlay.classList.remove('visible'); }
-    function resetTimer() { if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideOverlay, 5000); }
-
-    function handleCardboardInput(e) {
-        e.stopPropagation(); 
-        const t = e.target.closest('button, .prog-track'); 
-        if(!t) return; 
-        const cl = t.classList;
-
-        if(cl.contains('m-full')) { viewMode='full'; updateOverlay(); }
-        if(cl.contains('m-2d')) { viewMode='vr-2d'; updateOverlay(); }
-        if(cl.contains('m-3d')) { viewMode='vr-3d'; updateOverlay(); }
-        
-        if(cl.contains('zin')) params.z += 0.1; 
-        if(cl.contains('zout')) params.z -= 0.1; 
-        if(cl.contains('zrst')) params.z = defs.z;
-        if(cl.contains('dinc')) params.d += 0.5; 
-        if(cl.contains('ddec')) params.d -= 0.5; 
-        if(cl.contains('drst')) params.d = defs.d;
-        if(cl.contains('iinc')) params.i += 0.005; 
-        if(cl.contains('idec')) params.i -= 0.005; 
-        if(cl.contains('irst')) params.i = defs.i;
-        
-        if(cl.contains('rec') && screenGroup && camera) {
-            screenGroup.quaternion.copy(camera.quaternion);
-        }
-        
-        if(cl.contains('prog-track') && videoEl) { 
-            const r = t.getBoundingClientRect(); 
-            videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration; 
-        }
-        if(cl.contains('pp') && videoEl) videoEl.paused ? videoEl.play() : videoEl.pause();
-        if(cl.contains('rw') && videoEl) videoEl.currentTime -= 10; 
-        if(cl.contains('fw') && videoEl) videoEl.currentTime += 10;
-        
-        if(videoEl) {
-            document.querySelectorAll('.pp').forEach(b => b.textContent = videoEl.paused ? '▶' : '||');
-        }
-    }
-
-    function updateProg() { 
-        if (!videoEl || !videoEl.duration) return;
-        const p = (videoEl.currentTime / videoEl.duration) * 100; 
-        document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p + '%'); 
-    }
-
-    // ============================================
-    // CARDBOARD TRACKER
-    // ============================================
-    class Tracker {
-        constructor() { this.q = new THREE.Quaternion(); this.e = null; }
-        connect() { window.addEventListener('deviceorientation', e => this.e = e); }
-        getQ() { return this.q; }
-        update() {
-            if(!this.e) return;
-            const d = this.e;
-            const a = THREE.MathUtils.degToRad(d.alpha || 0);
-            const b = THREE.MathUtils.degToRad(d.beta || 0);
-            const g = THREE.MathUtils.degToRad(d.gamma || 0);
-            const o = (screen.orientation ? screen.orientation.angle : window.orientation || 0) * Math.PI / 180;
-            const q0 = new THREE.Quaternion();
-            const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-            this.q.setFromEuler(new THREE.Euler(b, a, -g, 'YXZ')).multiply(q1).multiply(q0.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -o));
-        }
-    }
-
-    // ============================================
-    // CARDBOARD STEREO EFFECT
-    // ============================================
-    function StereoEffect(r, videoElement) {
-        const _s = new THREE.StereoCamera(); 
-        _s.aspect = 0.5;
-        const dpr = window.devicePixelRatio || 1;
-        const vidW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
-        const sz = (sw, sh) => Math.min(Math.max(Math.floor(sw * dpr), vidW), 4096);
-        let w = sz(window.innerWidth), h = sz(window.innerHeight);
-        const opts = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false };
-        let _tL = new THREE.WebGLRenderTarget(w, h, opts);
-        let _tR = new THREE.WebGLRenderTarget(w, h, opts);
-        const _m = new THREE.ShaderMaterial({
-            uniforms: { tDiffuse: {value: null}, texSize: {value: new THREE.Vector2(w, h)}, zoom: {value: 1}, ipd: {value: 0} },
-            vertexShader: document.getElementById('vs').textContent, 
-            fragmentShader: document.getElementById('fs').textContent
-        });
-        const _sc = new THREE.Scene(); 
-        _sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), _m));
-        const _c = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        
-        this.setSize = (sw, sh) => {
-            r.setSize(sw, sh); 
-            let nw = sz(sw), nh = sz(sh);
-            if(nw !== w || nh !== h) { 
-                w = nw; h = nh; 
-                _tL.dispose(); _tR.dispose(); 
-                _tL = new THREE.WebGLRenderTarget(w, h, opts); 
-                _tR = new THREE.WebGLRenderTarget(w, h, opts); 
-                _m.uniforms.texSize.value.set(w, h);
-            }
-        };
-        
-        this.setUniforms = (i, z) => { 
-            _m.uniforms.ipd.value = i; 
-            _m.uniforms.zoom.value = z; 
-        };
-        
-        this.render = (s, c) => {
-            s.updateMatrixWorld(); 
-            _s.update(c);
-            
-            if(viewMode === 'vr-3d') _s.cameraL.layers.set(1); 
-            else _s.cameraL.layers.set(0);
-            r.setRenderTarget(_tL); r.clear(); r.render(s, _s.cameraL);
-            
-            if(viewMode === 'vr-3d') _s.cameraR.layers.set(2); 
-            else _s.cameraR.layers.set(0);
-            r.setRenderTarget(_tR); r.clear(); r.render(s, _s.cameraR);
-            
-            r.setRenderTarget(null);
-            const sw = window.innerWidth, sh = window.innerHeight; 
-            r.setScissorTest(true);
-            
-            r.setScissor(0, 0, sw/2, sh); 
-            r.setViewport(0, 0, sw/2, sh); 
-            _m.uniforms.tDiffuse.value = _tL.texture; 
-            _m.uniforms.ipd.value = params.i; 
-            r.render(_sc, _c);
-            
-            r.setScissor(sw/2, 0, sw/2, sh); 
-            r.setViewport(sw/2, 0, sw/2, sh); 
-            _m.uniforms.tDiffuse.value = _tR.texture; 
-            _m.uniforms.ipd.value = -params.i; 
-            r.render(_sc, _c);
-            
-            r.setScissorTest(false);
-        };
-    }
 </script>
 </body>
 </html>
