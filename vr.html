@@ -15,7 +15,93 @@
         .setup-box { 
             width: 100%; max-width: 450px; 
             background: #1e1e1e; padding: 25px; 
-            border-radius: 12px; border: 1px solid #333;
+            border-radius: 12px; border: 1px solid #333;<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>VR Player</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
+        
+        /* --- SETUP SCREEN LAYOUT --- */
+        #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        
+        /* Main Container Box */
+        .container {
+            display: flex;
+            width: 90%;
+            max-width: 1000px;
+            background: #1e1e1e;
+            border: 2px solid #333;
+            border-radius: 12px;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        /* Left Column (Controls) */
+        .left-col {
+            flex: 0 0 35%; /* Fixed width for controls */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            gap: 15px;
+        }
+
+        /* 1/3 Width Buttons */
+        .btn-small {
+            display: block;
+            width: 33%; /* 1/3 Width */
+            min-width: 110px; /* Ensure text fits */
+            padding: 10px;
+            background: #333;
+            color: white;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px dashed #555;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .btn-small:hover { background: #444; }
+        .btn-small:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        #enterBtn { background: #007bff; border: none; }
+        #fileInput { display: none; }
+
+        /* Radio Group (Below buttons) */
+        .radio-group {
+            margin-top: 10px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .radio-item { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; }
+        .radio-item input { accent-color: #007bff; width: 18px; height: 18px; }
+
+        /* Right Column (Video Preview) */
+        .right-col {
+            flex: 1;
+            background: #000;
+            border: 1px solid #333;
+            border-radius: 8px;
+            position: relative;
+            /* Force Landscape Aspect Ratio 16:9 */
+            aspect-ratio: 16 / 9;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+        #pVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
+        #placeholder { color: #555; font-weight: bold; text-transform: uppercase; }
+
+        /* --- OVERLAY UI (From Original) --- */
+        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; padding: 10px 0; transition: opacity 0.3s; }
+        #overlay.visible { display: flex; opacity: 1; }
+        #overlay.single { justify-content: center; } 
+        #overlay.split { justify-content: space-around; }
             display: flex; flex-direction: column; gap: 20px; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
