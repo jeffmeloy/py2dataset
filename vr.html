@@ -805,37 +805,84 @@
             return;
         }
 
-        // Convert screen coordinates to normalized device coordinates
         const rect = xrRenderer.domElement.getBoundingClientRect();
-        const ndcX = ((x - rect.left) / rect.width) * 2 - 1;
-        const ndcY = -((y - rect.top) / rect.height) * 2 + 1;
-
-        // Raycast from camera through tap point
-        xrRaycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), xrCamera);
-
-        // Check UI panel buttons
-        const intersects = xrRaycaster.intersectObjects([...xrButtons, xrProgressBar]);
-
-        if (intersects.length > 0) {
-            const hit = intersects[0];
-            const obj = hit.object;
-            const action = obj.userData.action;
-
-            if (obj.userData.isProgressBar) {
+        const screenWidth = rect.width;
+        const screenHeight = rect.height;
+        
+        // Determine which eye's viewport was tapped (left or right half)
+        const isLeftHalf = x < rect.left + screenWidth / 2;
+        
+        // Normalize coordinates within the tapped half (0 to 1)
+        let normalizedX, normalizedY;
+        if (isLeftHalf) {
+            normalizedX = (x - rect.left) / (screenWidth / 2);
+        } else {
+            normalizedX = (x - rect.left - screenWidth / 2) / (screenWidth / 2);
+        }
+        normalizedY = (y - rect.top) / screenHeight;
+        
+        // Convert to centered coordinates (-1 to 1)
+        const centeredX = (normalizedX - 0.5) * 2;
+        const centeredY = -(normalizedY - 0.5) * 2; // Flip Y (screen Y is inverted)
+        
+        // Map directly to panel-local coordinates
+        // Panel is 1.4 wide x 1.1 tall, buttons are positioned relative to panel center
+        const panelWidth = 1.4;
+        const panelHeight = 1.1;
+        
+        // Scale screen coords to panel coords
+        // The panel takes up roughly 50-60% of the viewport
+        const tapX = centeredX * (panelWidth * 0.9);
+        const tapY = centeredY * (panelHeight * 0.9);
+        
+        // Check each button with generous hit areas
+        let hitButton = null;
+        let closestDist = Infinity;
+        
+        for (const btn of xrButtons) {
+            const bx = btn.position.x;
+            const by = btn.position.y;
+            const bw = (btn.userData.w || 0.2) / 2 + 0.08; // Generous padding
+            const bh = (btn.userData.h || 0.1) / 2 + 0.06; // Generous padding
+            
+            if (tapX >= bx - bw && tapX <= bx + bw && tapY >= by - bh && tapY <= by + bh) {
+                const dist = Math.abs(tapX - bx) + Math.abs(tapY - by);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    hitButton = btn;
+                }
+            }
+        }
+        
+        // Check progress bar
+        if (!hitButton && xrProgressBar) {
+            const pbY = xrProgressBar.position.y;
+            const pbHalfW = 0.7;
+            const pbHalfH = 0.08;
+            
+            if (tapX >= -pbHalfW && tapX <= pbHalfW && tapY >= pbY - pbHalfH && tapY <= pbY + pbHalfH) {
                 // Seek in video
-                const localPoint = obj.worldToLocal(hit.point.clone());
-                const seekRatio = (localPoint.x + 0.6) / 1.2;
+                const seekRatio = Math.max(0, Math.min(1, (tapX + 0.6) / 1.2));
                 if (xrVideoEl && xrVideoEl.duration) {
                     xrVideoEl.currentTime = seekRatio * xrVideoEl.duration;
                 }
-            } else {
-                handleXRAction(action);
+                resetXRHideTimer();
+                return;
             }
+        }
+        
+        if (hitButton) {
+            // Visual feedback - briefly highlight the button
+            const originalColor = hitButton.material.map;
+            hitButton.material.color.setHex(0x00ff00);
+            setTimeout(() => {
+                hitButton.material.color.setHex(0xffffff);
+            }, 100);
             
-            // Reset hide timer after any button interaction
+            handleXRAction(hitButton.userData.action);
             resetXRHideTimer();
         } else {
-            // Tapped empty space - hide UI
+            // Tapped outside buttons - hide UI
             hideXRUI();
         }
     }
@@ -994,11 +1041,9 @@
         // Always position UI panel in front of user (head-locked)
         if (xrUIPanel && xrUIVisible) {
             const uiDistance = 1.5;
-            const uiOffset = -0.4; // Slightly below eye level
             
             xrUIPanel.position.copy(camPos);
             xrUIPanel.position.add(camDir.clone().multiplyScalar(uiDistance));
-            xrUIPanel.position.y += uiOffset;
             xrUIPanel.quaternion.copy(xrCamera.quaternion);
         }
 
