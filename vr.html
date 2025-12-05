@@ -364,6 +364,14 @@
         xrRenderer.domElement.id = 'webgl-canvas';
         document.body.appendChild(xrRenderer.domElement);
 
+        // Add touch/click listeners immediately after canvas is added
+        xrRenderer.domElement.addEventListener('touchstart', onScreenTouch, { passive: false, capture: true });
+        xrRenderer.domElement.addEventListener('click', onScreenClick, { capture: true });
+        xrRenderer.domElement.addEventListener('pointerdown', onPointerDown, { capture: true });
+        document.addEventListener('touchstart', onScreenTouch, { passive: false });
+        document.addEventListener('click', onScreenClick);
+        document.addEventListener('pointerdown', onPointerDown);
+
         // Create scene
         xrScene = new THREE.Scene();
         xrScene.background = new THREE.Color(0x000000);
@@ -600,6 +608,10 @@
             });
 
             xrSession.addEventListener('end', onXRSessionEnded);
+            
+            // Listen for select events on the session directly (for screen taps in cardboard mode)
+            xrSession.addEventListener('select', onXRSessionSelect);
+            xrSession.addEventListener('selectstart', onXRSessionSelect);
 
             await xrRenderer.xr.setSession(xrSession);
 
@@ -781,20 +793,26 @@
         xrControllerL = xrRenderer.xr.getController(1);
         xrControllerL.addEventListener('selectstart', onXRSelect);
         xrScene.add(xrControllerL);
-
-        // Touch events for screen taps (Cardboard-style / mobile VR)
-        xrRenderer.domElement.addEventListener('touchstart', onScreenTouch, { passive: false });
-        xrRenderer.domElement.addEventListener('click', onScreenClick);
+        
+        // Touch listeners are added in initWebXREngine
     }
 
     function onScreenTouch(event) {
         event.preventDefault();
-        if (event.touches.length > 0) {
-            handleScreenTap(event.touches[0].clientX, event.touches[0].clientY);
+        event.stopPropagation();
+        
+        const touch = event.touches[0] || event.changedTouches[0];
+        if (touch) {
+            handleScreenTap(touch.clientX, touch.clientY);
         }
     }
 
     function onScreenClick(event) {
+        handleScreenTap(event.clientX, event.clientY);
+    }
+
+    function onPointerDown(event) {
+        // Pointer events work on both touch and mouse
         handleScreenTap(event.clientX, event.clientY);
     }
 
@@ -806,84 +824,65 @@
         }
 
         const rect = xrRenderer.domElement.getBoundingClientRect();
-        const screenWidth = rect.width;
         const screenHeight = rect.height;
+        const screenWidth = rect.width;
         
-        // Determine which eye's viewport was tapped (left or right half)
-        const isLeftHalf = x < rect.left + screenWidth / 2;
+        // Normalize Y position (0 = top, 1 = bottom)
+        const py = (y - rect.top) / screenHeight;
         
-        // Normalize coordinates within the tapped half (0 to 1)
-        let normalizedX, normalizedY;
-        if (isLeftHalf) {
-            normalizedX = (x - rect.left) / (screenWidth / 2);
-        } else {
-            normalizedX = (x - rect.left - screenWidth / 2) / (screenWidth / 2);
-        }
-        normalizedY = (y - rect.top) / screenHeight;
+        // Normalize X within one viewport half (0 = left, 1 = right)
+        let px = (x - rect.left) / screenWidth;
+        if (px > 0.5) px = px - 0.5; // Map right half to 0-0.5
+        px = px * 2; // Scale to 0-1
         
-        // Convert to centered coordinates (-1 to 1)
-        const centeredX = (normalizedX - 0.5) * 2;
-        const centeredY = -(normalizedY - 0.5) * 2; // Flip Y (screen Y is inverted)
+        // Simple row-based detection
+        // Rows from top to bottom based on where panel content appears:
+        let hitAction = null;
         
-        // Map directly to panel-local coordinates
-        // Panel is 1.4 wide x 1.1 tall, buttons are positioned relative to panel center
-        const panelWidth = 1.4;
-        const panelHeight = 1.1;
-        
-        // Scale screen coords to panel coords
-        // The panel takes up roughly 50-60% of the viewport
-        const tapX = centeredX * (panelWidth * 0.9);
-        const tapY = centeredY * (panelHeight * 0.9);
-        
-        // Check each button with generous hit areas
-        let hitButton = null;
-        let closestDist = Infinity;
-        
-        for (const btn of xrButtons) {
-            const bx = btn.position.x;
-            const by = btn.position.y;
-            const bw = (btn.userData.w || 0.2) / 2 + 0.08; // Generous padding
-            const bh = (btn.userData.h || 0.1) / 2 + 0.06; // Generous padding
-            
-            if (tapX >= bx - bw && tapX <= bx + bw && tapY >= by - bh && tapY <= by + bh) {
-                const dist = Math.abs(tapX - bx) + Math.abs(tapY - by);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    hitButton = btn;
-                }
-            }
-        }
-        
-        // Check progress bar
-        if (!hitButton && xrProgressBar) {
-            const pbY = xrProgressBar.position.y;
-            const pbHalfW = 0.7;
-            const pbHalfH = 0.08;
-            
-            if (tapX >= -pbHalfW && tapX <= pbHalfW && tapY >= pbY - pbHalfH && tapY <= pbY + pbHalfH) {
-                // Seek in video
-                const seekRatio = Math.max(0, Math.min(1, (tapX + 0.6) / 1.2));
-                if (xrVideoEl && xrVideoEl.duration) {
-                    xrVideoEl.currentTime = seekRatio * xrVideoEl.duration;
-                }
-                resetXRHideTimer();
-                return;
-            }
-        }
-        
-        if (hitButton) {
-            // Visual feedback - briefly highlight the button
-            const originalColor = hitButton.material.map;
-            hitButton.material.color.setHex(0x00ff00);
-            setTimeout(() => {
-                hitButton.material.color.setHex(0xffffff);
-            }, 100);
-            
-            handleXRAction(hitButton.userData.action);
-            resetXRHideTimer();
-        } else {
-            // Tapped outside buttons - hide UI
+        if (py < 0.25) {
+            // Top area - outside panel, hide
             hideXRUI();
+            return;
+        } else if (py < 0.38) {
+            // Progress bar row
+            hitAction = 'seek';
+        } else if (py < 0.48) {
+            // Playback row: rw | pp | fw
+            if (px < 0.35) hitAction = 'rw';
+            else if (px < 0.65) hitAction = 'pp';
+            else hitAction = 'fw';
+        } else if (py < 0.58) {
+            // View mode row: 2D | 3D
+            if (px < 0.5) hitAction = 'm-2d';
+            else hitAction = 'm-3d';
+        } else if (py < 0.68) {
+            // Zoom row: - | reset | +
+            if (px < 0.33) hitAction = 'zout';
+            else if (px < 0.66) hitAction = 'zrst';
+            else hitAction = 'zin';
+        } else if (py < 0.78) {
+            // Distance row: - | reset | +
+            if (px < 0.33) hitAction = 'ddec';
+            else if (px < 0.66) hitAction = 'drst';
+            else hitAction = 'dinc';
+        } else if (py < 0.90) {
+            // Re-center button
+            hitAction = 'rec';
+        } else {
+            // Bottom area - outside panel, hide
+            hideXRUI();
+            return;
+        }
+        
+        if (hitAction === 'seek') {
+            const seekRatio = Math.max(0, Math.min(1, px));
+            if (xrVideoEl && xrVideoEl.duration) {
+                xrVideoEl.currentTime = seekRatio * xrVideoEl.duration;
+            }
+            resetXRHideTimer();
+        } else if (hitAction) {
+            handleXRAction(hitAction);
+            resetXRHideTimer();
         }
     }
 
@@ -894,37 +893,22 @@
             return;
         }
         
-        // Raycast from camera center (gaze direction)
-        const camPos = new THREE.Vector3();
-        const camDir = new THREE.Vector3();
-        xrCamera.getWorldPosition(camPos);
-        xrCamera.getWorldDirection(camDir);
-        
-        xrRaycaster.ray.origin.copy(camPos);
-        xrRaycaster.ray.direction.copy(camDir);
+        // For controller select (trigger press), treat as center screen tap
+        // This works for cardboard magnet triggers too
+        const rect = xrRenderer.domElement.getBoundingClientRect();
+        handleScreenTap(rect.left + rect.width / 4, rect.top + rect.height / 2);
+    }
 
-        // Check UI panel buttons
-        const intersects = xrRaycaster.intersectObjects([...xrButtons, xrProgressBar]);
-        
-        if (intersects.length > 0) {
-            const hit = intersects[0];
-            const obj = hit.object;
-            const action = obj.userData.action;
-
-            if (obj.userData.isProgressBar) {
-                const localPoint = obj.worldToLocal(hit.point.clone());
-                const seekRatio = (localPoint.x + 0.6) / 1.2;
-                if (xrVideoEl && xrVideoEl.duration) {
-                    xrVideoEl.currentTime = seekRatio * xrVideoEl.duration;
-                }
-            } else {
-                handleXRAction(action);
-            }
-            
-            resetXRHideTimer();
-        } else {
-            hideXRUI();
+    function onXRSessionSelect(event) {
+        // XR session-level select event (screen tap / cardboard trigger)
+        if (!xrUIVisible) {
+            showXRUI();
+            return;
         }
+        
+        // Treat as center tap since we don't have precise coordinates
+        const rect = xrRenderer.domElement.getBoundingClientRect();
+        handleScreenTap(rect.left + rect.width / 4, rect.top + rect.height / 2);
     }
 
     function handleXRAction(action) {
