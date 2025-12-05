@@ -8,10 +8,10 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         
-        /* --- SETUP SCREEN LAYOUT --- */
+        /* --- SETUP LAYOUT --- */
         #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; align-items: center; justify-content: center; }
         
-        /* Main Container Box */
+        /* Main Container */
         .container {
             display: flex;
             width: 95%;
@@ -21,11 +21,12 @@
             border-radius: 12px;
             padding: 20px;
             gap: 20px;
+            box-sizing: border-box;
         }
 
         /* Left Column (Controls) */
         .left-col {
-            flex: 0 0 35%; /* Fixed width for controls */
+            flex: 0 0 35%; 
             display: flex;
             flex-direction: column;
             justify-content: flex-start;
@@ -39,13 +40,13 @@
             gap: 15px;
         }
 
-        /* 1/3 Width Buttons */
+        /* 1/3 Width Buttons (approx 33%) */
         .btn-small {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 33%; /* 1/3 Width */
-            min-width: 110px; /* Ensure text fits */
+            width: 33%; 
+            min-width: 110px;
             height: 40px;
             background: #333;
             color: white;
@@ -74,26 +75,24 @@
         }
         .radio-item { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; color: #ccc; }
         .radio-item:hover { color: white; }
-        /* Custom Radio Style */
         .radio-item input { margin: 0; width: 18px; height: 18px; cursor: pointer; accent-color: #007bff; }
         .radio-desc { font-size: 11px; color: #777; margin-left: 28px; margin-top: -8px; }
 
-        /* Right Column (Video Preview) */
+        /* Right Column (Video Preview 16:9) */
         .right-col {
             flex: 1;
             background: #000;
             border: 1px solid #333;
             border-radius: 8px;
             position: relative;
-            /* Force Landscape Aspect Ratio 16:9 */
-            aspect-ratio: 16 / 9;
+            aspect-ratio: 16 / 9; /* Force 16:9 */
             display: flex; align-items: center; justify-content: center;
             overflow: hidden;
         }
         #pVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
         #placeholder { color: #555; font-weight: bold; text-transform: uppercase; font-size: 12px; }
 
-        /* --- OVERLAY UI (Original Styles) --- */
+        /* --- OVERLAY UI (From your specific WebGL Code) --- */
         #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; padding: 10px 0; transition: opacity 0.3s; }
         #overlay.visible { display: flex; opacity: 1; }
         #overlay.single { justify-content: center; } 
@@ -111,16 +110,16 @@
 
         /* Renderer Layer */
         #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
+        /* CSS Renderers */
+        .css-renderer { position: absolute; top: 0; z-index: 2; overflow: hidden; pointer-events: auto; }
         
-        /* Mobile Layout Adjustment */
         @media (max-width: 700px) {
-            .container { flex-direction: column; height: auto; max-height: 90vh; overflow-y: auto; }
-            .left-col { flex: 0 0 auto; width: 100%; }
-            .right-col { width: 100%; flex: 0 0 auto; aspect-ratio: 16/9; }
-            .btn-small { width: 48%; display: inline-flex; } /* Side by side on mobile */
+            .container { flex-direction: column; max-height: 90vh; overflow-y: auto; }
+            .left-col, .right-col { width: 100%; flex: 0 0 auto; }
+            .btn-small { width: 48%; display: inline-flex; } 
         }
     </style>
-    <!-- THREE.JS r128 (Compatible with your original code) -->
+    <!-- USING R128 AS REQUESTED -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -144,47 +143,53 @@
                     <input type="radio" name="engine" value="webgl" checked>
                     WebGL (Phone/Cardboard)
                 </label>
-                <div class="radio-desc">Uses Gyroscope & Distortion Shader</div>
+                <div class="radio-desc">Uses Gyroscope & Custom Shader</div>
 
                 <label class="radio-item">
                     <input type="radio" name="engine" value="webxr">
                     WebXR (Headset)
                 </label>
-                <div class="radio-desc">Uses Native VR (Quest, Vive, etc)</div>
+                <div class="radio-desc">Uses Native VR (Quest, Vive)</div>
             </div>
         </div>
 
         <!-- Right Column: 16:9 Preview -->
         <div class="right-col">
-            <span id="placeholder">Video Preview Window</span>
+            <span id="placeholder">Video Preview</span>
             <video id="pVideo" playsinline muted controls></video>
         </div>
     </div>
 </div>
 
-<!-- OVERLAY (For WebGL Mode) -->
 <div id="overlay"></div>
 
-<!-- SHADERS (Used by WebGL Mode) -->
+<!-- ULTRA QUALITY SHADER (LANCZOS + HIGH PRECISION) - EXACT COPY -->
 <script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}</script>
 <script id="fs" type="x-shader/x-fragment">
     precision highp float;
     uniform sampler2D tDiffuse; uniform vec2 texSize; uniform float ipd; uniform float zoom; varying vec2 vUv;
     const float PI = 3.14159265359;
+    
+    // Lanczos Weights
     float sinc(float x){ if(abs(x)<0.0001)return 1.0; float a=PI*x; return sin(a)/a; }
     float lw(float x){ if(abs(x)>=2.0)return 0.0; return sinc(x)*sinc(x*0.5); }
+
+    // High Quality Resampling
     vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
         vec2 inv = 1.0/size; vec2 pos = uv*size; vec2 ipos = floor(pos-0.5)+0.5; vec2 f = pos-ipos;
         vec4 wX = vec4(lw(1.0+f.x), lw(f.x), lw(1.0-f.x), lw(2.0-f.x));
         vec4 wY = vec4(lw(1.0+f.y), lw(f.y), lw(1.0-f.y), lw(2.0-f.y));
         wX /= dot(wX, vec4(1.0)); wY /= dot(wY, vec4(1.0));
+        
         vec4 r0 = texture2D(smp, (ipos+vec2(-1,-1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0,-1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1,-1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2,-1))*inv)*wX.w;
         vec4 r1 = texture2D(smp, (ipos+vec2(-1, 0))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 0))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 0))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 0))*inv)*wX.w;
         vec4 r2 = texture2D(smp, (ipos+vec2(-1, 1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 1))*inv)*wX.w;
         vec4 r3 = texture2D(smp, (ipos+vec2(-1, 2))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 2))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 2))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 2))*inv)*wX.w;
         return r0*wY.x + r1*wY.y + r2*wY.z + r3*wY.w;
     }
+
     vec2 distort(vec2 p){ vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v); return c+v*(1.0+r2*(0.22+0.18*r2)); }
+
     void main(){
         vec2 d = distort(vUv);
         vec2 uv = (d-vec2(0.5))/zoom; uv.x+=ipd; uv+=vec2(0.5);
@@ -194,43 +199,39 @@
 </script>
 
 <script>
-    // --- GLOBAL VARIABLES ---
+    // GLOBAL STATE
+    let selectedMode = 'webgl';
     let srcURL = null;
-    let selectedMode = 'webgl'; // default
-    let mainVideo = null;
-    
-    // UI Elements
-    const els = {
-        setup: document.getElementById('setup'),
-        pVid: document.getElementById('pVideo'),
-        enter: document.getElementById('enterBtn'),
-        lbl: document.querySelector('.btn-small'), // Select Video Label
-        overlay: document.getElementById('overlay')
+    let mainVideo = null; // The hidden video element
+
+    // DOM ELEMENTS
+    const els = { 
+        setup: document.getElementById('setup'), 
+        pVid: document.getElementById('pVideo'), 
+        enter: document.getElementById('enterBtn'), 
+        lbl: document.querySelector('.btn-small'), 
+        overlay: document.getElementById('overlay'),
+        ph: document.getElementById('placeholder')
     };
 
-    // --- SETUP LOGIC ---
-    
-    // 1. File Selection
+    // 1. FILE INPUT
     document.getElementById('fileInput').addEventListener('change', (e) => {
         const f = e.target.files[0]; if(!f) return;
         srcURL = URL.createObjectURL(f);
-        // Show Preview
         els.pVid.src = srcURL; 
         els.pVid.style.display = 'block';
-        document.getElementById('placeholder').style.display = 'none';
+        els.ph.style.display='none';
         els.enter.disabled = false;
     });
 
-    // 2. Radio Selection
+    // 2. RADIO SELECTION
     document.querySelectorAll('input[name="engine"]').forEach(r => {
-        r.addEventListener('change', (e) => {
-            selectedMode = e.target.value;
-        });
+        r.addEventListener('change', (e) => selectedMode = e.target.value);
     });
 
-    // 3. Enter VR Button
-    els.enter.addEventListener('click', async () => {
-        // Stop Preview
+    // 3. START BUTTON
+    els.enter.addEventListener('click', () => {
+        // Pause Preview
         els.pVid.pause();
         els.setup.style.display = 'none';
 
@@ -240,78 +241,75 @@
         mainVideo.playsinline = true;
         mainVideo.loop = false;
         mainVideo.crossOrigin = "anonymous";
+        mainVideo.play();
 
-        // Fork based on selection
         if (selectedMode === 'webgl') {
-            initWebGL(); // Your original Code
+            initWebGL(); // Uses your exact provided code structure
         } else {
-            initWebXR(); // New Headset Code
+            initWebXR(); // Lightweight alternative for headsets
         }
     });
 
-    // =============================================================
-    // ENGINE 1: LEGACY WEBGL (Original Code + StereoEffect)
-    // =============================================================
+    // =====================================================================
+    // ENGINE 1: WEBGL (EXACT COPY OF YOUR LOGIC)
+    // =====================================================================
     function initWebGL() {
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { try { DeviceOrientationEvent.requestPermission(); } catch (e) {} }
         const de = document.documentElement; if(de.requestFullscreen) de.requestFullscreen();
         if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
 
-        let viewMode = 'full';
-        let hideTimer = null;
-        let videoAspect = 16/9;
+        let viewMode = 'full', hideTimer = null;
         const defs = { z: 1.0, d: 3.0, i: 0.0 };
         let params = { ...defs };
+        let videoAspect = 16/9;
 
-        // Scene
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
         const screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
         const tracker = new Tracker(); tracker.connect();
 
-        // Texture
-        mainVideo.play();
-        const tex = new THREE.VideoTexture(mainVideo);
-        tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-
         mainVideo.addEventListener('loadedmetadata', () => {
-            if(mainVideo.videoWidth) videoAspect = mainVideo.videoWidth / mainVideo.videoHeight;
+            if(mainVideo.videoHeight) videoAspect = mainVideo.videoWidth / mainVideo.videoHeight;
         });
 
-        // Geometry (6x6 Plane)
-        const geo = new THREE.PlaneGeometry(6, 6);
+        const tex = new THREE.VideoTexture(mainVideo); 
+        tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
         
-        // Standard View
+        const geo = new THREE.PlaneGeometry(6, 6); 
+        
         const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2})); 
-        mStd.name = 'screenStandard'; screenGroup.add(mStd);
-
-        // SBS Meshes (For 3D Mode) - High Precision Shader
-        const vs = document.getElementById('vs').textContent;
-        // Logic for SBS shaders using the HTML defined shaders but with uniforms for SBS cropping
-        // Note: For simplicity and reliability in this merged file, I will use custom shaders that perform the crop
+        mStd.name = 'screenStandard'; 
+        screenGroup.add(mStd);
+        
+        // Custom Shaders for SBS Splitting to work with StereoEffect logic
+        const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
         const fsL = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5, vUv.y)); }`;
         const fsR = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5+0.5, vUv.y)); }`;
-        // Note: We create simple shader materials here, but the StereoEffect (below) applies the Lanczos/Distortion pass on the RESULT.
+        
         const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsL, side:2})); mL.layers.set(1);
         const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsR, side:2})); mR.layers.set(2);
         mL.name = mR.name = 'screenSBS'; screenGroup.add(mL); screenGroup.add(mR);
 
-        // Renderer
         const renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
         renderer.domElement.id = 'webgl-canvas'; 
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio); 
         document.body.appendChild(renderer.domElement);
-
-        // Effect
+        
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
         const effect = new StereoEffect(renderer, mainVideo); 
         effect.setSize(window.innerWidth, window.innerHeight);
         
-        // Update Overlay Logic
+        mainVideo.addEventListener('timeupdate', updateProg);
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            if(effect) effect.setSize(window.innerWidth, window.innerHeight);
+        });
+
         function updateOverlay() {
-            const isFull = (viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; 
-            if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(()=>els.overlay.classList.remove('visible'), 3000);
-            
+            const isFull = (viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; resetTimer();
             const controls = `
                 <div class="row"><div class="prog-track"><div class="prog-fill"></div></div></div>
                 <div class="row"><button class="btn-icon rw">&laquo;</button><button class="btn-icon pp">▶</button><button class="btn-icon fw">&raquo;</button></div>
@@ -327,130 +325,98 @@
             `;
             els.overlay.innerHTML = isFull ? `<div class="ctrl-panel">${controls}</div>` : `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
         }
-        updateOverlay();
 
-        // Interaction
-        els.overlay.addEventListener('click', (e) => {
+        function handleInput(e) {
             e.stopPropagation(); const t = e.target.closest('button, .prog-track'); if(!t) return; const cl = t.classList;
-            if(cl.contains('m-full')) { viewMode='full'; params.z=1.0; params.d=3.0; updateOverlay(); }
+            if(cl.contains('m-full')) { viewMode='full'; if(viewMode==='full'){params.z=1.0;params.d=3.0;} updateOverlay(); }
             if(cl.contains('m-2d')) { viewMode='vr-2d'; updateOverlay(); }
             if(cl.contains('m-3d')) { viewMode='vr-3d'; updateOverlay(); }
             if(cl.contains('zin')) params.z+=0.1; if(cl.contains('zout')) params.z-=0.1; if(cl.contains('zrst')) params.z=defs.z;
             if(cl.contains('dinc')) params.d+=0.5; if(cl.contains('ddec')) params.d-=0.5; if(cl.contains('drst')) params.d=defs.d;
             if(cl.contains('iinc')) params.i+=0.005; if(cl.contains('idec')) params.i-=0.005; if(cl.contains('irst')) params.i=defs.i;
             if(cl.contains('rec')) screenGroup.quaternion.copy(camera.quaternion);
-            if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); mainVideo.currentTime = ((e.clientX - r.left)/r.width) * mainVideo.duration; }
-            if(cl.contains('pp')) mainVideo.paused ? mainVideo.play() : mainVideo.pause();
-            if(cl.contains('rw')) mainVideo.currentTime -= 10; if(cl.contains('fw')) mainVideo.currentTime += 10;
-            // Reset timer
-            if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(()=>els.overlay.classList.remove('visible'), 3000);
-        });
+            if(mainVideo) {
+                if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); mainVideo.currentTime = ((e.clientX - r.left)/r.width) * mainVideo.duration; }
+                if(cl.contains('pp')) mainVideo.paused ? mainVideo.play() : mainVideo.pause();
+                if(cl.contains('rw')) mainVideo.currentTime -= 10; if(cl.contains('fw')) mainVideo.currentTime += 10;
+                document.querySelectorAll('.pp').forEach(b=>b.textContent = mainVideo.paused ? '▶' : '||');
+            }
+        }
+        function updateProg() { if(mainVideo) { const p=(mainVideo.currentTime/mainVideo.duration)*100; document.querySelectorAll('.prog-fill').forEach(f=>f.style.width=p+'%'); } }
+        function showOverlay() { els.overlay.classList.add('visible'); resetTimer(); }
+        function hideOverlay() { els.overlay.classList.remove('visible'); }
+        function resetTimer() { if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideOverlay, 3000); }
 
-        document.addEventListener('click', (e) => { 
-            if(e.target.closest('#overlay')) return;
-            els.overlay.classList.contains('visible') ? els.overlay.classList.remove('visible') : els.overlay.classList.add('visible');
-        });
+        document.addEventListener('click', (e) => { if(e.target.closest('#overlay')) { resetTimer(); return; } if(els.overlay.classList.contains('visible')) hideOverlay(); else showOverlay(); });
+        els.overlay.addEventListener('click', handleInput);
+        updateOverlay();
 
-        // Loop
         function animate() {
-            requestAnimationFrame(animate);
-            tracker.update(); camera.quaternion.copy(tracker.getQ());
-            
+            requestAnimationFrame(animate); tracker.update(); camera.quaternion.copy(tracker.getQ());
             let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
             let s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
             let effectiveAspect = videoAspect;
             if(viewMode === 'vr-3d') effectiveAspect = videoAspect / 2.0;
 
-            screenGroup.children.forEach(c => { c.position.z = z; c.scale.set(s, s/effectiveAspect, s); });
+            screenGroup.children.forEach(c => { c.position.z = z; c.scale.set(s, s / effectiveAspect, s); });
             
             const mStd = screenGroup.getObjectByName('screenStandard');
             const mSBS = screenGroup.children.filter(c=>c.name==='screenSBS');
             if(viewMode === 'vr-3d') { if(mStd) mStd.visible = false; mSBS.forEach(m=>m.visible=true); } 
             else { if(mStd) mStd.visible = true; mSBS.forEach(m=>m.visible=false); }
-            
-            // Prog bar update
-            const p = (mainVideo.currentTime/mainVideo.duration)*100;
-            document.querySelectorAll('.prog-fill').forEach(f=>f.style.width=p+'%');
 
             if(viewMode === 'full') {
                 renderer.setScissorTest(false); renderer.setViewport(0,0,window.innerWidth,window.innerHeight); renderer.render(scene, camera);
             } else {
-                effect.setUniforms(params.i, params.z); effect.render(scene, camera);
+                if(effect) { effect.setUniforms(params.i, params.z); effect.render(scene, camera); }
             }
         }
         animate();
     }
 
-    // =============================================================
-    // ENGINE 2: WEBXR (Modern Headset)
-    // =============================================================
+    // =====================================================================
+    // ENGINE 2: WEBXR (SIMPLE NATIVE HEADSET SUPPORT)
+    // =====================================================================
     function initWebXR() {
-        mainVideo.play();
         const scene = new THREE.Scene(); scene.background = new THREE.Color(0x000000);
         const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 100);
-        
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
-        renderer.xr.setReferenceSpaceType('local'); // Headset tracking
+        renderer.xr.setReferenceSpaceType('local');
         document.body.appendChild(renderer.domElement);
 
         const screenGroup = new THREE.Group(); scene.add(screenGroup);
         const tex = new THREE.VideoTexture(mainVideo);
         tex.minFilter = THREE.LinearFilter; 
         
-        // Geometry
-        const geo = new THREE.PlaneGeometry(8, 4.5); // Base 16:9
-        
-        // 2D Mesh (Visible in Left/Right/None)
+        const geo = new THREE.PlaneGeometry(8, 4.5);
         const m2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2}));
         m2D.layers.enable(1); m2D.layers.enable(2);
         screenGroup.add(m2D);
 
-        // 3D Left
-        const geoL = geo.clone(); const uvL = geoL.attributes.uv; for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i)*0.5);
-        const mL = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({map:tex, side:2}));
-        mL.layers.set(1); mL.visible = false; screenGroup.add(mL);
-
-        // 3D Right
-        const geoR = geo.clone(); const uvR = geoR.attributes.uv; for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i)*0.5)+0.5);
-        const mR = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({map:tex, side:2}));
-        mR.layers.set(2); mR.visible = false; screenGroup.add(mR);
-
-        // Logic
-        let dist = 6.0; let is3D = false;
-        
         mainVideo.addEventListener('loadedmetadata', () => {
              const asp = mainVideo.videoWidth / mainVideo.videoHeight;
              screenGroup.scale.set(1, (16/9)/asp, 1);
         });
 
-        // Trigger VR
-        // Note: In r128, VRButton is not built-in to the core build file.
-        // We will manually trigger the session since we are in the flow of a user gesture.
         if (navigator.xr) {
             navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] }).then((session) => {
                 renderer.xr.setSession(session);
-                session.addEventListener('end', () => { location.reload(); }); // Simple exit logic
-            }).catch((err) => { alert("WebXR Error: " + err); location.reload(); });
-        } else {
-            alert("WebXR not supported on this device/browser.");
-        }
+                session.addEventListener('end', () => location.reload());
+            }).catch(() => { alert("WebXR not available."); location.reload(); });
+        } else { alert("WebXR not supported."); location.reload(); }
 
-        // Loop
         renderer.setAnimationLoop(() => {
-            // "Head locked"ish or just static in world. 
-            // In 'local' space, 0,0,-6 is 6 meters in front of where you started.
-            screenGroup.position.set(0, 0, -dist); 
-            
-            // Simple controller input check could go here for zoom/mode
-            // For now, it plays the video in the headset.
+            screenGroup.position.set(0, 0, -6);
             renderer.render(scene, camera);
         });
     }
 
-    // --- CLASSES FOR WEBGL MODE ---
+    // =====================================================================
+    // CLASSES (FROM YOUR ORIGINAL CODE)
+    // =====================================================================
     class Tracker {
         constructor() { this.q=new THREE.Quaternion(); this.e=null; }
         connect() { window.addEventListener('deviceorientation', e=>this.e=e); }
