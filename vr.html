@@ -354,7 +354,6 @@
     let xrProgressBar, xrProgressFill;
     let xrUIVisible = true;
     let xrHideTimer = null;
-    let xrReticle = null;
 
     async function initWebXREngine() {
         // Create renderer first with high quality settings
@@ -773,7 +772,7 @@
     }
 
     function setupXRControllers() {
-        // Controller 0 (usually right)
+        // Controller 0 (usually right) - for VR controllers
         xrControllerR = xrRenderer.xr.getController(0);
         xrControllerR.addEventListener('selectstart', onXRSelect);
         xrScene.add(xrControllerR);
@@ -783,56 +782,40 @@
         xrControllerL.addEventListener('selectstart', onXRSelect);
         xrScene.add(xrControllerL);
 
-        // Create gaze reticle (crosshair "+")
-        createGazeReticle();
+        // Touch events for screen taps (Cardboard-style / mobile VR)
+        xrRenderer.domElement.addEventListener('touchstart', onScreenTouch, { passive: false });
+        xrRenderer.domElement.addEventListener('click', onScreenClick);
     }
 
-    function createGazeReticle() {
-        const reticleGroup = new THREE.Group();
-        
-        // Horizontal line of "+"
-        const hGeo = new THREE.PlaneGeometry(0.04, 0.008);
-        const hMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.9, depthTest: false });
-        const hLine = new THREE.Mesh(hGeo, hMat);
-        reticleGroup.add(hLine);
-        
-        // Vertical line of "+"
-        const vGeo = new THREE.PlaneGeometry(0.008, 0.04);
-        const vMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.9, depthTest: false });
-        const vLine = new THREE.Mesh(vGeo, vMat);
-        reticleGroup.add(vLine);
-        
-        // Small dot in center
-        const dotGeo = new THREE.CircleGeometry(0.006, 16);
-        const dotMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.9, depthTest: false });
-        const dot = new THREE.Mesh(dotGeo, dotMat);
-        dot.position.z = 0.001;
-        reticleGroup.add(dot);
-        
-        reticleGroup.renderOrder = 9999;
-        xrReticle = reticleGroup;
-        xrScene.add(xrReticle);
+    function onScreenTouch(event) {
+        event.preventDefault();
+        if (event.touches.length > 0) {
+            handleScreenTap(event.touches[0].clientX, event.touches[0].clientY);
+        }
     }
 
-    function onXRSelect(event) {
+    function onScreenClick(event) {
+        handleScreenTap(event.clientX, event.clientY);
+    }
+
+    function handleScreenTap(x, y) {
         // If UI is hidden, show it and return
         if (!xrUIVisible) {
             showXRUI();
             return;
         }
-        
-        // Raycast from camera (gaze direction)
-        const camPos = new THREE.Vector3();
-        const camDir = new THREE.Vector3();
-        xrCamera.getWorldPosition(camPos);
-        xrCamera.getWorldDirection(camDir);
-        
-        xrRaycaster.ray.origin.copy(camPos);
-        xrRaycaster.ray.direction.copy(camDir);
+
+        // Convert screen coordinates to normalized device coordinates
+        const rect = xrRenderer.domElement.getBoundingClientRect();
+        const ndcX = ((x - rect.left) / rect.width) * 2 - 1;
+        const ndcY = -((y - rect.top) / rect.height) * 2 + 1;
+
+        // Raycast from camera through tap point
+        xrRaycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), xrCamera);
 
         // Check UI panel buttons
         const intersects = xrRaycaster.intersectObjects([...xrButtons, xrProgressBar]);
-        
+
         if (intersects.length > 0) {
             const hit = intersects[0];
             const obj = hit.object;
@@ -852,7 +835,47 @@
             // Reset hide timer after any button interaction
             resetXRHideTimer();
         } else {
-            // Clicked empty space - hide UI
+            // Tapped empty space - hide UI
+            hideXRUI();
+        }
+    }
+
+    function onXRSelect(event) {
+        // If UI is hidden, show it and return
+        if (!xrUIVisible) {
+            showXRUI();
+            return;
+        }
+        
+        // Raycast from camera center (gaze direction)
+        const camPos = new THREE.Vector3();
+        const camDir = new THREE.Vector3();
+        xrCamera.getWorldPosition(camPos);
+        xrCamera.getWorldDirection(camDir);
+        
+        xrRaycaster.ray.origin.copy(camPos);
+        xrRaycaster.ray.direction.copy(camDir);
+
+        // Check UI panel buttons
+        const intersects = xrRaycaster.intersectObjects([...xrButtons, xrProgressBar]);
+        
+        if (intersects.length > 0) {
+            const hit = intersects[0];
+            const obj = hit.object;
+            const action = obj.userData.action;
+
+            if (obj.userData.isProgressBar) {
+                const localPoint = obj.worldToLocal(hit.point.clone());
+                const seekRatio = (localPoint.x + 0.6) / 1.2;
+                if (xrVideoEl && xrVideoEl.duration) {
+                    xrVideoEl.currentTime = seekRatio * xrVideoEl.duration;
+                }
+            } else {
+                handleXRAction(action);
+            }
+            
+            resetXRHideTimer();
+        } else {
             hideXRUI();
         }
     }
@@ -946,39 +969,7 @@
     }
 
     function updateXRControllerHover() {
-        if (!xrReticle || !xrCamera) return;
-        
-        // Position reticle in front of camera (head-locked, centered)
-        const camPos = new THREE.Vector3();
-        const camDir = new THREE.Vector3();
-        xrCamera.getWorldPosition(camPos);
-        xrCamera.getWorldDirection(camDir);
-        
-        // Position reticle at fixed distance in front of camera
-        const reticleDistance = 1.4; // Slightly in front of UI panel
-        xrReticle.position.copy(camPos).add(camDir.clone().multiplyScalar(reticleDistance));
-        xrReticle.quaternion.copy(xrCamera.quaternion);
-        
-        // Show/hide reticle with UI
-        xrReticle.visible = xrUIVisible;
-        
-        if (!xrUIVisible) return;
-        
-        // Raycast from camera for hover detection
-        xrRaycaster.ray.origin.copy(camPos);
-        xrRaycaster.ray.direction.copy(camDir);
-
-        const intersects = xrRaycaster.intersectObjects([...xrButtons, xrProgressBar]);
-        
-        // Update reticle color based on hover state
-        const isHovering = intersects.length > 0;
-        const color = isHovering ? 0x00ff00 : 0x00ffff;
-        
-        xrReticle.children.forEach(child => {
-            if (child.material) {
-                child.material.color.setHex(color);
-            }
-        });
+        // No hover effects - touch only
     }
 
     function animateWebXR(timestamp, frame) {
@@ -1059,7 +1050,6 @@
         xrUIPanel = null;
         xrProgressBar = null;
         xrProgressFill = null;
-        xrReticle = null;
         xrUIVisible = true;
         if (xrHideTimer) clearTimeout(xrHideTimer);
         
