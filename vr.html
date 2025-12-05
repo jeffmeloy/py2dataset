@@ -356,8 +356,8 @@
     let xrHideTimer = null;
 
     async function initWebXREngine() {
-        // Create renderer first
-        xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // Create renderer first with high quality settings
+        xrRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
         xrRenderer.setPixelRatio(window.devicePixelRatio);
         xrRenderer.setSize(window.innerWidth, window.innerHeight);
         xrRenderer.xr.enabled = true;
@@ -384,33 +384,200 @@
         xrVideoEl.loop = false;
 
         xrVideoEl.addEventListener('loadedmetadata', () => {
-            if (xrVideoEl.videoHeight) videoAspect = xrVideoEl.videoWidth / xrVideoEl.videoHeight;
-            updateXRScreenGeometry();
+            if (xrVideoEl.videoHeight) {
+                videoAspect = xrVideoEl.videoWidth / xrVideoEl.videoHeight;
+                
+                // Update shader texSize uniforms with actual video dimensions
+                xrScreenGroup.children.forEach(mesh => {
+                    if (mesh.material && mesh.material.uniforms && mesh.material.uniforms.texSize) {
+                        mesh.material.uniforms.texSize.value.set(xrVideoEl.videoWidth, xrVideoEl.videoHeight);
+                    }
+                });
+                
+                updateXRScreenGeometry();
+            }
         });
 
         // Create video texture
         xrVideoTexture = new THREE.VideoTexture(xrVideoEl);
         xrVideoTexture.minFilter = THREE.LinearFilter;
         xrVideoTexture.magFilter = THREE.LinearFilter;
+        xrVideoTexture.generateMipmaps = false;
+        xrVideoTexture.anisotropy = xrRenderer.capabilities.getMaxAnisotropy();
 
-        // Create screen meshes
-        const geo = new THREE.PlaneGeometry(4, 4);
+        // Create screen meshes with higher resolution geometry for better quality
+        const geo = new THREE.PlaneGeometry(4, 4, 32, 32);
 
-        // Standard screen (2D)
-        const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: xrVideoTexture, side: THREE.DoubleSide }));
+        // Lanczos shader for high-quality upscaling
+        const lanczosVS = `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+        
+        const lanczosFS = `
+            precision highp float;
+            uniform sampler2D map;
+            uniform vec2 texSize;
+            varying vec2 vUv;
+            
+            const float PI = 3.14159265359;
+            
+            float sinc(float x) {
+                if (abs(x) < 0.0001) return 1.0;
+                float a = PI * x;
+                return sin(a) / a;
+            }
+            
+            float lanczosWeight(float x) {
+                if (abs(x) >= 2.0) return 0.0;
+                return sinc(x) * sinc(x * 0.5);
+            }
+            
+            vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
+                vec2 inv = 1.0 / size;
+                vec2 pos = uv * size;
+                vec2 ipos = floor(pos - 0.5) + 0.5;
+                vec2 f = pos - ipos;
+                
+                vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
+                vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
+                wX /= dot(wX, vec4(1.0));
+                wY /= dot(wY, vec4(1.0));
+                
+                vec4 r0 = texture2D(smp, (ipos + vec2(-1, -1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, -1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, -1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, -1)) * inv) * wX.w;
+                vec4 r1 = texture2D(smp, (ipos + vec2(-1, 0)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 0)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 0)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 0)) * inv) * wX.w;
+                vec4 r2 = texture2D(smp, (ipos + vec2(-1, 1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 1)) * inv) * wX.w;
+                vec4 r3 = texture2D(smp, (ipos + vec2(-1, 2)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 2)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 2)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 2)) * inv) * wX.w;
+                
+                return r0 * wY.x + r1 * wY.y + r2 * wY.z + r3 * wY.w;
+            }
+            
+            void main() {
+                gl_FragColor = textureLanczos(map, vUv, texSize);
+            }
+        `;
+
+        // Standard screen (2D) with Lanczos filtering
+        const stdMat = new THREE.ShaderMaterial({
+            uniforms: {
+                map: { value: xrVideoTexture },
+                texSize: { value: new THREE.Vector2(1920, 1080) }
+            },
+            vertexShader: lanczosVS,
+            fragmentShader: lanczosFS,
+            side: THREE.DoubleSide
+        });
+        const mStd = new THREE.Mesh(geo, stdMat);
         mStd.name = 'screenStandard';
         xrScreenGroup.add(mStd);
 
-        // SBS screens (3D)
-        const vs = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-        const fsL = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5, vUv.y)); }`;
-        const fsR = `precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5+0.5, vUv.y)); }`;
+        // SBS screens (3D) with Lanczos filtering
+        const lanczosFS_L = `
+            precision highp float;
+            uniform sampler2D map;
+            uniform vec2 texSize;
+            varying vec2 vUv;
+            
+            const float PI = 3.14159265359;
+            
+            float sinc(float x) {
+                if (abs(x) < 0.0001) return 1.0;
+                float a = PI * x;
+                return sin(a) / a;
+            }
+            
+            float lanczosWeight(float x) {
+                if (abs(x) >= 2.0) return 0.0;
+                return sinc(x) * sinc(x * 0.5);
+            }
+            
+            vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
+                vec2 inv = 1.0 / size;
+                vec2 pos = uv * size;
+                vec2 ipos = floor(pos - 0.5) + 0.5;
+                vec2 f = pos - ipos;
+                
+                vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
+                vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
+                wX /= dot(wX, vec4(1.0));
+                wY /= dot(wY, vec4(1.0));
+                
+                vec4 r0 = texture2D(smp, (ipos + vec2(-1, -1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, -1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, -1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, -1)) * inv) * wX.w;
+                vec4 r1 = texture2D(smp, (ipos + vec2(-1, 0)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 0)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 0)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 0)) * inv) * wX.w;
+                vec4 r2 = texture2D(smp, (ipos + vec2(-1, 1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 1)) * inv) * wX.w;
+                vec4 r3 = texture2D(smp, (ipos + vec2(-1, 2)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 2)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 2)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 2)) * inv) * wX.w;
+                
+                return r0 * wY.x + r1 * wY.y + r2 * wY.z + r3 * wY.w;
+            }
+            
+            void main() {
+                vec2 uv = vec2(vUv.x * 0.5, vUv.y);
+                gl_FragColor = textureLanczos(map, uv, texSize);
+            }
+        `;
+        
+        const lanczosFS_R = `
+            precision highp float;
+            uniform sampler2D map;
+            uniform vec2 texSize;
+            varying vec2 vUv;
+            
+            const float PI = 3.14159265359;
+            
+            float sinc(float x) {
+                if (abs(x) < 0.0001) return 1.0;
+                float a = PI * x;
+                return sin(a) / a;
+            }
+            
+            float lanczosWeight(float x) {
+                if (abs(x) >= 2.0) return 0.0;
+                return sinc(x) * sinc(x * 0.5);
+            }
+            
+            vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
+                vec2 inv = 1.0 / size;
+                vec2 pos = uv * size;
+                vec2 ipos = floor(pos - 0.5) + 0.5;
+                vec2 f = pos - ipos;
+                
+                vec4 wX = vec4(lanczosWeight(1.0 + f.x), lanczosWeight(f.x), lanczosWeight(1.0 - f.x), lanczosWeight(2.0 - f.x));
+                vec4 wY = vec4(lanczosWeight(1.0 + f.y), lanczosWeight(f.y), lanczosWeight(1.0 - f.y), lanczosWeight(2.0 - f.y));
+                wX /= dot(wX, vec4(1.0));
+                wY /= dot(wY, vec4(1.0));
+                
+                vec4 r0 = texture2D(smp, (ipos + vec2(-1, -1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, -1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, -1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, -1)) * inv) * wX.w;
+                vec4 r1 = texture2D(smp, (ipos + vec2(-1, 0)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 0)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 0)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 0)) * inv) * wX.w;
+                vec4 r2 = texture2D(smp, (ipos + vec2(-1, 1)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 1)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 1)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 1)) * inv) * wX.w;
+                vec4 r3 = texture2D(smp, (ipos + vec2(-1, 2)) * inv) * wX.x + texture2D(smp, (ipos + vec2(0, 2)) * inv) * wX.y + texture2D(smp, (ipos + vec2(1, 2)) * inv) * wX.z + texture2D(smp, (ipos + vec2(2, 2)) * inv) * wX.w;
+                
+                return r0 * wY.x + r1 * wY.y + r2 * wY.z + r3 * wY.w;
+            }
+            
+            void main() {
+                vec2 uv = vec2(vUv.x * 0.5 + 0.5, vUv.y);
+                gl_FragColor = textureLanczos(map, uv, texSize);
+            }
+        `;
 
-        const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: { map: { value: xrVideoTexture } }, vertexShader: vs, fragmentShader: fsL, side: THREE.DoubleSide }));
+        const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+            uniforms: { map: { value: xrVideoTexture }, texSize: { value: new THREE.Vector2(1920, 1080) } },
+            vertexShader: lanczosVS,
+            fragmentShader: lanczosFS_L,
+            side: THREE.DoubleSide
+        }));
         mL.layers.set(1);
         mL.name = 'screenSBS';
 
-        const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: { map: { value: xrVideoTexture } }, vertexShader: vs, fragmentShader: fsR, side: THREE.DoubleSide }));
+        const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+            uniforms: { map: { value: xrVideoTexture }, texSize: { value: new THREE.Vector2(1920, 1080) } },
+            vertexShader: lanczosVS,
+            fragmentShader: lanczosFS_R,
+            side: THREE.DoubleSide
+        }));
         mR.layers.set(2);
         mR.name = 'screenSBS';
 
@@ -498,7 +665,7 @@
 
     function createXRUIPanel() {
         xrUIPanel = new THREE.Group();
-        xrUIPanel.position.set(0, 0.8, -1.5);
+        // Position will be updated each frame to follow camera
         
         // Panel background
         const bgGeo = new THREE.PlaneGeometry(1.4, 1.1);
@@ -717,23 +884,18 @@
                 params.d = defs.d;
                 break;
             case 'rec':
-                // Re-center: position UI and screen in front of user
+                // Re-center: position screen in front of user
                 if (xrCamera) {
                     const camPos = new THREE.Vector3();
                     const camDir = new THREE.Vector3();
                     xrCamera.getWorldPosition(camPos);
                     xrCamera.getWorldDirection(camDir);
                     
-                    // Position screen group
+                    // Position screen group in front of user
                     xrScreenGroup.position.copy(camPos);
                     xrScreenGroup.position.add(camDir.clone().multiplyScalar(params.d));
+                    xrScreenGroup.position.y = camPos.y; // Keep at eye level
                     xrScreenGroup.lookAt(camPos);
-                    
-                    // Position UI panel
-                    xrUIPanel.position.copy(camPos);
-                    xrUIPanel.position.y -= 0.3;
-                    xrUIPanel.position.add(camDir.clone().multiplyScalar(1.5));
-                    xrUIPanel.lookAt(camPos);
                 }
                 break;
         }
@@ -816,6 +978,17 @@
         // Keep screen at distance if not re-centered manually
         if (xrScreenGroup.position.lengthSq() === 0) {
             xrScreenGroup.position.set(0, 1.5, -params.d);
+        }
+
+        // Always position UI panel in front of user (head-locked)
+        if (xrUIPanel && xrUIVisible) {
+            const uiDistance = 1.5;
+            const uiOffset = -0.4; // Slightly below eye level
+            
+            xrUIPanel.position.copy(camPos);
+            xrUIPanel.position.add(camDir.clone().multiplyScalar(uiDistance));
+            xrUIPanel.position.y += uiOffset;
+            xrUIPanel.quaternion.copy(xrCamera.quaternion);
         }
 
         const pose = frame.getViewerPose(xrRefSpace);
