@@ -32,7 +32,7 @@
         #startBtn:disabled { background: #333; color: #555; cursor: not-allowed; }
 
         /* OVERLAY */
-        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; padding: 10px 0; transition: opacity 0.3s; }
+        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.7); z-index: 99999; display: none; padding: 10px 0; transition: opacity 0.3s; pointer-events: auto; }
         #overlay.visible { display: flex; opacity: 1; }
         #overlay.single { justify-content: center; } 
         #overlay.split { justify-content: space-around; }
@@ -595,9 +595,13 @@
 
         // Start XR session
         try {
-            xrSession = await navigator.xr.requestSession('immersive-vr', {
-                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
-            });
+            // Request dom-overlay to show HTML controls on top of XR
+            const sessionOptions = {
+                optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay'],
+                domOverlay: { root: els.overlay }
+            };
+            
+            xrSession = await navigator.xr.requestSession('immersive-vr', sessionOptions);
 
             xrSession.addEventListener('end', onXRSessionEnded);
             
@@ -620,8 +624,12 @@
             // Update progress bar periodically
             xrVideoEl.addEventListener('timeupdate', updateXRProgress);
             
-            // Show overlay initially
+            // Show overlay initially - keep it visible for now
             showXROverlay();
+            
+            // Debug: log that we got here
+            console.log('XR session started, overlay should be visible');
+            console.log('domOverlay supported:', xrSession.domOverlayState);
 
             // Start render loop
             xrRenderer.setAnimationLoop(animateWebXR);
@@ -700,8 +708,9 @@
     }
 
     function resetXROverlayTimer() {
-        if (xrOverlayTimer) clearTimeout(xrOverlayTimer);
-        xrOverlayTimer = setTimeout(hideXROverlay, 3000);
+        // Disabled for debugging - keep overlay visible
+        // if (xrOverlayTimer) clearTimeout(xrOverlayTimer);
+        // xrOverlayTimer = setTimeout(hideXROverlay, 3000);
     }
 
     function buildXRControls() {
@@ -866,6 +875,7 @@
     }
 
     function onXRSelect(event) {
+        console.log('XR Select fired');
         // Toggle overlay visibility
         if (xrOverlayVisible) {
             hideXROverlay();
@@ -875,6 +885,7 @@
     }
 
     function onXRSessionSelect(event) {
+        console.log('XR Session Select fired');
         // Toggle overlay visibility
         if (xrOverlayVisible) {
             hideXROverlay();
