@@ -679,8 +679,15 @@
         xrUIPanel = new THREE.Group();
         // Position will be updated each frame to follow camera
         
+        // Selection indicator at top
+        const indicatorGeo = new THREE.PlaneGeometry(1.2, 0.12);
+        const indicatorMat = new THREE.MeshBasicMaterial({ transparent: true });
+        xrSelectionIndicator = new THREE.Mesh(indicatorGeo, indicatorMat);
+        xrSelectionIndicator.position.set(0, 0.55, 0.02);
+        xrUIPanel.add(xrSelectionIndicator);
+        
         // Panel background
-        const bgGeo = new THREE.PlaneGeometry(1.4, 1.1);
+        const bgGeo = new THREE.PlaneGeometry(1.4, 1.3);
         const bgMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.9 });
         const bgMesh = new THREE.Mesh(bgGeo, bgMat);
         bgMesh.position.z = -0.01;
@@ -757,6 +764,10 @@
 
         xrScene.add(xrUIPanel);
         
+        // Initialize menu highlight
+        xrMenuIndex = 0;
+        updateXRMenuHighlight();
+        
         // Start auto-hide timer
         resetXRHideTimer();
     }
@@ -797,118 +808,97 @@
         // Touch listeners are added in initWebXREngine
     }
 
+    // XR menu state for tap-to-cycle navigation
+    let xrMenuIndex = 0;
+    const xrMenuItems = ['pp', 'rw', 'fw', 'm-2d', 'm-3d', 'zin', 'zout', 'dinc', 'ddec', 'rec'];
+    const xrMenuLabels = ['▶ PLAY/PAUSE', '⏪ SKIP -10s', '⏩ SKIP +10s', '2D MODE', '3D MODE', 'ZOOM IN', 'ZOOM OUT', 'FARTHER', 'CLOSER', 'RE-CENTER'];
+    let xrSelectionIndicator = null;
+
     function onScreenTouch(event) {
         event.preventDefault();
         event.stopPropagation();
-        
-        const touch = event.touches[0] || event.changedTouches[0];
-        if (touch) {
-            handleScreenTap(touch.clientX, touch.clientY);
-        }
+        handleXRTap();
     }
 
     function onScreenClick(event) {
-        handleScreenTap(event.clientX, event.clientY);
+        handleXRTap();
     }
 
     function onPointerDown(event) {
-        // Pointer events work on both touch and mouse
-        handleScreenTap(event.clientX, event.clientY);
+        handleXRTap();
     }
 
-    function handleScreenTap(x, y) {
-        // If UI is hidden, show it and return
+    function handleXRTap() {
+        // If UI is hidden, show it
         if (!xrUIVisible) {
             showXRUI();
+            xrMenuIndex = 0;
+            updateXRMenuHighlight();
             return;
         }
+        
+        // Execute current selection
+        const action = xrMenuItems[xrMenuIndex];
+        handleXRAction(action);
+        
+        // Move to next menu item
+        xrMenuIndex = (xrMenuIndex + 1) % xrMenuItems.length;
+        updateXRMenuHighlight();
+        
+        resetXRHideTimer();
+    }
 
-        const rect = xrRenderer.domElement.getBoundingClientRect();
-        const screenHeight = rect.height;
-        const screenWidth = rect.width;
+    function updateXRMenuHighlight() {
+        // Update button appearances to show current selection
+        xrButtons.forEach((btn) => {
+            const action = btn.userData.action;
+            const isHighlighted = (action === xrMenuItems[xrMenuIndex]);
+            
+            const text = btn.userData.text;
+            
+            let isActive = false;
+            if (action === 'm-2d') isActive = (viewMode === 'vr-2d');
+            if (action === 'm-3d') isActive = (viewMode === 'vr-3d');
+            
+            const bgColor = isHighlighted ? '#ffff00' : (isActive ? '#007bff' : '#333333');
+            const textColor = isHighlighted ? '#000000' : '#ffffff';
+            
+            btn.material.map = createTextTexture(text, 256, 64, bgColor, textColor, 28, false);
+            btn.material.needsUpdate = true;
+        });
         
-        // Normalize Y position (0 = top, 1 = bottom)
-        const py = (y - rect.top) / screenHeight;
+        // Update selection indicator text
+        updateXRSelectionIndicator();
+    }
+
+    function updateXRSelectionIndicator() {
+        if (!xrSelectionIndicator || !xrUIPanel) return;
         
-        // Normalize X within one viewport half (0 = left, 1 = right)
-        let px = (x - rect.left) / screenWidth;
-        if (px > 0.5) px = px - 0.5; // Map right half to 0-0.5
-        px = px * 2; // Scale to 0-1
+        const label = 'TAP TO: ' + xrMenuLabels[xrMenuIndex];
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 48;
+        const ctx = canvas.getContext('2d');
         
-        // Simple row-based detection
-        // Rows from top to bottom based on where panel content appears:
-        let hitAction = null;
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 512, 48);
         
-        if (py < 0.25) {
-            // Top area - outside panel, hide
-            hideXRUI();
-            return;
-        } else if (py < 0.38) {
-            // Progress bar row
-            hitAction = 'seek';
-        } else if (py < 0.48) {
-            // Playback row: rw | pp | fw
-            if (px < 0.35) hitAction = 'rw';
-            else if (px < 0.65) hitAction = 'pp';
-            else hitAction = 'fw';
-        } else if (py < 0.58) {
-            // View mode row: 2D | 3D
-            if (px < 0.5) hitAction = 'm-2d';
-            else hitAction = 'm-3d';
-        } else if (py < 0.68) {
-            // Zoom row: - | reset | +
-            if (px < 0.33) hitAction = 'zout';
-            else if (px < 0.66) hitAction = 'zrst';
-            else hitAction = 'zin';
-        } else if (py < 0.78) {
-            // Distance row: - | reset | +
-            if (px < 0.33) hitAction = 'ddec';
-            else if (px < 0.66) hitAction = 'drst';
-            else hitAction = 'dinc';
-        } else if (py < 0.90) {
-            // Re-center button
-            hitAction = 'rec';
-        } else {
-            // Bottom area - outside panel, hide
-            hideXRUI();
-            return;
-        }
+        ctx.fillStyle = '#ffff00';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, 256, 24);
         
-        if (hitAction === 'seek') {
-            const seekRatio = Math.max(0, Math.min(1, px));
-            if (xrVideoEl && xrVideoEl.duration) {
-                xrVideoEl.currentTime = seekRatio * xrVideoEl.duration;
-            }
-            resetXRHideTimer();
-        } else if (hitAction) {
-            handleXRAction(hitAction);
-            resetXRHideTimer();
-        }
+        xrSelectionIndicator.material.map = new THREE.CanvasTexture(canvas);
+        xrSelectionIndicator.material.needsUpdate = true;
     }
 
     function onXRSelect(event) {
-        // If UI is hidden, show it and return
-        if (!xrUIVisible) {
-            showXRUI();
-            return;
-        }
-        
-        // For controller select (trigger press), treat as center screen tap
-        // This works for cardboard magnet triggers too
-        const rect = xrRenderer.domElement.getBoundingClientRect();
-        handleScreenTap(rect.left + rect.width / 4, rect.top + rect.height / 2);
+        handleXRTap();
     }
 
     function onXRSessionSelect(event) {
-        // XR session-level select event (screen tap / cardboard trigger)
-        if (!xrUIVisible) {
-            showXRUI();
-            return;
-        }
-        
-        // Treat as center tap since we don't have precise coordinates
-        const rect = xrRenderer.domElement.getBoundingClientRect();
-        handleScreenTap(rect.left + rect.width / 4, rect.top + rect.height / 2);
+        handleXRTap();
     }
 
     function handleXRAction(action) {
@@ -1079,7 +1069,9 @@
         xrUIPanel = null;
         xrProgressBar = null;
         xrProgressFill = null;
+        xrSelectionIndicator = null;
         xrUIVisible = true;
+        xrMenuIndex = 0;
         if (xrHideTimer) clearTimeout(xrHideTimer);
         
         els.setup.style.display = 'flex';
@@ -1090,6 +1082,8 @@
         if (xrUIPanel) {
             xrUIPanel.visible = true;
             xrUIVisible = true;
+            xrMenuIndex = 0;
+            updateXRMenuHighlight();
         }
         resetXRHideTimer();
     }
