@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>VR Cinema Player (WebXR)</title>
+    <title>VR Cinema Player</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
-        
-        /* CANVAS (Stripchat approach: touch-action none for drag controls) */
         canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
 
         /* SETUP SCREEN */
@@ -16,40 +14,38 @@
         .file-btn { display: block; background: #252525; padding: 20px; text-align: center; border-radius: 12px; cursor: pointer; border: 2px dashed #444; transition: 0.2s; }
         .file-btn:hover { border-color: #007bff; background: #2a2a2a; }
         #fileInput { display: none; }
-        
-        #startBtn { 
-            width: 100%; padding: 16px; margin-top: 20px;
-            background: #007bff; color: white; border: none; border-radius: 8px; 
-            font-size: 16px; font-weight: bold; cursor: pointer; 
-            opacity: 0.5; pointer-events: none; transition: 0.3s;
-        }
+        #startBtn { width: 100%; padding: 16px; margin-top: 20px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; opacity: 0.5; pointer-events: none; transition: 0.3s; }
         #startBtn.ready { opacity: 1; pointer-events: auto; }
 
-        /* OVERLAY UI (Matches the "Shutter" style) */
-        #overlay { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 10px; background: rgba(20,20,20,0.8); padding: 10px; border-radius: 30px; backdrop-filter: blur(5px); transition: opacity 0.3s; }
-        #overlay.hidden { opacity: 0; pointer-events: none; }
+        /* UNIFIED CONTROL BAR */
+        #ui-bar { 
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); 
+            z-index: 100; display: flex; align-items: center; gap: 8px; 
+            background: rgba(20,20,20,0.9); padding: 8px 12px; border-radius: 30px; 
+            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
+            transition: opacity 0.3s; opacity: 0; pointer-events: none;
+        }
+        #ui-bar.visible { opacity: 1; pointer-events: auto; }
         
-        .btn { background: #333; color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .btn { background: #333; color: white; border: none; height: 40px; min-width: 40px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: bold; padding: 0 15px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
         .btn:hover { background: #555; }
         .btn.active { background: #007bff; }
+        .btn-icon { padding: 0; width: 40px; border-radius: 50%; font-size: 18px; }
         
-        /* VR BUTTON (Custom styled to match Stripchat's "Enter VR") */
-        #vrButton {
-            position: fixed; bottom: 30px; right: 30px; z-index: 101;
-            background: #007bff; color: white; border: none;
-            padding: 12px 24px; border-radius: 30px; font-weight: bold;
-            cursor: pointer; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-        }
+        /* VR Specific Button Style */
+        #btnEnterVR { background: #007bff; }
+        #btnEnterVR:hover { background: #0056b3; }
+
+        .divider { width: 1px; height: 25px; background: #555; margin: 0 4px; }
+        .label { font-size: 10px; color: #aaa; text-transform: uppercase; margin-right: 5px; margin-left: 5px; font-weight: bold; }
     </style>
     
-    <!-- Modern Three.js (r150+) -->
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     </script>
 </head>
 <body>
 
-<!-- SETUP -->
 <div id="setup">
     <div class="setup-box">
         <h2>VR Cinema</h2>
@@ -59,43 +55,49 @@
     </div>
 </div>
 
-<!-- CONTROLS OVERLAY -->
-<div id="overlay" class="hidden">
-    <button class="btn" id="btn2D">2D</button>
-    <button class="btn" id="btn3D">3D</button>
-    <div style="width:1px; background:#555; margin:0 5px;"></div>
-    <button class="btn" id="btnPlay">⏯</button>
-    <button class="btn" id="btnRecenter">⌖</button>
+<!-- MAIN UI -->
+<div id="ui-bar">
+    <button class="btn" id="btnEnterVR">ENTER VR</button>
+    <div class="divider"></div>
+    
+    <span class="label">Mode</span>
+    <button class="btn btn-icon active" id="btn2D" title="2D Mode">2D</button>
+    <button class="btn btn-icon" id="btn3D" title="3D SBS Mode">3D</button>
+    
+    <div class="divider"></div>
+    
+    <span class="label">Size</span>
+    <button class="btn btn-icon" id="btnZoomOut" title="Smaller / Further">-</button>
+    <button class="btn btn-icon" id="btnZoomIn" title="Bigger / Closer">+</button>
+    
+    <div class="divider"></div>
+    <button class="btn btn-icon" id="btnPlay" title="Play/Pause">⏯</button>
 </div>
-
-<button id="vrButton">ENTER VR</button>
 
 <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-    // GLOBAL VARIABLES
     let scene, camera, renderer, controls;
-    let video, videoTexture;
-    let screenGroup; // Holds the screen meshes
-    let mesh2D, meshLeft, meshRight; // The screen geometries
-    let is3D = false; // Toggle state
+    let video, screenGroup, mesh2D, meshLeft, meshRight;
+    let currentDistance = 6.0; // Starting distance (meters)
 
     const els = {
         setup: document.getElementById('setup'),
         fileInput: document.getElementById('fileInput'),
         startBtn: document.getElementById('startBtn'),
         label: document.getElementById('fileLabel'),
-        overlay: document.getElementById('overlay'),
-        vrBtn: document.getElementById('vrButton'),
+        ui: document.getElementById('ui-bar'),
+        btnEnterVR: document.getElementById('btnEnterVR'),
         btn2D: document.getElementById('btn2D'),
         btn3D: document.getElementById('btn3D'),
-        btnPlay: document.getElementById('btnPlay'),
-        btnRecenter: document.getElementById('btnRecenter')
+        btnZoomIn: document.getElementById('btnZoomIn'),
+        btnZoomOut: document.getElementById('btnZoomOut'),
+        btnPlay: document.getElementById('btnPlay')
     };
 
-    // 1. FILE HANDLING
+    // 1. INPUT HANDLING
     let videoSrc = null;
     els.fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -108,206 +110,168 @@
     els.startBtn.addEventListener('click', () => {
         if (!videoSrc) return;
         els.setup.style.display = 'none';
-        els.overlay.classList.remove('hidden');
+        els.ui.classList.add('visible');
         init();
     });
 
-    // 2. INITIALIZATION (The "Stripchat" Approach)
+    // 2. INIT ENGINE
     function init() {
-        // A. Setup Video
+        // Video
         video = document.createElement('video');
         video.src = videoSrc;
         video.crossOrigin = "anonymous";
         video.playsInline = true;
-        video.loop = true; // Optional: loop video
+        video.loop = true;
         video.play();
 
-        // B. Setup Three.js Scene
+        // Scene
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050505); // Dark grey background
-
+        scene.background = new THREE.Color(0x050505);
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 0, 0); // User is at center
 
-        // C. Renderer with WebXR enabled
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.xr.enabled = true; // MAGIC LINE: Enables WebXR
-        renderer.xr.setReferenceSpaceType('local'); // "Local" = Seated/Standing in one spot
+        renderer.xr.enabled = true;
+        renderer.xr.setReferenceSpaceType('local');
         document.body.appendChild(renderer.domElement);
 
-        // D. VR Button (Using Three.js Helper, styled custom)
-        // We replace the default button with our custom one functionality
-        const sessionInit = { optionalFeatures: [ 'local-floor', 'bounded-floor' ] };
-        const vrBtnLogic = VRButton.createButton(renderer, sessionInit);
-        // Hide standard button, wire up ours
-        vrBtnLogic.style.display = 'none'; 
-        document.body.appendChild(vrBtnLogic);
+        // WebXR Button Logic (Hidden, triggered by our UI)
+        const vrBtn = VRButton.createButton(renderer);
+        vrBtn.style.display = 'none';
+        document.body.appendChild(vrBtn);
         
-        els.vrBtn.style.display = 'block';
-        els.vrBtn.addEventListener('click', () => {
-            // Trigger the hidden Three.js VR button
-            vrBtnLogic.click(); 
+        els.btnEnterVR.addEventListener('click', () => {
+            vrBtn.click();
+            // Optional: Update text based on state
+            setTimeout(() => {
+                if(renderer.xr.isPresenting) els.btnEnterVR.textContent = "EXIT VR";
+                else els.btnEnterVR.textContent = "ENTER VR";
+            }, 1000);
         });
 
-        // E. Magic Window Controls (OrbitControls)
-        // This replicates the "Left-click & drag" behavior
+        // Magic Window Controls (Mouse/Touch Drag)
         controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 0, -5); // Look forward
-        controls.enableZoom = false;
+        controls.target.set(0, 0, -currentDistance);
+        controls.enableZoom = false; // Disable Orbit zoom, we use Physical zoom
         controls.enablePan = false;
-        controls.rotateSpeed = -0.5; // Invert drag to feel like "looking"
+        controls.rotateSpeed = -0.5;
         controls.update();
 
-        // F. Create the Cinema Screen
-        createScreen();
+        // Create Screen
+        createCinemaScreen();
 
-        // G. Animation Loop
-        renderer.setAnimationLoop(render);
+        // Loop
+        renderer.setAnimationLoop(() => {
+            controls.update();
+            renderer.render(scene, camera);
+        });
 
-        // H. Events
-        window.addEventListener('resize', onResize);
-        setupUI();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        setupControls();
     }
 
-    // 3. SCREEN GEOMETRY & LAYERS
-    function createScreen() {
-        videoTexture = new THREE.VideoTexture(video);
-        videoTexture.minFilter = THREE.LinearFilter;
-        videoTexture.magFilter = THREE.LinearFilter;
-        videoTexture.colorSpace = THREE.SRGBColorSpace;
+    function createCinemaScreen() {
+        const texture = new THREE.VideoTexture(video);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.colorSpace = THREE.SRGBColorSpace;
 
         screenGroup = new THREE.Group();
-        // Move screen 5 meters away
-        screenGroup.position.set(0, 0, -5); 
+        updateScreenDistance(); // Set initial Z
         scene.add(screenGroup);
 
-        // Aspect Ratio logic (default 16:9, adjusts on metadata)
+        // Base Geometry (Standard 16:9, corrected by metadata later)
         const aspect = 16/9;
         const width = 8; 
         const height = width / aspect;
-        const geometry = new THREE.PlaneGeometry(width, height);
+        const geo = new THREE.PlaneGeometry(width, height);
 
-        // --- MESH 1: 2D MODE (Magic Window / Non-VR) ---
-        // Visible on Layer 0 (Default)
-        const mat2D = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
-        mesh2D = new THREE.Mesh(geometry, mat2D);
-        mesh2D.layers.set(0); 
+        // 2D Mesh (Layer 0 = Default/Desktop, Layer 1&2 = VR Left/Right for Mono viewing)
+        mesh2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        mesh2D.layers.enable(1); mesh2D.layers.enable(2); // Visible in VR
         screenGroup.add(mesh2D);
 
-        // --- MESH 2: LEFT EYE (VR 3D) ---
-        // Visible on Layer 1
-        const matLeft = mat2D.clone();
-        // UV Mapping: 0.0 to 0.5 (Left half of video)
-        const uvAttributeL = geometry.clone().attributes.uv;
-        for ( let i = 0; i < uvAttributeL.count; i ++ ) {
-            uvAttributeL.setX( i, uvAttributeL.getX( i ) * 0.5 );
-        }
-        meshLeft = new THREE.Mesh(new THREE.PlaneGeometry(width, height), matLeft);
-        meshLeft.geometry.setAttribute('uv', uvAttributeL);
-        meshLeft.layers.set(1); // Left Eye
+        // 3D Left Mesh (Layer 1)
+        const geoL = geo.clone();
+        const uvL = geoL.attributes.uv;
+        for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i) * 0.5);
+        meshLeft = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        meshLeft.layers.set(1); 
+        meshLeft.visible = false;
         screenGroup.add(meshLeft);
 
-        // --- MESH 3: RIGHT EYE (VR 3D) ---
-        // Visible on Layer 2
-        const matRight = mat2D.clone();
-        // UV Mapping: 0.5 to 1.0 (Right half of video)
-        const uvAttributeR = geometry.clone().attributes.uv;
-        for ( let i = 0; i < uvAttributeR.count; i ++ ) {
-            uvAttributeR.setX( i, (uvAttributeR.getX( i ) * 0.5) + 0.5 );
-        }
-        meshRight = new THREE.Mesh(new THREE.PlaneGeometry(width, height), matRight);
-        meshRight.geometry.setAttribute('uv', uvAttributeR);
-        meshRight.layers.set(2); // Right Eye
+        // 3D Right Mesh (Layer 2)
+        const geoR = geo.clone();
+        const uvR = geoR.attributes.uv;
+        for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
+        meshRight = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        meshRight.layers.set(2);
+        meshRight.visible = false;
         screenGroup.add(meshRight);
 
-        // Default to 2D visibility
-        setMode2D();
-
-        // Update aspect ratio when video loads
+        // Handle Aspect Ratio
         video.addEventListener('loadedmetadata', () => {
+            if(!video.videoWidth) return;
             const vidAspect = video.videoWidth / video.videoHeight;
-            // Scale the group to match aspect
-            const newH = width / vidAspect;
-            screenGroup.scale.set(1, (16/9) / vidAspect, 1); 
+            // Scale Y instead of regenerating geometry
+            const scaleY = (16/9) / vidAspect; 
+            screenGroup.scale.set(1, scaleY, 1);
         });
     }
 
-    // 4. RENDERING & LOGIC
-    function render() {
-        // Standard Texture update is automatic in Three.js VideoTexture
+    function setupControls() {
+        // Mode Switching
+        els.btn2D.addEventListener('click', () => {
+            els.btn2D.classList.add('active'); els.btn3D.classList.remove('active');
+            mesh2D.visible = true; meshLeft.visible = false; meshRight.visible = false;
+        });
         
-        // Handle Magic Window controls
-        controls.update();
+        els.btn3D.addEventListener('click', () => {
+            els.btn3D.classList.add('active'); els.btn2D.classList.remove('active');
+            mesh2D.visible = false; meshLeft.visible = true; meshRight.visible = true;
+            // Ensure Left eye is visible on Desktop (Layer 0) for preview
+            meshLeft.layers.enable(0);
+        });
 
-        renderer.render(scene, camera);
-    }
+        // Zoom (Distance)
+        // Closer = Bigger (-Z decreases towards 0)
+        // Further = Smaller (-Z increases)
+        els.btnZoomIn.addEventListener('click', () => {
+            currentDistance -= 1.0;
+            if(currentDistance < 2.0) currentDistance = 2.0; // Max zoom in
+            updateScreenDistance();
+        });
 
-    function onResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+        els.btnZoomOut.addEventListener('click', () => {
+            currentDistance += 1.0;
+            if(currentDistance > 15.0) currentDistance = 15.0; // Max zoom out
+            updateScreenDistance();
+        });
 
-    // 5. UI & LOGIC
-    function setupUI() {
-        els.btn2D.addEventListener('click', () => { setMode2D(); });
-        els.btn3D.addEventListener('click', () => { setMode3D(); });
-        
+        // Playback
         els.btnPlay.addEventListener('click', () => {
             if(video.paused) { video.play(); els.btnPlay.textContent = '⏸'; }
             else { video.pause(); els.btnPlay.textContent = '▶'; }
         });
-
-        els.btnRecenter.addEventListener('click', () => {
-            // Reset orbit controls
-            controls.reset();
-            // Recenter VR view
-            if(renderer.xr.isPresenting) {
-                 // WebXR recentering is handled by the device mostly, 
-                 // but we can reset the camera group offset if we had one.
-            }
-        });
     }
 
-    function setMode2D() {
-        is3D = false;
-        els.btn2D.classList.add('active');
-        els.btn3D.classList.remove('active');
+    function updateScreenDistance() {
+        // Move screen along negative Z axis
+        if(screenGroup) screenGroup.position.set(0, 0, -currentDistance);
         
-        // In 2D Mode:
-        // Magic Window (Layer 0) sees mesh2D (Full video)
-        // VR Left (Layer 1) sees mesh2D (Full video) - Monoscopic VR
-        // VR Right (Layer 2) sees mesh2D (Full video) - Monoscopic VR
-        
-        mesh2D.visible = true;
-        meshLeft.visible = false;
-        meshRight.visible = false;
-
-        // Make mesh2D visible to all layers so it looks correct in VR headset too (Mono)
-        mesh2D.layers.enable(1);
-        mesh2D.layers.enable(2);
+        // Update orbit controls target so rotation feels correct
+        if(controls) {
+            controls.target.set(0, 0, -currentDistance);
+            controls.update();
+        }
     }
-
-    function setMode3D() {
-        is3D = true;
-        els.btn3D.classList.add('active');
-        els.btn2D.classList.remove('active');
-
-        // In 3D Mode:
-        // Magic Window (Layer 0) sees meshLeft (Left eye only, to avoid squashed look)
-        // VR Left (Layer 1) sees meshLeft
-        // VR Right (Layer 2) sees meshRight
-
-        mesh2D.visible = false;
-        meshLeft.visible = true;
-        meshRight.visible = true;
-
-        // Ensure meshLeft is visible on desktop (Layer 0)
-        meshLeft.layers.enable(0); 
-    }
-
 </script>
 </body>
 </html>
