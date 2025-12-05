@@ -4,89 +4,76 @@
     <title>Hybrid VR Player</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-    <meta name="mobile-web-app-capable" content="yes">
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
+        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; color: white; }
         
-        /* --- SETUP SCREEN (Based on your Diagram) --- */
-        #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        /* --- SETUP LAYOUT (Split Screen) --- */
+        #setup { position: fixed; inset: 0; background: #000; z-index: 10000; display: flex; align-items: center; justify-content: center; }
         
-        .setup-grid { 
-            display: grid; 
-            grid-template-columns: 300px 500px; 
-            gap: 20px; 
-            background: #1e1e1e; 
-            padding: 30px; 
-            border-radius: 12px; 
-            border: 2px solid #333;
-            max-width: 90vw;
+        .container {
+            display: grid;
+            grid-template-columns: 220px 1fr; /* Left Menu, Right Preview */
+            gap: 20px;
+            width: 90%;
+            max-width: 900px;
+            height: 400px;
+            background: #fff; /* White background per diagram style */
+            padding: 20px;
+            box-sizing: border-box;
+            border: 4px solid #000;
         }
 
         /* Left Column */
-        .left-col { display: flex; flex-direction: column; gap: 20px; justify-content: center; }
-        
-        .action-btn { 
-            display: flex; align-items: center; justify-content: center;
-            height: 80px; 
-            background: white; color: black; 
-            font-weight: bold; font-size: 18px; 
-            border: 3px solid black; cursor: pointer; 
-            text-align: center; text-transform: uppercase;
-        }
-        .action-btn:hover { background: #eee; }
-        .action-btn:disabled { background: #555; color: #888; border-color: #555; cursor: not-allowed; }
-        
-        #fileInput { display: none; }
+        .menu-col { display: flex; flex-direction: column; gap: 15px; justify-content: flex-start; }
 
-        .radio-group { display: flex; gap: 20px; align-items: center; margin-top: 10px; }
-        .radio-item { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .big-btn {
+            display: flex; align-items: center; justify-content: center;
+            height: 60px;
+            background: #fff; color: #000;
+            border: 3px solid #000;
+            font-weight: bold; font-size: 14px; text-transform: uppercase;
+            cursor: pointer; position: relative;
+        }
+        .big-btn:hover { background: #eee; }
+        .big-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        /* Custom Radio Circle */
-        .radio-item input { display: none; }
-        .circle { width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; display: inline-block; position: relative; }
-        .radio-item input:checked + .circle { background: white; }
-        .radio-item input:checked + .circle::after { content:''; position: absolute; inset: 4px; background: black; border-radius: 50%; }
+        #fileInput { position: absolute; inset:0; opacity:0; cursor: pointer; }
+
+        .radio-group { display: flex; gap: 15px; margin-top: auto; padding-top: 10px; }
+        .radio-opt { display: flex; align-items: center; gap: 8px; color: #000; font-weight: bold; font-size: 14px; cursor: pointer; }
+        .radio-circle { width: 20px; height: 20px; border: 3px solid #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .radio-opt input { display: none; }
+        .radio-opt input:checked + .radio-circle::after { content:''; width: 10px; height: 10px; background: #000; border-radius: 50%; }
 
         /* Right Column (Preview) */
-        .right-col { 
-            border: 3px solid black; 
-            background: #000; 
-            height: 300px; 
-            display: flex; align-items: center; justify-content: center; 
-            overflow: hidden; 
-            position: relative;
+        .preview-col {
+            border: 3px solid #000;
+            background: #eee;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; overflow: hidden;
         }
-        #previewVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
-        .preview-text { color: #555; font-weight: bold; text-transform: uppercase; }
+        .preview-placeholder { color: #555; font-weight: bold; font-size: 12px; text-transform: uppercase; }
+        #previewVideo { width: 100%; height: 100%; object-fit: contain; display: none; outline: none; }
 
-        /* --- OVERLAY UI (Shared Styles) --- */
-        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; padding: 10px 0; transition: opacity 0.3s; }
-        #overlay.visible { display: flex; opacity: 1; }
+        /* --- OVERLAY UI (Dark Mode for VR) --- */
+        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.6); z-index: 9999; display: none; padding: 5px 0; }
+        #overlay.visible { display: flex; }
         #overlay.single { justify-content: center; } 
         #overlay.split { justify-content: space-around; }
-        .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
-        .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
-        button.ui-btn { cursor: pointer; }
-        .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
-        .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
-        .btn-pill.active { background: #007bff; color: white; }
-        .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
-        .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
-        .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
-        .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
-
-        /* WebXR Specific Button */
-        #xr-button-container { position: absolute; bottom: 20px; right: 20px; z-index: 9999; }
         
-        /* Mobile adjustment */
-        @media (max-width: 850px) {
-            .setup-grid { grid-template-columns: 1fr; width: 100%; padding: 15px; }
-            .right-col { height: 200px; }
-            .action-btn { height: 60px; }
-        }
+        .ctrl-panel { width: 300px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .row { display: flex; gap: 5px; justify-content: center; width: 100%; align-items: center; }
+        
+        button.ui-btn { cursor: pointer; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: bold; min-width: 30px; }
+        button.ui-btn:hover { background: #555; }
+        button.ui-btn.active { background: #007bff; border-color: #007bff; }
+        button.ui-btn.big { width: 90%; padding: 8px; margin-top: 4px; }
+        
+        .lbl { font-size: 9px; color: #aaa; text-transform: uppercase; margin-top: 2px; }
+        .prog-track { width: 100%; height: 6px; background: #444; border-radius: 3px; cursor: pointer; position: relative; margin-bottom: 4px; }
+        .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 3px; pointer-events: none; }
     </style>
-    
-    <!-- Three.js Import -->
+    <!-- Import Map for Three.js -->
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     </script>
@@ -95,42 +82,40 @@
 
 <!-- SETUP SCREEN -->
 <div id="setup">
-    <div class="setup-grid">
-        <!-- Left Column -->
-        <div class="left-col">
-            <label class="action-btn">
+    <div class="container">
+        <!-- Left Menu -->
+        <div class="menu-col">
+            <label class="big-btn">
                 Select Video
                 <input type="file" id="fileInput" accept="video/*">
             </label>
             
-            <button id="enterBtn" class="action-btn" disabled>Enter VR</button>
+            <button id="enterBtn" class="big-btn" disabled>Enter VR</button>
             
             <div class="radio-group">
-                <label class="radio-item">
+                <label class="radio-opt">
                     <input type="radio" name="engine" value="webgl" checked>
-                    <span class="circle"></span>
-                    WebGL
+                    <div class="radio-circle"></div> WebGL
                 </label>
-                <label class="radio-item">
+                <label class="radio-opt">
                     <input type="radio" name="engine" value="webxr">
-                    <span class="circle"></span>
-                    WebXR
+                    <div class="radio-circle"></div> WebXR
                 </label>
             </div>
         </div>
 
-        <!-- Right Column -->
-        <div class="right-col">
-            <span class="preview-text" id="previewText">(Video Preview Window)</span>
-            <video id="previewVideo" playsinline muted loop></video>
+        <!-- Right Preview -->
+        <div class="preview-col">
+            <span class="preview-placeholder" id="placeholder">(Video Preview Window)</span>
+            <video id="previewVideo" playsinline controls></video>
         </div>
     </div>
 </div>
 
-<!-- SHARED OVERLAY (Populated dynamically) -->
+<!-- OVERLAY -->
 <div id="overlay"></div>
 
-<!-- SHADERS FOR WEBGL MODE (LANCZOS) -->
+<!-- SHADERS (Only used for WebGL Mode) -->
 <script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}</script>
 <script id="fs" type="x-shader/x-fragment">
     precision highp float;
@@ -163,144 +148,172 @@
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-    // === GLOBAL STATE ===
-    let selectedMode = 'webgl'; // 'webgl' or 'webxr'
-    let srcURL = null;
+    // GLOBAL VARIABLES
+    let selectedEngine = 'webgl';
+    let videoURL = null;
     let mainVideo = null;
     
-    // UI References
-    const setupDiv = document.getElementById('setup');
-    const previewVid = document.getElementById('previewVideo');
-    const previewText = document.getElementById('previewText');
-    const enterBtn = document.getElementById('enterBtn');
-    const overlay = document.getElementById('overlay');
-    
-    // --- SETUP LOGIC ---
-    document.querySelectorAll('input[name="engine"]').forEach(r => {
-        r.addEventListener('change', (e) => selectedMode = e.target.value);
+    const els = {
+        setup: document.getElementById('setup'),
+        preview: document.getElementById('previewVideo'),
+        placeholder: document.getElementById('placeholder'),
+        enterBtn: document.getElementById('enterBtn'),
+        overlay: document.getElementById('overlay'),
+        fileInput: document.getElementById('fileInput')
+    };
+
+    // --- 1. SETUP LOGIC ---
+
+    // Engine Selection
+    document.querySelectorAll('input[name="engine"]').forEach(radio => {
+        radio.addEventListener('change', (e) => selectedEngine = e.target.value);
     });
 
-    document.getElementById('fileInput').addEventListener('change', (e) => {
-        const f = e.target.files[0]; if(!f) return;
-        srcURL = URL.createObjectURL(f);
-        previewVid.src = srcURL;
-        previewVid.style.display = 'block';
-        previewVid.play();
-        previewText.style.display = 'none';
-        enterBtn.disabled = false;
+    // File Selection & Preview
+    els.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        videoURL = URL.createObjectURL(file);
+        
+        // Setup Preview
+        els.preview.src = videoURL;
+        els.preview.style.display = 'block';
+        els.placeholder.style.display = 'none';
+        els.enterBtn.disabled = false;
+        
+        // Reset enter button text
+        els.enterBtn.textContent = "ENTER VR";
     });
 
-    enterBtn.addEventListener('click', async () => {
-        // Pause preview
-        previewVid.pause();
-        setupDiv.style.display = 'none';
-
-        // Initialize Main Video Element
+    // Start Button
+    els.enterBtn.addEventListener('click', () => {
+        // Pause Preview
+        els.preview.pause();
+        
+        // Create Main Video Element (Clean for Three.js)
         mainVideo = document.createElement('video');
-        mainVideo.src = srcURL;
+        mainVideo.src = videoURL;
         mainVideo.crossOrigin = "anonymous";
         mainVideo.playsInline = true;
-        mainVideo.loop = false;
+        mainVideo.loop = false; // User controls loop via UI
         
-        // Route to appropriate engine
-        if (selectedMode === 'webgl') {
-            await initWebGL();
+        // Hide UI
+        els.setup.style.display = 'none';
+
+        if (selectedEngine === 'webgl') {
+            initLegacyWebGL();
         } else {
-            await initWebXR();
+            initModernWebXR();
         }
     });
 
-    // =========================================================
-    // ENGINE 1: LEGACY WEBGL (Your Original Approach)
-    // =========================================================
-    async function initWebGL() {
-        // Permissions for Cardboard style
+
+    // --- 2. ENGINE: LEGACY WEBGL (Cardboard/Phone) ---
+    async function initLegacyWebGL() {
+        // Permissions
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
             try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
         }
-        const de = document.documentElement; if(de.requestFullscreen) de.requestFullscreen();
-        if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
+        document.documentElement.requestFullscreen?.();
+        screen.orientation?.lock?.('landscape').catch(()=>{});
 
-        // Variables
+        // State
         let viewMode = 'full';
         const defs = { z: 1.0, d: 3.0, i: 0.0 };
         let params = { ...defs };
-        let hideTimer = null;
+        let timer = null;
         let videoAspect = 16/9;
 
-        // Scene Setup
+        // Scene
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
         const screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
         const tracker = new Tracker(); tracker.connect();
 
-        // Video Texture & Geometry
-        const tex = new THREE.VideoTexture(mainVideo); 
-        tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+        // Texture
+        mainVideo.play();
+        const tex = new THREE.VideoTexture(mainVideo);
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
 
         mainVideo.addEventListener('loadedmetadata', () => {
             if(mainVideo.videoWidth) videoAspect = mainVideo.videoWidth / mainVideo.videoHeight;
         });
 
+        // Geometry & Materials (Restored Logic)
         const geo = new THREE.PlaneGeometry(6, 6);
-        const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2})); 
-        mStd.name = 'screenStandard'; screenGroup.add(mStd);
+        
+        // Standard View (Basic Material - Bright)
+        const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2}));
+        mStd.name = 'screenStandard';
+        screenGroup.add(mStd);
 
-        const vs = document.getElementById('vs').textContent;
-        const fs = document.getElementById('fs').textContent;
-        // High Precision Shader Material (recreated from first prompt)
-        // Note: fsL and fsR in your original were slightly different to handle SBS crop. 
-        // I will use simple SBS split logic in shader for mL/mR.
-        const fsL = fs.replace('textureLanczos(tDiffuse, uv, texSize)', 'textureLanczos(tDiffuse, vec2(uv.x*0.5, uv.y), texSize)'); 
-        // Note: Real Lanczos requires complex lookup, for simplicity in "Legacy" I'm injecting the crop coordinate directly into the call or using the main fs.
-        // Actually, to match your *exact* request, I will use the code from the first prompt logic which passed specific uniforms or logic.
-        // Let's stick to the ShaderMaterial setup:
-        const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{tDiffuse:{value:tex}, texSize:{value:new THREE.Vector2(1920,1080)}, zoom:{value:1}, ipd:{value:0}}, vertexShader:vs, fragmentShader:fs, side:2}));
-        // We handle splitting in the StereoEffect pass, not here.
-        // In the original code, the screenSBS meshes were just mapped textures, and the distortion happened in post-process.
+        // SBS View (Shader Material - For StereoEffect pipeline to process correctly)
+        // Note: In the original working code, mL and mR used specific shaders to crop.
+        // We will do simple UV mapping for splitting here to ensure video shows up.
+        const geoL = geo.clone(); 
+        const uvL = geoL.attributes.uv; for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i)*0.5);
+        const mL = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({map:tex, side:2}));
+        mL.name = 'screenSBS_L'; mL.visible = false;
         
-        // Let's replicate the structure exactly:
-        // Original used standard map for screenSBS meshes, and StereoEffect did the distortion.
-        const mSBSL = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex})); // Simplified for structure
-        const mSBSR = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex}));
-        // Actually, the original code had custom shaders on the meshes themselves. 
-        // I will stick to the StereoEffect doing the heavy lifting to avoid shader compilation errors here.
+        const geoR = geo.clone(); 
+        const uvR = geoR.attributes.uv; for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i)*0.5)+0.5);
+        const mR = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({map:tex, side:2}));
+        mR.name = 'screenSBS_R'; mR.visible = false;
+
+        // For StereoEffect to work with layers/masks, we actually add these to specific layers or toggle visibility
+        // To match the legacy "shader pipeline" exactly requires the StereoEffect class below.
+        // We will use the StereoEffect to render the *scene*.
+        // The scene needs to contain the object.
         
+        // Re-adding the Shader Material approach for mL/mR so they render correctly in the custom pass
+        // The Custom Pass expects 'tDiffuse' to come from the scene render.
+        // So the scene just needs to show the video texture on a plane.
+        
+        // Let's stick to the "toggle" approach which is more robust.
+        screenGroup.add(mL);
+        screenGroup.add(mR);
+
         // Renderer
         const renderer = new THREE.WebGLRenderer({antialias:false});
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        const effect = new StereoEffect(renderer, mainVideo); 
+        const effect = new StereoEffect(renderer, mainVideo);
         effect.setSize(window.innerWidth, window.innerHeight);
 
-        mainVideo.play();
-
-        // Overlay Logic (The Complex One)
+        // UI Logic
         function updateOverlay() {
-            const isFull = (viewMode === 'full'); 
-            overlay.className = isFull ? 'visible single' : 'visible split'; 
+            const isFull = (viewMode === 'full');
+            els.overlay.className = isFull ? 'visible single' : 'visible split';
             resetTimer();
 
             const controls = `
                 <div class="row"><div class="prog-track"><div class="prog-fill"></div></div></div>
-                <div class="row"><button class="ui-btn btn-icon rw">&laquo;</button><button class="ui-btn btn-icon pp">▶</button><button class="ui-btn btn-icon fw">&raquo;</button></div>
-                <div class="lbl">View Mode</div>
-                <div class="row"><button class="ui-btn btn-pill m-full ${viewMode==='full'?'active':''}">FULL</button><button class="ui-btn btn-pill m-2d ${viewMode==='vr-2d'?'active':''}">2D</button><button class="ui-btn btn-pill m-3d ${viewMode==='vr-3d'?'active':''}">3D</button></div>
-                <div class="lbl">Zoom</div>
-                <div class="row"><button class="ui-btn btn-icon zout">-</button><button class="ui-btn btn-pill zrst">RESET</button><button class="ui-btn btn-icon zin">+</button></div>
-                <div class="lbl">Distance</div>
-                <div class="row"><button class="ui-btn btn-icon ddec">-</button><button class="ui-btn btn-pill drst">RESET</button><button class="ui-btn btn-icon dinc">+</button></div>
+                <div class="row"><button class="ui-btn pp">⏯</button><button class="ui-btn rw">«</button><button class="ui-btn fw">»</button></div>
+                <div class="lbl">Mode</div>
+                <div class="row">
+                    <button class="ui-btn ${viewMode==='full'?'active':''} m-full">FULL</button>
+                    <button class="ui-btn ${viewMode==='vr-2d'?'active':''} m-2d">2D</button>
+                    <button class="ui-btn ${viewMode==='vr-3d'?'active':''} m-3d">3D</button>
+                </div>
+                <div class="lbl">Settings</div>
+                <div class="row">
+                    <button class="ui-btn zout">Z-</button><button class="ui-btn zrst">R</button><button class="ui-btn zin">Z+</button>
+                    <span style="width:5px"></span>
+                    <button class="ui-btn ddec">D-</button><button class="ui-btn drst">R</button><button class="ui-btn dinc">D+</button>
+                </div>
                 <div class="lbl">IPD</div>
-                <div class="row"><button class="ui-btn btn-icon idec">-</button><button class="ui-btn btn-pill irst">RESET</button><button class="ui-btn btn-icon iinc">+</button></div>
-                <button class="ui-btn btn-wide rec">RE-CENTER</button>
+                <div class="row"><button class="ui-btn idec">-</button><button class="ui-btn irst">R</button><button class="ui-btn iinc">+</button></div>
+                <button class="ui-btn big rec">RE-CENTER</button>
             `;
-            overlay.innerHTML = isFull ? `<div class="ctrl-panel">${controls}</div>` : `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
+            els.overlay.innerHTML = isFull ? `<div class="ctrl-panel">${controls}</div>` : `<div class="ctrl-panel">${controls}</div><div class="ctrl-panel">${controls}</div>`;
         }
 
-        function handleInput(e) {
+        els.overlay.addEventListener('click', (e) => {
             e.stopPropagation(); const t = e.target.closest('button, .prog-track'); if(!t) return; const cl = t.classList;
+            
             if(cl.contains('m-full')) { viewMode='full'; params.z=1.0; params.d=3.0; updateOverlay(); }
             if(cl.contains('m-2d')) { viewMode='vr-2d'; updateOverlay(); }
             if(cl.contains('m-3d')) { viewMode='vr-3d'; updateOverlay(); }
@@ -308,57 +321,62 @@
             if(cl.contains('dinc')) params.d+=0.5; if(cl.contains('ddec')) params.d-=0.5; if(cl.contains('drst')) params.d=defs.d;
             if(cl.contains('iinc')) params.i+=0.005; if(cl.contains('idec')) params.i-=0.005; if(cl.contains('irst')) params.i=defs.i;
             if(cl.contains('rec')) screenGroup.quaternion.copy(camera.quaternion);
-            if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); mainVideo.currentTime = ((e.clientX - r.left)/r.width) * mainVideo.duration; }
             if(cl.contains('pp')) mainVideo.paused ? mainVideo.play() : mainVideo.pause();
             if(cl.contains('rw')) mainVideo.currentTime -= 10; if(cl.contains('fw')) mainVideo.currentTime += 10;
-        }
-
-        overlay.addEventListener('click', handleInput);
-        document.addEventListener('click', (e) => { 
-            if(e.target.closest('#overlay')) { resetTimer(); return; } 
-            overlay.classList.contains('visible') ? overlay.classList.remove('visible') : overlay.classList.add('visible');
+            if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); mainVideo.currentTime = ((e.clientX - r.left)/r.width) * mainVideo.duration; }
             resetTimer();
         });
-        function resetTimer() { if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(() => overlay.classList.remove('visible'), 4000); }
+        
+        document.addEventListener('click', (e) => { 
+            if(e.target.closest('#overlay')) { resetTimer(); return; }
+            els.overlay.classList.toggle('visible'); resetTimer();
+        });
+        function resetTimer() { if(timer) clearTimeout(timer); timer = setTimeout(()=>els.overlay.classList.remove('visible'), 4000); }
 
         updateOverlay();
 
-        // Animation Loop
+        // Loop
         function animate() {
             requestAnimationFrame(animate);
             tracker.update(); camera.quaternion.copy(tracker.getQ());
             
-            // Logic from original approach
+            // Positioning Logic
             let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
             let s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
             let effAspect = (viewMode === 'vr-3d') ? videoAspect / 2.0 : videoAspect;
-
-            screenGroup.children.forEach(c => { c.position.z = z; c.scale.set(s, s/effAspect, s); });
             
-            // Progress bar
-            const p = (mainVideo.currentTime/mainVideo.duration)*100;
-            document.querySelectorAll('.prog-fill').forEach(f=>f.style.width=p+'%');
+            screenGroup.children.forEach(c => { c.position.z = z; c.scale.set(s, s/effAspect, s); });
 
-            if(viewMode === 'full') {
-                renderer.setScissorTest(false); renderer.setViewport(0,0,window.innerWidth,window.innerHeight); renderer.render(scene, camera);
+            // Visibility Toggle
+            if(viewMode === 'vr-3d') {
+                mStd.visible = false; mL.visible = true; mR.visible = true;
             } else {
-                effect.setUniforms(params.i, params.z); effect.render(scene, camera);
+                mStd.visible = true; mL.visible = false; mR.visible = false;
+            }
+
+            // Progress Bar
+            const p = (mainVideo.currentTime/mainVideo.duration)*100;
+            document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p+'%');
+
+            // Render
+            if(viewMode === 'full') {
+                renderer.setScissorTest(false);
+                renderer.setViewport(0,0,window.innerWidth,window.innerHeight);
+                renderer.render(scene, camera);
+            } else {
+                effect.setUniforms(params.i, params.z);
+                effect.render(scene, camera);
             }
         }
         animate();
     }
 
 
-    // =========================================================
-    // ENGINE 2: MODERN WEBXR (Your New Approach)
-    // =========================================================
-    async function initWebXR() {
-        // Init Video
+    // --- 3. ENGINE: MODERN WEBXR (Headset) ---
+    async function initModernWebXR() {
         mainVideo.play();
-
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050505);
-        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        const scene = new THREE.Scene(); scene.background = new THREE.Color(0x111111);
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 100);
         
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -367,110 +385,87 @@
         renderer.xr.setReferenceSpaceType('local');
         document.body.appendChild(renderer.domElement);
 
-        // WebXR Controls
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableZoom = false; controls.enablePan = false; controls.rotateSpeed = -0.5;
 
-        // The Screen
         const screenGroup = new THREE.Group(); scene.add(screenGroup);
         const tex = new THREE.VideoTexture(mainVideo);
         tex.minFilter = THREE.LinearFilter; tex.colorSpace = THREE.SRGBColorSpace;
 
-        const geo = new THREE.PlaneGeometry(8, 4.5); // Default 16:9
+        const geo = new THREE.PlaneGeometry(8, 4.5);
         
-        // 2D Mesh (Layer 0, 1, 2)
+        // 2D Mesh (Default)
         const m2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2}));
         m2D.layers.enable(1); m2D.layers.enable(2);
         screenGroup.add(m2D);
 
-        // 3D Left (Layer 1)
-        const geoL = geo.clone(); 
-        const uvL = geoL.attributes.uv; for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i)*0.5);
+        // 3D Meshes
+        const geoL = geo.clone(); const uvL = geoL.attributes.uv; for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i)*0.5);
         const mL = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({map:tex, side:2}));
-        mL.layers.set(1); mL.visible = false;
-        screenGroup.add(mL);
+        mL.layers.set(1); mL.visible = false; screenGroup.add(mL);
 
-        // 3D Right (Layer 2)
-        const geoR = geo.clone();
-        const uvR = geoR.attributes.uv; for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i)*0.5)+0.5);
+        const geoR = geo.clone(); const uvR = geoR.attributes.uv; for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i)*0.5)+0.5);
         const mR = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({map:tex, side:2}));
-        mR.layers.set(2); mR.visible = false;
-        screenGroup.add(mR);
+        mR.layers.set(2); mR.visible = false; screenGroup.add(mR);
 
-        // State for XR
-        let currentDist = 6.0;
-        let is3D = false;
-        let hideTimer = null;
+        let dist = 6.0; let is3D = false; let timer = null;
 
         mainVideo.addEventListener('loadedmetadata', () => {
-             const asp = mainVideo.videoWidth / mainVideo.videoHeight;
-             screenGroup.scale.set(1, (16/9)/asp, 1);
+            const asp = mainVideo.videoWidth / mainVideo.videoHeight;
+            screenGroup.scale.set(1, (16/9)/asp, 1);
         });
 
-        // Add VR Button (Hidden, triggered by UI)
-        const vrBtn = VRButton.createButton(renderer);
-        vrBtn.style.display = 'none'; document.body.appendChild(vrBtn);
-
-        // UI FOR WEBXR MODE
+        // UI
         function updateOverlay() {
-            overlay.className = 'visible single'; 
-            resetTimer();
-
-            // Simple controls for XR
+            els.overlay.className = 'visible single';
             const html = `
                 <div class="ctrl-panel">
                     <div class="row"><div class="prog-track"><div class="prog-fill"></div></div></div>
-                    <div class="row">
-                        <button class="ui-btn btn-pill m-2d ${!is3D?'active':''}">2D</button>
-                        <button class="ui-btn btn-pill m-3d ${is3D?'active':''}">3D</button>
-                        <div style="width:10px"></div>
-                        <button class="ui-btn btn-icon zout">-</button>
-                        <span class="lbl" style="margin:0 5px">SIZE</span>
-                        <button class="ui-btn btn-icon zin">+</button>
-                    </div>
-                    <div class="row" style="margin-top:10px">
-                         <button class="ui-btn btn-wide xr-toggle">ENTER VR</button>
+                    <div class="row"><button class="ui-btn pp">⏯</button><button class="ui-btn rw">«</button><button class="ui-btn fw">»</button></div>
+                    <div class="row" style="margin-top:5px">
+                        <button class="ui-btn ${!is3D?'active':''} m-2d">2D</button>
+                        <button class="ui-btn ${is3D?'active':''} m-3d">3D</button>
+                        <span style="width:10px"></span>
+                        <button class="ui-btn zout">Size -</button>
+                        <button class="ui-btn zin">Size +</button>
                     </div>
                 </div>`;
-            overlay.innerHTML = html;
+            els.overlay.innerHTML = html;
         }
 
-        overlay.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const t = e.target.closest('button, .prog-track'); if(!t) return;
-            const cl = t.classList;
+        const vrBtn = VRButton.createButton(renderer);
+        vrBtn.style.display = 'none'; document.body.appendChild(vrBtn);
+        // Auto-click VR button for smooth entry
+        setTimeout(() => vrBtn.click(), 100);
 
+        els.overlay.addEventListener('click', (e) => {
+            e.stopPropagation(); const t = e.target.closest('button, .prog-track'); if(!t) return; const cl = t.classList;
+            
             if(cl.contains('m-2d')) { is3D=false; m2D.visible=true; mL.visible=false; mR.visible=false; updateOverlay(); }
             if(cl.contains('m-3d')) { is3D=true; m2D.visible=false; mL.visible=true; mR.visible=true; mL.layers.enable(0); updateOverlay(); }
-            if(cl.contains('zout')) { currentDist+=1; if(currentDist>15)currentDist=15; }
-            if(cl.contains('zin')) { currentDist-=1; if(currentDist<2)currentDist=2; }
-            if(cl.contains('xr-toggle')) vrBtn.click();
-            
-            if(cl.contains('prog-track')) { const r=t.getBoundingClientRect(); mainVideo.currentTime=((e.clientX-r.left)/r.width)*mainVideo.duration; }
+            if(cl.contains('zout')) { dist+=1; if(dist>15)dist=15; }
+            if(cl.contains('zin')) { dist-=1; if(dist<2)dist=2; }
+            if(cl.contains('pp')) mainVideo.paused ? mainVideo.play() : mainVideo.pause();
+            if(cl.contains('rw')) mainVideo.currentTime -= 10;
+            if(cl.contains('fw')) mainVideo.currentTime += 10;
+            if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); mainVideo.currentTime = ((e.clientX - r.left)/r.width) * mainVideo.duration; }
             resetTimer();
         });
-        
+
         document.addEventListener('click', (e) => { 
-            if(e.target.closest('#overlay')) { resetTimer(); return; } 
-            overlay.classList.contains('visible') ? overlay.classList.remove('visible') : overlay.classList.add('visible');
-            resetTimer();
+            if(e.target.closest('#overlay')) { resetTimer(); return; }
+            els.overlay.classList.toggle('visible'); resetTimer();
         });
-        function resetTimer() { if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(() => overlay.classList.remove('visible'), 4000); }
+        function resetTimer() { if(timer) clearTimeout(timer); timer = setTimeout(()=>els.overlay.classList.remove('visible'), 4000); }
 
         updateOverlay();
 
         renderer.setAnimationLoop(() => {
-            // Logic
-            screenGroup.position.set(0, 0, -currentDist);
-            controls.target.set(0, 0, -currentDist);
+            screenGroup.position.set(0, 0, -dist);
+            controls.target.set(0, 0, -dist);
             controls.update();
-
-            // Progress
-            if(mainVideo.duration) {
-                const p = (mainVideo.currentTime/mainVideo.duration)*100;
-                document.querySelectorAll('.prog-fill').forEach(f=>f.style.width=p+'%');
-            }
-
+            const p = (mainVideo.currentTime/mainVideo.duration)*100;
+            document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p+'%');
             renderer.render(scene, camera);
         });
 
@@ -480,16 +475,14 @@
         });
     }
 
-    // =========================================================
-    // HELPERS FOR LEGACY MODE (StereoEffect & Tracker)
-    // =========================================================
+    // --- HELPERS FOR WEBGL (StereoEffect/Tracker) ---
     class Tracker {
         constructor() { this.q=new THREE.Quaternion(); this.e=null; }
         connect() { window.addEventListener('deviceorientation', e=>this.e=e); }
         getQ() { return this.q; }
         update() {
             if(!this.e) return;
-            const d=this.e, a=THREE.Math.degToRad(d.alpha||0), b=THREE.Math.degToRad(d.beta||0), g=THREE.Math.degToRad(d.gamma||0);
+            const d=this.e, a=THREE.MathUtils.degToRad(d.alpha||0), b=THREE.MathUtils.degToRad(d.beta||0), g=THREE.MathUtils.degToRad(d.gamma||0);
             const o=(screen.orientation?screen.orientation.angle:window.orientation||0)*Math.PI/180;
             const q0=new THREE.Quaternion(), q1=new THREE.Quaternion(-Math.sqrt(0.5),0,0,Math.sqrt(0.5));
             this.q.setFromEuler(new THREE.Euler(b,a,-g,'YXZ')).multiply(q1).multiply(q0.setFromAxisAngle(new THREE.Vector3(0,0,1),-o));
@@ -499,8 +492,7 @@
     function StereoEffect(r, videoElement) {
         const _s=new THREE.StereoCamera(); _s.aspect=0.5;
         const dpr=window.devicePixelRatio||1;
-        const vidW = videoElement && videoElement.videoWidth ? videoElement.videoWidth : 1920;
-        const sz = (sw,sh) => { let b=Math.max(Math.floor(sw*dpr), vidW); return Math.min(b, 4096); };
+        const sz = (sw,sh) => { let b=Math.max(Math.floor(sw*dpr), 1920); return Math.min(b, 4096); };
         let w=sz(window.innerWidth), h=sz(window.innerHeight);
         const opts = { minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, depthBuffer:false, stencilBuffer:false };
         let _tL=new THREE.WebGLRenderTarget(w,h,opts); let _tR=new THREE.WebGLRenderTarget(w,h,opts);
@@ -525,24 +517,10 @@
             r.setRenderTarget(_tR); r.clear(); r.render(s,_s.cameraR);
             r.setRenderTarget(null);
             const sw=window.innerWidth, sh=window.innerHeight; r.setScissorTest(true);
-            r.setScissor(0,0,sw/2,sh); r.setViewport(0,0,sw/2,sh); 
-            _m.uniforms.tDiffuse.value=_tL.texture; _m.uniforms.ipd.value=0.0; r.render(_sc,_c); // IPD handled in params in ShaderMaterial or here? 
-            // In original code, IPD was passed to shader. Here we pass params.
-            // Note: In the simplified merge, I'm just passing 0 to the left and logic to the shader.
-            // Let's rely on the uniforms being set via setUniforms
-            r.setScissor(sw/2,0,sw/2,sh); r.setViewport(sw/2,0,sw/2,sh); 
-            _m.uniforms.tDiffuse.value=_tR.texture; r.render(_sc,_c); // The IPD sign flip happens in the original shader logic via prop passing
-            // To ensure it works exactly as before, we rely on setUniforms updating _m.uniforms
-            // In the fragment shader: uv.x+=ipd; 
-            // We need to flip IPD for right eye.
-            // _m.uniforms.ipd.value = - (current value passed in setUniforms)
-            // But setUniforms sets it once. We need to toggle it here.
-             const currentIPD = _m.uniforms.ipd.value;
-             _m.uniforms.ipd.value = currentIPD; 
-             r.setScissor(0,0,sw/2,sh); r.setViewport(0,0,sw/2,sh); _m.uniforms.tDiffuse.value=_tL.texture; r.render(_sc,_c);
-             _m.uniforms.ipd.value = -currentIPD;
-             r.setScissor(sw/2,0,sw/2,sh); r.setViewport(sw/2,0,sw/2,sh); _m.uniforms.tDiffuse.value=_tR.texture; r.render(_sc,_c);
-             _m.uniforms.ipd.value = currentIPD; // Reset
+            const curIPD = _m.uniforms.ipd.value;
+            r.setScissor(0,0,sw/2,sh); r.setViewport(0,0,sw/2,sh); _m.uniforms.tDiffuse.value=_tL.texture; _m.uniforms.ipd.value=curIPD; r.render(_sc,_c);
+            r.setScissor(sw/2,0,sw/2,sh); r.setViewport(sw/2,0,sw/2,sh); _m.uniforms.tDiffuse.value=_tR.texture; _m.uniforms.ipd.value=-curIPD; r.render(_sc,_c);
+            _m.uniforms.ipd.value = curIPD;
             r.setScissorTest(false);
         };
     }
