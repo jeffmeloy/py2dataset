@@ -76,27 +76,6 @@
         #btnEnter:not(:disabled) { background: #007bff; border-color: #0056b3; }
         #btnEnter:not(:disabled):hover { background: #0056b3; }
 
-        .radio-group {
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
-            padding: 15px;
-            background: #181818;
-            border: 1px solid #333;
-            border-radius: 8px;
-        }
-        .radio-label {
-            font-size: 16px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            cursor: pointer;
-            color: #ccc;
-        }
-        .radio-label:hover { color: white; }
-        input[type="radio"] { width: 20px; height: 20px; cursor: pointer; accent-color: #007bff; }
-
         #previewVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
         .placeholder { color: #666; font-weight: bold; text-align: center; padding: 20px; user-select: none; }
         #fileInput { display: none; }
@@ -110,11 +89,6 @@
             Tap to Select Video
         </button>
         <input type="file" id="fileInput" accept="video/*">
-        
-        <div class="radio-group">
-            <label class="radio-label"><input type="radio" name="mode" value="webgl" checked> WebGL (Cardboard)</label>
-            <label class="radio-label"><input type="radio" name="mode" value="webxr"> WebXR (Headset)</label>
-        </div>
 
         <button id="btnEnter" class="launch-btn" disabled>Enter VR</button>
     </div>
@@ -142,15 +116,7 @@
         placeholder.style.display = 'none';
         
         btnEnter.disabled = false;
-        btnEnter.textContent = "START " + (document.querySelector('input[name="mode"]:checked').value === 'webgl' ? "WebGL" : "WebXR");
-    });
-
-    document.querySelectorAll('input[name="mode"]').forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            if(!btnEnter.disabled) {
-                btnEnter.textContent = "START " + (e.target.value === 'webgl' ? "WebGL" : "WebXR");
-            }
-        });
+        btnEnter.textContent = "ENTER VR";
     });
 
     btnEnter.addEventListener('click', () => {
@@ -160,8 +126,12 @@
         if (de.requestFullscreen) de.requestFullscreen().catch(()=>{});
         else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen();
 
-        const mode = document.querySelector('input[name="mode"]:checked').value;
-        let finalHtml = (mode === 'webgl') ? getWebGLSource() : getWebXRSource();
+        // Store both engine sources for mode switching
+        sessionStorage.setItem('vr_webgl_source', getWebGLSource());
+        sessionStorage.setItem('vr_webxr_source', getWebXRSource());
+        sessionStorage.setItem('vr_video_url', selectedBlobUrl);
+
+        let finalHtml = getWebGLSource();
 
         const injector = `
             <script>
@@ -171,7 +141,12 @@
                     style.innerHTML = '#setup { display: none !important; }';
                     document.head.appendChild(style);
 
-                    ${mode === 'webgl' ? getWebGLBootstrapper() : getWebXRBootstrapper()}
+                    if(typeof initEngine === 'function') {
+                        srcURL = _LAUNCH_URL; 
+                        viewMode = 'full';
+                        initEngine();
+                        updateOverlay();
+                    }
                 });
             <\/script>
         `;
@@ -182,29 +157,6 @@
         document.write(finalHtml);
         document.close();
     });
-
-    function getWebGLBootstrapper() {
-        return `
-            if(typeof initEngine === 'function') {
-                srcURL = _LAUNCH_URL; 
-                viewMode = 'full';
-                initEngine();
-                updateOverlay();
-            }
-        `;
-    }
-
-    function getWebXRBootstrapper() {
-        return `
-            window.videoSrc = _LAUNCH_URL; 
-            const checkInit = setInterval(() => {
-                if(typeof window.initVR === 'function') {
-                    clearInterval(checkInit);
-                    window.initVR(); 
-                }
-            }, 50);
-        `;
-    }
 
     function getWebGLSource() {
         return `<!DOCTYPE html>
@@ -315,6 +267,7 @@
             <div class="lbl">IPD</div>
             <div class="row"><button class="btn-icon idec">-</button><button class="btn-pill irst">RESET</button><button class="btn-icon iinc">+</button></div>
             <button class="btn-wide rec">RE-CENTER</button>
+            <button class="btn-wide webxr-switch" style="background:#28a745;">SWITCH TO WEBXR</button>
         \`;
         els.overlay.innerHTML = isFull ? \`<div class="ctrl-panel">\${controls}</div>\` : \`<div class="ctrl-panel">\${controls}</div><div class="ctrl-panel">\${controls}</div>\`;
     }
@@ -396,7 +349,43 @@
         if(cl.contains('prog-track')) { const r = t.getBoundingClientRect(); videoEl.currentTime = ((e.clientX - r.left)/r.width) * videoEl.duration; }
         if(cl.contains('pp')) videoEl.paused ? videoEl.play() : videoEl.pause();
         if(cl.contains('rw')) videoEl.currentTime -= 10; if(cl.contains('fw')) videoEl.currentTime += 10;
+        if(cl.contains('webxr-switch')) { switchToWebXR(); return; }
         document.querySelectorAll('.pp').forEach(b => b.textContent = videoEl.paused ? '▶' : '||');
+    }
+    function switchToWebXR() {
+        // Save state for restoration
+        sessionStorage.setItem('vr_state', JSON.stringify({
+            viewMode: viewMode,
+            params: params,
+            currentTime: videoEl.currentTime,
+            paused: videoEl.paused
+        }));
+        
+        const webxrSource = sessionStorage.getItem('vr_webxr_source');
+        const videoUrl = sessionStorage.getItem('vr_video_url');
+        if(!webxrSource || !videoUrl) { alert('Session expired. Please reload.'); return; }
+        
+        const injector = \`
+            <script>
+                window.videoSrc = "\${videoUrl}";
+                window.addEventListener('DOMContentLoaded', () => {
+                    const style = document.createElement('style');
+                    style.innerHTML = '#setup { display: none !important; }';
+                    document.head.appendChild(style);
+                    const checkInit = setInterval(() => {
+                        if(typeof window.initVR === 'function') {
+                            clearInterval(checkInit);
+                            window.initVR();
+                        }
+                    }, 50);
+                });
+            <\\/script>
+        \`;
+        
+        let finalHtml = webxrSource.replace('</body>', injector + '</body>');
+        document.open();
+        document.write(finalHtml);
+        document.close();
     }
     function updateProg() { const p = (videoEl.currentTime / videoEl.duration) * 100; document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p + '%'); }
     class Tracker {
@@ -530,14 +519,34 @@
     window.initVR = function() { init(); };
 
     function init() {
+        // Restore state from WebGL if switching
+        const savedState = sessionStorage.getItem('vr_state');
+        if(savedState) {
+            try {
+                const state = JSON.parse(savedState);
+                viewMode = state.viewMode === 'vr-3d' ? 'vr-3d' : 'vr-2d';
+                currentScale = state.params?.z || 1.0;
+                currentDistance = state.params?.d || 6.0;
+            } catch(e) {}
+        }
+        
         video = document.createElement('video');
         video.src = window.videoSrc;
         video.crossOrigin = "anonymous";
         video.playsInline = true;
         video.loop = true;
-        video.play();
         video.addEventListener('timeupdate', updateProg);
-        video.addEventListener('loadedmetadata', updateScreenTransform);
+        video.addEventListener('loadedmetadata', () => {
+            updateScreenTransform();
+            // Restore playback position after metadata loaded
+            if(savedState) {
+                try {
+                    const state = JSON.parse(savedState);
+                    if(state.currentTime) video.currentTime = state.currentTime;
+                } catch(e) {}
+            }
+        });
+        video.play();
 
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
@@ -620,6 +629,14 @@
         meshRight.layers.set(2);
         meshRight.visible = false;
         screenGroup.add(meshRight);
+        
+        // Apply restored viewMode visibility
+        if(viewMode === 'vr-3d') {
+            mesh2D.visible = false;
+            meshLeft.visible = true;
+            meshRight.visible = true;
+            meshLeft.layers.enable(0);
+        }
     }
 
     function updateOverlay() {
@@ -653,9 +670,10 @@
                 <button class="btn-icon dinc">+</button>
             </div>
             
-            <div style="height: 25px;"></div>
+            <div style="height: 15px;"></div>
             
             <button class="btn-wide enter-vr">ENTER VR</button>
+            <button class="btn-wide back-webgl" style="background:#6c757d;">BACK TO CARDBOARD</button>
         \`;
         
         els.overlay.innerHTML = \`<div class="ctrl-panel">\${controls}</div>\`;
@@ -711,6 +729,59 @@
             if(vrBtn) vrBtn.click();
             t.textContent = "CHECK HEADSET";
         }
+        
+        if(cl.contains('back-webgl')) {
+            switchToWebGL();
+            return;
+        }
+    }
+    
+    function switchToWebGL() {
+        // Save state for restoration
+        sessionStorage.setItem('vr_state', JSON.stringify({
+            viewMode: viewMode,
+            params: { z: currentScale, d: currentDistance, i: 0 },
+            currentTime: video.currentTime,
+            paused: video.paused
+        }));
+        
+        const webglSource = sessionStorage.getItem('vr_webgl_source');
+        const videoUrl = sessionStorage.getItem('vr_video_url');
+        if(!webglSource || !videoUrl) { alert('Session expired. Please reload.'); return; }
+        
+        const injector = \`
+            <script>
+                const _LAUNCH_URL = "\${videoUrl}";
+                window.addEventListener('DOMContentLoaded', () => {
+                    const style = document.createElement('style');
+                    style.innerHTML = '#setup { display: none !important; }';
+                    document.head.appendChild(style);
+                    if(typeof initEngine === 'function') {
+                        srcURL = _LAUNCH_URL;
+                        viewMode = 'full';
+                        initEngine();
+                        // Restore state
+                        const saved = sessionStorage.getItem('vr_state');
+                        if(saved) {
+                            try {
+                                const state = JSON.parse(saved);
+                                viewMode = state.viewMode === 'vr-3d' ? 'vr-3d' : (state.viewMode === 'vr-2d' ? 'vr-2d' : 'full');
+                                params.z = state.params.z || 1.0;
+                                params.d = state.params.d || 3.0;
+                                params.i = state.params.i || 0;
+                                if(state.currentTime) videoEl.currentTime = state.currentTime;
+                            } catch(e) {}
+                        }
+                        updateOverlay();
+                    }
+                });
+            <\\/script>
+        \`;
+        
+        let finalHtml = webglSource.replace('</body>', injector + '</body>');
+        document.open();
+        document.write(finalHtml);
+        document.close();
     }
 
     function updateScreenTransform() {
