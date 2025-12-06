@@ -1,452 +1,437 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>OnePlus VR Cinema</title>
+    <title>VR Cinema v0.2</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, maximum-scale=1">
-    <meta name="theme-color" content="#000000">
+    <meta name="theme-color" content="#121212">
     <style>
-        /* Dark AMOLED-friendly theme */
-        body { margin: 0; background: #000; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; color: #fff; }
-        
-        #launcher {
-            width: 100%; max-width: 600px; padding: 30px;
-            display: flex; flex-direction: column; gap: 20px;
-        }
-
-        h1 { margin: 0 0 10px 0; text-align: center; font-weight: 300; letter-spacing: 2px; color: #eb0029; /* OnePlus Red */ }
-
-        /* Big touch targets for high-res screens */
-        button.launch-btn {
-            width: 100%; padding: 25px; font-size: 20px; font-weight: bold;
-            color: white; background: #1f1f1f; border: 2px solid #333;
-            border-radius: 16px; cursor: pointer; text-transform: uppercase;
-        }
-        
-        button.launch-btn:active { background: #333; transform: scale(0.98); }
-        
-        #btnEnter { 
-            background: #eb0029; border-color: #c40022; opacity: 0.5; pointer-events: none; transition: 0.3s;
-        }
-        #btnEnter.ready { opacity: 1; pointer-events: auto; }
-
+        body { margin: 0; background: #121212; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; color: #e0e0e0; }
+        #launcher { width: 100%; max-width: 500px; padding: 30px; display: flex; flex-direction: column; gap: 20px; background: #1e1e1e; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; }
+        h1 { margin: 0; font-weight: 300; letter-spacing: 2px; color: #fff; }
+        .tag { font-size: 12px; background: #007bff; color: white; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 8px; }
+        button.launch-btn { width: 100%; padding: 20px; font-size: 18px; font-weight: bold; color: white; background: #2d2d2d; border: 1px solid #444; border-radius: 12px; cursor: pointer; transition: 0.2s; }
+        button.launch-btn:hover { background: #3d3d3d; border-color: #666; }
         #fileInput { display: none; }
-        #status { text-align: center; color: #888; font-size: 14px; min-height: 20px; }
-        
-        /* OnePlus 13 specific: Hide scrollbars */
-        ::-webkit-scrollbar { display: none; }
+        #status { color: #888; font-size: 14px; min-height: 20px; }
     </style>
 </head>
 <body>
 
 <div id="launcher">
-    <h1>ONEPLUS CINEMA</h1>
-    
-    <button class="launch-btn" onclick="document.getElementById('fileInput').click()">
-        📂 Select Video
-    </button>
+    <h1>VR CINEMA <span class="tag">v0.2</span></h1>
+    <div id="status">Select a video to begin</div>
+    <button class="launch-btn" onclick="document.getElementById('fileInput').click()">📂 OPEN VIDEO</button>
     <input type="file" id="fileInput" accept="video/*">
-    
-    <div id="status">No video loaded</div>
-
-    <!-- Mode selection hidden - defaulting to WebGL for Phone VR -->
-    
-    <button id="btnEnter" class="launch-btn">
-        ENTER VR
-    </button>
 </div>
 
 <script>
-    let selectedBlobUrl = null;
     const fileInput = document.getElementById('fileInput');
-    const btnEnter = document.getElementById('btnEnter');
     const status = document.getElementById('status');
 
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        selectedBlobUrl = URL.createObjectURL(file);
-        status.textContent = "Ready: " + file.name;
-        btnEnter.classList.add('ready');
-        btnEnter.textContent = "START MOVIE";
+        const url = URL.createObjectURL(file);
+        
+        // v0.2: Immediately launch into Default Mode (WebGL)
+        // We pass default params: Time 0, Zoom 1.0, etc.
+        launchPlayer('webgl', url, { time: 0, zoom: 1.0, ipd: 0.0, mode: '2d' });
     });
 
-    btnEnter.addEventListener('click', async () => {
-        if (!selectedBlobUrl) return;
+    // --- THE ENGINE SWITCHER ---
+    // This function reconstructs the entire page based on the requested mode
+    function launchPlayer(mode, videoUrl, params) {
+        // Prepare the payload (functions converted to strings so they survive the document.write)
+        const code = `
+            <script>
+                const _SRC_URL = "${videoUrl}";
+                const _INIT_PARAMS = ${JSON.stringify(params)};
+                
+                // Persistence Logic
+                function switchEngine(targetMode, currentParams) {
+                    const html = (${launchPlayer.toString()})(targetMode, _SRC_URL, currentParams);
+                    document.open();
+                    document.write(html);
+                    document.close();
+                }
 
-        // 1. Android Fullscreen
-        const de = document.documentElement;
-        if (de.requestFullscreen) {
-            await de.requestFullscreen({ navigationUI: "hide" }); // Hides gesture bar
-        }
+                ${getWebGLSource.toString()}
+                ${getWebXRSource.toString()}
+                
+                window.addEventListener('DOMContentLoaded', () => {
+                    ${mode === 'webgl' ? 'initWebGL(_INIT_PARAMS);' : 'initWebXR(_INIT_PARAMS);'}
+                });
+            <\/script>
+        `;
 
-        // 2. Android Landscape Lock
-        if (screen.orientation && screen.orientation.lock) {
-            try { await screen.orientation.lock('landscape'); } catch(e) { console.log('Orientation lock failed', e); }
-        }
+        let html = (mode === 'webgl') ? getWebGLTemplate() : getWebXRTemplate();
+        return html.replace('<!--INJECT-->', code);
+    }
 
-        // 3. Inject the High-Performance WebGL Player
-        const playerHtml = getOnePlusPlayerSource(selectedBlobUrl);
-        document.open();
-        document.write(playerHtml);
-        document.close();
-    });
-
-    function getOnePlusPlayerSource(videoUrl) {
-        return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>VR Player</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        canvas { display: block; width: 100vw; height: 100vh; }
-        
-        #overlay {
-            position: fixed; bottom: 0; left: 0; right: 0; 
-            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
-            z-index: 9999; display: flex; opacity: 0; transition: opacity 0.5s; pointer-events: none;
-            padding-bottom: 20px;
-        }
-        #overlay.visible { opacity: 1; pointer-events: auto; }
-        
-        /* Split controls for VR view */
-        .eye-col { width: 50%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 10px; }
-        
-        .controls { 
-            background: rgba(30,30,30,0.8); border: 1px solid #444; 
-            padding: 10px; border-radius: 20px; backdrop-filter: blur(10px);
-            display: flex; flex-direction: column; gap: 8px; align-items: center; width: 280px;
-        }
-
-        .row { display: flex; gap: 10px; justify-content: center; width: 100%; align-items: center; }
-        
-        button { 
-            background: #333; color: white; border: none; border-radius: 8px; 
-            padding: 8px 12px; font-weight: bold; font-size: 14px; cursor: pointer; 
-        }
-        button.active { background: #eb0029; }
-        button:active { transform: scale(0.95); }
-
-        .slider-box { width: 100%; display: flex; align-items: center; gap: 5px; font-size: 12px; color: #ccc; }
-        .bar-bg { flex: 1; height: 6px; background: #444; border-radius: 3px; position: relative; }
-        .bar-fill { height: 100%; background: #eb0029; width: 0%; border-radius: 3px; }
-    </style>
-    <!-- Using Three.js r128 for stability with older stereo effects -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>
-</head>
-<body>
-    <div id="overlay"></div>
+    // --- TEMPLATES ---
     
-    <!-- SHADER: High Quality Lanczos Resampling for OnePlus Screen -->
-    <script id="vs" type="x-shader/x-vertex">varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}<\/script>
-    <script id="fs" type="x-shader/x-fragment">
-        precision highp float;
-        uniform sampler2D tDiffuse; uniform vec2 texSize; uniform float ipd; uniform float zoom; varying vec2 vUv;
-        const float PI = 3.14159265359;
-        // Lanczos2 Kernel
-        float sinc(float x){ if(abs(x)<0.0001)return 1.0; float a=PI*x; return sin(a)/a; }
-        float lw(float x){ if(abs(x)>=2.0)return 0.0; return sinc(x)*sinc(x*0.5); }
-        vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
-            vec2 inv = 1.0/size; vec2 pos = uv*size; vec2 ipos = floor(pos-0.5)+0.5; vec2 f = pos-ipos;
-            vec4 wX = vec4(lw(1.0+f.x), lw(f.x), lw(1.0-f.x), lw(2.0-f.x));
-            vec4 wY = vec4(lw(1.0+f.y), lw(f.y), lw(1.0-f.y), lw(2.0-f.y));
-            wX /= dot(wX, vec4(1.0)); wY /= dot(wY, vec4(1.0));
-            // Manual unroll for performance on GPU
-            vec4 r0 = texture2D(smp, (ipos+vec2(-1,-1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0,-1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1,-1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2,-1))*inv)*wX.w;
-            vec4 r1 = texture2D(smp, (ipos+vec2(-1, 0))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 0))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 0))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 0))*inv)*wX.w;
-            vec4 r2 = texture2D(smp, (ipos+vec2(-1, 1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 1))*inv)*wX.w;
-            vec4 r3 = texture2D(smp, (ipos+vec2(-1, 2))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 2))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 2))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 2))*inv)*wX.w;
-            return r0*wY.x + r1*wY.y + r2*wY.z + r3*wY.w;
-        }
-        // Barrel Distortion
-        vec2 distort(vec2 p){ vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v); return c+v*(1.0+r2*(0.22+0.18*r2)); }
-        void main(){
-            vec2 d = distort(vUv);
-            vec2 uv = (d-vec2(0.5))/zoom; uv.x+=ipd; uv+=vec2(0.5);
-            if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) gl_FragColor=vec4(0.0);
-            else gl_FragColor=textureLanczos(tDiffuse, uv, texSize);
-        }
-    <\/script>
+    function getWebGLTemplate() {
+        return `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <title>VR Cinema (Phone)</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+            <style>
+                body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
+                #overlay { position: fixed; bottom: 0; left: 0; right: 0; z-index: 99; transition: opacity 0.3s; display: flex; pointer-events: none; padding-bottom: 20px;}
+                #overlay.visible { opacity: 1; pointer-events: auto; }
+                #overlay.hidden { opacity: 0; }
+                .eye-col { width: 50%; display: flex; justify-content: center; }
+                .panel { background: rgba(20,20,20,0.9); border: 1px solid #444; border-radius: 12px; padding: 10px; width: 300px; display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(5px); }
+                .row { display: flex; gap: 5px; justify-content: center; width: 100%; }
+                button { background: #333; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; flex: 1; cursor: pointer; }
+                button.active { background: #007bff; }
+                button.xr-btn { background: #8e24aa; margin-top: 5px; } 
+                .prog-bar { width: 100%; height: 6px; background: #444; border-radius: 3px; overflow: hidden; }
+                .prog-fill { height: 100%; background: #007bff; width: 0%; }
+            </style>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>
+        </head>
+        <body>
+            <div id="overlay" class="visible"></div>
+            <!--INJECT-->
+        </body>
+        </html>`;
+    }
 
-    <script>
-        // CONFIG
-        const SRC_URL = "${videoUrl}";
-        const CONFIG = { zoom: 1.0, ipd: 0.0, mode: '2d' }; // '2d' or '3d'
-        
-        let scene, camera, renderer, video, videoTex, screenMesh, effect, tracker;
-        let overlayTimer;
+    function getWebXRTemplate() {
+        return `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <title>VR Cinema (Headset)</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+            <style>
+                body { margin: 0; overflow: hidden; background: #000; }
+                /* Simple loading overlay */
+                #loader { position: fixed; inset: 0; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; font-family: sans-serif; z-index: 100; }
+            </style>
+            <script type="importmap">
+                { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+            <\/script>
+        </head>
+        <body>
+            <div id="loader"><h2>ENTERING WEBXR...</h2></div>
+            <!--INJECT-->
+        </body>
+        </html>`;
+    }
 
-        async function init() {
-            // 1. Wake Lock (Crucial for OnePlus)
-            if ('wakeLock' in navigator) {
-                try { await navigator.wakeLock.request('screen'); console.log('Wake Lock Active'); } catch(e){}
+    // --- ENGINES (Function bodies converted to strings) ---
+
+    function getWebGLSource() {
+        // --- WEBGL (PHONE) LOGIC ---
+        window.initWebGL = function(params) {
+            // OnePlus Wake Lock
+            if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+            
+            // Fullscreen & Orientation
+            const de = document.documentElement;
+            if (de.requestFullscreen) de.requestFullscreen().catch(()=>{});
+            if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
+
+            let scene, camera, renderer, effect, video, videoTex, screenMesh, tracker;
+            let currentParams = { ...params };
+            
+            // Shaders (Lanczos)
+            const vs = `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+            const fs = `
+                precision highp float; uniform sampler2D tDiffuse; uniform vec2 texSize; uniform float ipd; uniform float zoom; varying vec2 vUv;
+                float sinc(float x){ if(abs(x)<0.0001)return 1.0; float a=3.14159*x; return sin(a)/a; }
+                float lw(float x){ if(abs(x)>=2.0)return 0.0; return sinc(x)*sinc(x*0.5); }
+                vec4 textureLanczos(sampler2D smp, vec2 uv, vec2 size) {
+                    vec2 inv = 1.0/size; vec2 pos = uv*size; vec2 ipos = floor(pos-0.5)+0.5; vec2 f = pos-ipos;
+                    vec4 wX = vec4(lw(1.0+f.x), lw(f.x), lw(1.0-f.x), lw(2.0-f.x));
+                    vec4 wY = vec4(lw(1.0+f.y), lw(f.y), lw(1.0-f.y), lw(2.0-f.y));
+                    wX /= dot(wX, vec4(1.0)); wY /= dot(wY, vec4(1.0));
+                    vec4 r0 = texture2D(smp, (ipos+vec2(-1,-1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0,-1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1,-1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2,-1))*inv)*wX.w;
+                    vec4 r1 = texture2D(smp, (ipos+vec2(-1, 0))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 0))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 0))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 0))*inv)*wX.w;
+                    vec4 r2 = texture2D(smp, (ipos+vec2(-1, 1))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 1))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 1))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 1))*inv)*wX.w;
+                    vec4 r3 = texture2D(smp, (ipos+vec2(-1, 2))*inv)*wX.x + texture2D(smp, (ipos+vec2(0, 2))*inv)*wX.y + texture2D(smp, (ipos+vec2(1, 2))*inv)*wX.z + texture2D(smp, (ipos+vec2(2, 2))*inv)*wX.w;
+                    return r0*wY.x + r1*wY.y + r2*wY.z + r3*wY.w;
+                }
+                vec2 distort(vec2 p){ vec2 c=vec2(0.5); vec2 v=p-c; float r2=dot(v,v); return c+v*(1.0+r2*(0.22+0.18*r2)); }
+                void main(){
+                    vec2 d = distort(vUv);
+                    vec2 uv = (d-vec2(0.5))/currentParams.zoom; uv.x+=ipd; uv+=vec2(0.5);
+                    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) gl_FragColor=vec4(0.0);
+                    else gl_FragColor=textureLanczos(tDiffuse, uv, texSize);
+                }
+            `;
+
+            initEngine();
+
+            function initEngine() {
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
+                
+                renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                document.body.appendChild(renderer.domElement);
+
+                video = document.createElement('video');
+                video.src = _SRC_URL;
+                video.crossOrigin = "anonymous";
+                video.playsInline = true;
+                video.currentTime = currentParams.time || 0;
+                video.loop = true;
+                
+                videoTex = new THREE.Texture(video);
+                videoTex.minFilter = THREE.LinearFilter;
+                videoTex.magFilter = THREE.LinearFilter;
+                videoTex.generateMipmaps = false;
+
+                // Frame Loop
+                if ('requestVideoFrameCallback' in video) {
+                    const loop = () => { videoTex.needsUpdate = true; video.requestVideoFrameCallback(loop); };
+                    video.requestVideoFrameCallback(loop);
+                } else {
+                    setInterval(() => { if(video.readyState >= 2) videoTex.needsUpdate = true; }, 16);
+                }
+
+                // Screen
+                const geo = new THREE.PlaneGeometry(8, 4.5);
+                screenMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map: videoTex, side: 2}));
+                screenMesh.position.z = -5;
+                scene.add(screenMesh);
+
+                // Stereo Effect
+                effect = new StereoEffect(renderer, vs, fs);
+                effect.setSize(window.innerWidth, window.innerHeight);
+
+                // Tracker
+                tracker = new Tracker();
+                tracker.connect();
+
+                video.play();
+                updateOverlay();
+                setupUI();
+                animate();
             }
 
-            // 2. Setup Three.js
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
-            
-            // OnePlus 13 has a very high pixel density. 
-            // We use standardPixelRatio to keep text sharp, but the video shader handles the heavy lifting.
-            renderer = new THREE.WebGLRenderer({antialias: false, powerPreference: "high-performance"});
-            renderer.setPixelRatio(window.devicePixelRatio); 
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            // 3. Load Video
-            video = document.createElement('video');
-            video.src = SRC_URL;
-            video.crossOrigin = "anonymous";
-            video.playsInline = true; // Important for mobile
-            video.loop = false;
-            
-            // 4. Create Texture
-            videoTex = new THREE.Texture(video);
-            videoTex.minFilter = THREE.LinearFilter;
-            videoTex.magFilter = THREE.LinearFilter;
-            videoTex.generateMipmaps = false;
-
-            // Frame Sync Polyfill
-            if ('requestVideoFrameCallback' in video) {
-                const loop = () => { videoTex.needsUpdate = true; video.requestVideoFrameCallback(loop); };
-                video.requestVideoFrameCallback(loop);
-            } else {
-                setInterval(() => { if(video.readyState >= 2) videoTex.needsUpdate = true; }, 16);
+            function animate() {
+                requestAnimationFrame(animate);
+                tracker.update();
+                camera.quaternion.copy(tracker.q);
+                effect.setUniforms(currentParams.ipd, currentParams.zoom);
+                effect.render(scene, camera);
+                
+                // Update Progress bar
+                if(video && !video.paused) {
+                    const pct = (video.currentTime / video.duration) * 100;
+                    document.querySelectorAll('.prog-fill').forEach(el => el.style.width = pct + '%');
+                }
             }
-
-            // 5. Screen Geometry
-            const geo = new THREE.PlaneGeometry(8, 4.5); // 16:9 base
-            // SBS handling in Shader Material
-            const matStd = new THREE.MeshBasicMaterial({map: videoTex, side: 2});
-            screenMesh = new THREE.Mesh(geo, matStd);
-            screenMesh.position.z = -5;
-            scene.add(screenMesh);
             
-            // 6. Stereo Effect & Tracker
-            effect = new StereoEffect(renderer);
-            effect.setSize(window.innerWidth, window.innerHeight);
-            
-            tracker = new OrientationTracker();
-            tracker.connect();
-
-            // 7. Events
-            window.addEventListener('resize', onResize);
-            document.body.addEventListener('click', toggleOverlay);
-            video.addEventListener('loadedmetadata', () => {
-                // Adjust aspect ratio based on actual video
-                const aspect = video.videoWidth / video.videoHeight;
-                screenMesh.scale.set(1, 1/aspect * (16/9), 1);
-            });
-
-            video.play();
-            updateOverlayHTML();
-            animate();
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            // Update Camera Rotation
-            tracker.update();
-            camera.quaternion.copy(tracker.q);
-
-            effect.render(scene, camera);
-        }
-
-        function onResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            effect.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        // --- Controls & UI ---
-        
-        function toggleOverlay(e) {
-            // Don't toggle if clicking a button
-            if(e.target.tagName === 'BUTTON') return;
-            
-            const ov = document.getElementById('overlay');
-            if(ov.classList.contains('visible')) {
-                ov.classList.remove('visible');
-            } else {
-                updateOverlayHTML();
-                ov.classList.add('visible');
-                clearTimeout(overlayTimer);
-                overlayTimer = setTimeout(() => ov.classList.remove('visible'), 4000);
-            }
-        }
-
-        function handleBtn(action) {
-            clearTimeout(overlayTimer);
-            overlayTimer = setTimeout(() => document.getElementById('overlay').classList.remove('visible'), 4000);
-
-            if(action === 'play') video.paused ? video.play() : video.pause();
-            if(action === 'seek-') video.currentTime -= 10;
-            if(action === 'seek+') video.currentTime += 10;
-            if(action === 'mode-2d') { 
-                CONFIG.mode = '2d'; 
-                // Reset UVs to full
-                screenMesh.material = new THREE.MeshBasicMaterial({map: videoTex, side: 2});
-            }
-            if(action === 'mode-3d') { 
-                CONFIG.mode = '3d';
-                // Handled in render loop or specialized mesh, 
-                // but for single mesh simplicity we just scale it differently here or swap geometry
-                // For this simple OneFile, we will rely on aspect ratio fix:
-                screenMesh.scale.x = 2; // Stretch geometry for SBS
-            }
-            if(action === 'center') {
-                tracker.resetOffset();
-            }
-            if(action === 'zoom+') CONFIG.zoom += 0.05;
-            if(action === 'zoom-') CONFIG.zoom -= 0.05;
-            
-            updateOverlayHTML();
-        }
-
-        function updateOverlayHTML() {
-            const isPaused = video.paused;
-            const html = \`
-                <div class="controls">
-                    <div class="row">
-                        <button onclick="handleBtn('seek-')">« 10s</button>
-                        <button onclick="handleBtn('play')" style="width:50px">\${isPaused ? '▶' : '||'}</button>
-                        <button onclick="handleBtn('seek+')">10s »</button>
-                    </div>
-                    <div class="row">
-                        <button onclick="handleBtn('mode-2d')" class="\${CONFIG.mode=='2d'?'active':''}">2D</button>
-                        <button onclick="handleBtn('mode-3d')" class="\${CONFIG.mode=='3d'?'active':''}">3D (SBS)</button>
-                    </div>
-                    <div class="row">
-                        <button onclick="handleBtn('zoom-')">Zoom -</button>
-                        <button onclick="handleBtn('center')">Recenter</button>
-                        <button onclick="handleBtn('zoom+')">Zoom +</button>
-                    </div>
-                </div>
-            \`;
-            // Duplicate for both eyes
-            document.getElementById('overlay').innerHTML = \`<div class="eye-col">\${html}</div><div class="eye-col">\${html}</div>\`;
-        }
-
-        // --- Helpers ---
-
-        class OrientationTracker {
-            constructor() { 
-                this.q = new THREE.Quaternion(); 
-                this.offset = new THREE.Quaternion();
-                this.deviceQ = new THREE.Quaternion();
-                this.zee = new THREE.Vector3(0, 0, 1);
-                this.euler = new THREE.Euler();
-            }
-            connect() {
-                window.addEventListener('deviceorientation', (e) => {
-                    const alpha = e.alpha ? THREE.Math.degToRad(e.alpha) : 0;
-                    const beta = e.beta ? THREE.Math.degToRad(e.beta) : 0;
-                    const gamma = e.gamma ? THREE.Math.degToRad(e.gamma) : 0;
-                    const orient = (screen.orientation ? screen.orientation.angle : window.orientation || 0) * THREE.Math.degToRad(1); // deg to rad
-
-                    this.euler.set(beta, alpha, -gamma, 'YXZ');
-                    this.deviceQ.setFromEuler(this.euler);
-                    this.deviceQ.multiply(new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5))); // Fix for device vs camera coords
-                    this.deviceQ.multiply(new THREE.Quaternion().setFromAxisAngle(this.zee, -orient));
+            function setupUI() {
+                document.body.addEventListener('click', (e) => {
+                    if(e.target.closest('button')) return;
+                    const ov = document.getElementById('overlay');
+                    ov.classList.toggle('visible');
+                    ov.classList.toggle('hidden');
                 });
             }
-            update() {
-                this.q.copy(this.deviceQ).multiply(this.offset);
-            }
-            resetOffset() {
-                // Invert current Y rotation to center view
-                this.offset.copy(this.deviceQ).invert();
-            }
-        }
 
-        function StereoEffect(renderer) {
-            const _s = new THREE.StereoCamera(); 
-            _s.aspect = 0.5;
-            
-            // Shader setup for lens distortion
-            const _scene = new THREE.Scene();
-            const _cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-            const _target = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter});
-            
-            const _mat = new THREE.ShaderMaterial({
-                uniforms: { tDiffuse: {value: null}, texSize: {value: new THREE.Vector2()}, zoom: {value: 1.0}, ipd: {value: 0.0} },
-                vertexShader: document.getElementById('vs').textContent,
-                fragmentShader: document.getElementById('fs').textContent
-            });
-            _scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), _mat));
+            function updateOverlay() {
+                const html = `
+                    <div class="panel">
+                        <div class="prog-bar"><div class="prog-fill"></div></div>
+                        <div class="row">
+                            <button onclick="handle('seek', -10)">-10s</button>
+                            <button onclick="handle('play')">PLAY/PAUSE</button>
+                            <button onclick="handle('seek', 10)">+10s</button>
+                        </div>
+                        <div class="row">
+                            <button onclick="handle('mode', '2d')" class="${currentParams.mode==='2d'?'active':''}">2D</button>
+                            <button onclick="handle('mode', '3d')" class="${currentParams.mode==='3d'?'active':''}">3D SBS</button>
+                        </div>
+                        <div class="row">
+                            <button onclick="handle('zoom', -0.1)">OUT</button>
+                            <button onclick="handle('recenter')">RECENTER</button>
+                            <button onclick="handle('zoom', 0.1)">IN</button>
+                        </div>
+                        <button class="xr-btn" onclick="handle('webxr')">📺 SWITCH TO HEADSET (WebXR)</button>
+                    </div>
+                `;
+                document.getElementById('overlay').innerHTML = `<div class="eye-col">${html}</div><div class="eye-col">${html}</div>`;
+            }
 
-            this.setSize = (w, h) => {
-                renderer.setSize(w, h);
-                _target.setSize(w, h);
-                _mat.uniforms.texSize.value.set(w, h);
+            window.handle = (action, val) => {
+                if(action === 'play') video.paused ? video.play() : video.pause();
+                if(action === 'seek') video.currentTime += val;
+                if(action === 'recenter') tracker.reset();
+                if(action === 'zoom') currentParams.zoom = Math.max(0.5, Math.min(3.0, currentParams.zoom + val));
+                if(action === 'mode') {
+                    currentParams.mode = val;
+                    if(val === '3d') screenMesh.scale.x = 2; else screenMesh.scale.x = 1;
+                    updateOverlay();
+                }
+                
+                // --- THE SWITCH LOGIC ---
+                if(action === 'webxr') {
+                    video.pause();
+                    currentParams.time = video.currentTime;
+                    // Transfer state to WebXR
+                    switchEngine('webxr', currentParams);
+                }
             };
 
-            this.render = (scene, camera) => {
-                scene.updateMatrixWorld();
-                _s.update(camera);
+            // Helper Classes
+            function Tracker() {
+                this.q = new THREE.Quaternion(); this.o = new THREE.Quaternion(); this.e = new THREE.Euler(); this.z = new THREE.Vector3(0,0,1);
+                this.connect = () => window.addEventListener('deviceorientation', e => this.evt = e);
+                this.update = () => {
+                    if(!this.evt) return;
+                    const a = THREE.Math.degToRad(this.evt.alpha||0), b = THREE.Math.degToRad(this.evt.beta||0), g = THREE.Math.degToRad(this.evt.gamma||0);
+                    const orient = (screen.orientation ? screen.orientation.angle : window.orientation||0) * (Math.PI/180);
+                    this.e.set(b, a, -g, 'YXZ');
+                    this.q.setFromEuler(this.e).multiply(new THREE.Quaternion(-0.707,0,0,0.707)).multiply(new THREE.Quaternion().setFromAxisAngle(this.z, -orient)).multiply(this.o);
+                };
+                this.reset = () => { this.o.copy(this.q).invert(); };
+            }
 
-                // Render Scene to Texture
-                renderer.setRenderTarget(_target);
-                renderer.clear();
-                renderer.render(scene, _s.cameraL); // Note: Simple implementation renders full scene twice, usually okay for video
+            function StereoEffect(r, vs, fs) {
+                const _s = new THREE.StereoCamera(); _s.aspect = 0.5;
+                const _t = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+                const _m = new THREE.ShaderMaterial({ uniforms: { tDiffuse:{value:null}, texSize:{value:new THREE.Vector2()}, zoom:{value:1}, ipd:{value:0} }, vertexShader:vs, fragmentShader:fs });
+                const _sc = new THREE.Scene(); _sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), _m)); const _c = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
                 
-                // We actually need left/right separation for the Shader. 
-                // To keep this OneFile simple and performant on OnePlus, we do a multi-pass:
-                
-                // 1. Left Eye to Target
-                renderer.setScissorTest(true);
-                renderer.setRenderTarget(_target);
-                renderer.setScissor(0, 0, window.innerWidth/2, window.innerHeight);
-                renderer.setViewport(0, 0, window.innerWidth/2, window.innerHeight);
-                
-                // SBS logic for 3D mode
-                if(CONFIG.mode === '3d') {
-                    videoTex.offset.x = 0; videoTex.repeat.x = 0.5;
+                this.setSize = (w,h) => { r.setSize(w,h); _t.setSize(w,h); _m.uniforms.texSize.value.set(w,h); };
+                this.setUniforms = (i,z) => { _m.uniforms.ipd.value = i; _m.uniforms.zoom.value = z; };
+                this.render = (s,c) => {
+                    s.updateMatrixWorld(); _s.update(c);
+                    r.setRenderTarget(_t); r.clear();
+                    r.setScissorTest(true); 
+                    
+                    // Render Left to Target
+                    r.setScissor(0,0,window.innerWidth/2,window.innerHeight); r.setViewport(0,0,window.innerWidth/2,window.innerHeight);
+                    if(currentParams.mode === '3d') { videoTex.offset.x = 0; videoTex.repeat.x = 0.5; } else { videoTex.offset.x = 0; videoTex.repeat.x = 1; }
+                    r.render(s, _s.cameraL);
+                    
+                    // Render Right to Target
+                    r.setScissor(window.innerWidth/2,0,window.innerWidth/2,window.innerHeight); r.setViewport(window.innerWidth/2,0,window.innerWidth/2,window.innerHeight);
+                    if(currentParams.mode === '3d') videoTex.offset.x = 0.5;
+                    r.render(s, _s.cameraR);
+                    
+                    // Distortion Pass to Screen
+                    r.setRenderTarget(null); r.setScissorTest(false);
+                    _m.uniforms.tDiffuse.value = _t.texture;
+                    
+                    // Left Lens
+                    r.setScissorTest(true); r.setScissor(0,0,window.innerWidth/2,window.innerHeight); r.setViewport(0,0,window.innerWidth/2,window.innerHeight);
+                    _m.uniforms.ipd.value = 0.0; r.render(_sc, _c);
+                    
+                    // Right Lens
+                    r.setScissor(window.innerWidth/2,0,window.innerWidth/2,window.innerHeight); r.setViewport(window.innerWidth/2,0,window.innerWidth/2,window.innerHeight);
+                    _m.uniforms.ipd.value = 0.0; r.render(_sc, _c);
+                    r.setScissorTest(false);
+                };
+            }
+        };
+    }
+
+    function getWebXRSource() {
+        // --- WEBXR (HEADSET) LOGIC ---
+        window.initWebXR = async function(params) {
+            const THREE = await import('three');
+            const { XRButton } = await import('three/addons/webxr/XRButton.js');
+
+            let scene, camera, renderer, video, videoTex, screenGroup;
+            let currentParams = { ...params };
+            
+            init();
+
+            function init() {
+                const container = document.createElement('div');
+                document.body.appendChild(container);
+
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x050505);
+
+                camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+                camera.position.set(0, 1.6, 3);
+
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.xr.enabled = true;
+                renderer.xr.setReferenceSpaceType('local');
+                container.appendChild(renderer.domElement);
+
+                // Video Setup
+                video = document.createElement('video');
+                video.src = _SRC_URL;
+                video.crossOrigin = "anonymous";
+                video.playsInline = true;
+                video.currentTime = currentParams.time || 0;
+                video.loop = true;
+                video.play();
+
+                videoTex = new THREE.VideoTexture(video);
+                videoTex.colorSpace = THREE.SRGBColorSpace;
+
+                // Screen
+                screenGroup = new THREE.Group();
+                screenGroup.position.set(0, 1.6, -6); // Distance
+                scene.add(screenGroup);
+
+                const baseScale = 8 * (currentParams.zoom || 1.0);
+                const geo = new THREE.PlaneGeometry(baseScale, baseScale * (9/16));
+
+                // Handle 2D/3D geometry
+                if(currentParams.mode === '3d') {
+                    // Left Eye Mesh
+                    const matL = new THREE.MeshBasicMaterial({ map: videoTex, side: THREE.DoubleSide });
+                    const meshL = new THREE.Mesh(geo, matL);
+                    meshL.geometry = geo.clone();
+                    const uvL = meshL.geometry.attributes.uv;
+                    for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i) * 0.5);
+                    meshL.layers.set(1); // Left Eye
+                    screenGroup.add(meshL);
+
+                    // Right Eye Mesh
+                    const matR = new THREE.MeshBasicMaterial({ map: videoTex, side: THREE.DoubleSide });
+                    const meshR = new THREE.Mesh(geo, matR);
+                    meshR.geometry = geo.clone();
+                    const uvR = meshR.geometry.attributes.uv;
+                    for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
+                    meshR.layers.set(2); // Right Eye
+                    screenGroup.add(meshR);
                 } else {
-                    videoTex.offset.x = 0; videoTex.repeat.x = 1;
+                    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: videoTex, side: THREE.DoubleSide }));
+                    screenGroup.add(mesh);
                 }
-                renderer.render(scene, _s.cameraL);
 
-                // 2. Right Eye to Target
-                renderer.setScissor(window.innerWidth/2, 0, window.innerWidth/2, window.innerHeight);
-                renderer.setViewport(window.innerWidth/2, 0, window.innerWidth/2, window.innerHeight);
+                // Handle Exit
+                renderer.xr.addEventListener('sessionend', () => {
+                    // --- THE BACK BUTTON LOGIC ---
+                    // Capture state and go back to phone mode
+                    currentParams.time = video.currentTime;
+                    // Switch back to WebGL
+                    switchEngine('webgl', currentParams);
+                });
+
+                renderer.setAnimationLoop(() => {
+                    renderer.render(scene, camera);
+                });
+
+                // Auto-Enter VR
+                const btn = XRButton.createButton(renderer);
+                document.body.appendChild(btn);
                 
-                if(CONFIG.mode === '3d') {
-                    videoTex.offset.x = 0.5;
-                }
-                renderer.render(scene, _s.cameraR);
-
-                // 3. Render Post-Process (Distortion) to Screen
-                renderer.setRenderTarget(null);
-                renderer.setScissorTest(false);
-                _mat.uniforms.tDiffuse.value = _target.texture;
-                _mat.uniforms.zoom.value = CONFIG.zoom;
-                
-                // Left Lens
-                renderer.setScissorTest(true);
-                renderer.setScissor(0, 0, window.innerWidth/2, window.innerHeight);
-                renderer.setViewport(0, 0, window.innerWidth/2, window.innerHeight);
-                _mat.uniforms.ipd.value = 0.0;
-                renderer.render(_scene, _cam);
-
-                // Right Lens
-                renderer.setScissor(window.innerWidth/2, 0, window.innerWidth/2, window.innerHeight);
-                renderer.setViewport(window.innerWidth/2, 0, window.innerWidth/2, window.innerHeight);
-                _mat.uniforms.ipd.value = 0.0;
-                renderer.render(_scene, _cam);
-                
-                renderer.setScissorTest(false);
-            };
-        }
-
-        init();
-    <\/script>
-</body>
-</html>`;
+                // Hide loader and click button automatically
+                document.getElementById('loader').style.display = 'none';
+                btn.click();
+            }
+        };
     }
 </script>
 </body>
