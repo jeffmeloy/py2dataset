@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <style>
-        /* --- LAUNCHER STYLES (DARK THEME) --- */
         body { 
             margin: 0; 
             background: #121212; 
@@ -105,7 +104,6 @@
 </head>
 <body>
 
-<!-- LAUNCHER UI -->
 <div id="launcher">
     <div class="controls-col">
         <button class="launch-btn" onclick="document.getElementById('fileInput').click()">
@@ -208,7 +206,6 @@
         `;
     }
 
-    // --- WEBGL SOURCE ---
     function getWebGLSource() {
         return `<!DOCTYPE html>
 <html lang="en">
@@ -321,26 +318,43 @@
         \`;
         els.overlay.innerHTML = isFull ? \`<div class="ctrl-panel">\${controls}</div>\` : \`<div class="ctrl-panel">\${controls}</div><div class="ctrl-panel">\${controls}</div>\`;
     }
-    let scene, camera, renderer, effect, videoEl, screenGroup, tracker;
+    let scene, camera, renderer, effect, videoEl, screenGroup, tracker, videoTexture;
     function initEngine() {
         scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
         screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
         tracker = new Tracker(); tracker.connect();
-        videoEl = document.createElement('video'); videoEl.src = srcURL; videoEl.playsinline = true; videoEl.loop = false;
+        videoEl = document.createElement('video'); videoEl.src = srcURL; videoEl.playsInline = true; videoEl.loop = false;
         videoEl.addEventListener('loadedmetadata', () => { if(videoEl.videoHeight) videoAspect = videoEl.videoWidth / videoEl.videoHeight; });
-        const tex = new THREE.VideoTexture(videoEl); tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+        
+        videoTexture = new THREE.Texture(videoEl);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.generateMipmaps = false;
+        
+        if ('requestVideoFrameCallback' in videoEl) {
+            function onVideoFrame() {
+                videoTexture.needsUpdate = true;
+                videoEl.requestVideoFrameCallback(onVideoFrame);
+            }
+            videoEl.requestVideoFrameCallback(onVideoFrame);
+        } else {
+            videoTexture = new THREE.VideoTexture(videoEl);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+        }
+        
         const geo = new THREE.PlaneGeometry(6, 6); 
-        const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:tex, side:2})); mStd.name = 'screenStandard'; screenGroup.add(mStd);
+        const mStd = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({map:videoTexture, side:2})); mStd.name = 'screenStandard'; screenGroup.add(mStd);
         const vs = \`varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }\`;
         const fsL = \`precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5, vUv.y)); }\`;
         const fsR = \`precision highp float; uniform sampler2D map; varying vec2 vUv; void main() { gl_FragColor = texture2D(map, vec2(vUv.x*0.5+0.5, vUv.y)); }\`;
-        const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsL, side:2})); mL.layers.set(1);
-        const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:tex}}, vertexShader:vs, fragmentShader:fsR, side:2})); mR.layers.set(2);
+        const mL = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:videoTexture}}, vertexShader:vs, fragmentShader:fsL, side:2})); mL.layers.set(1);
+        const mR = new THREE.Mesh(geo, new THREE.ShaderMaterial({uniforms:{map:{value:videoTexture}}, vertexShader:vs, fragmentShader:fsR, side:2})); mR.layers.set(2);
         mL.name = mR.name = 'screenSBS'; screenGroup.add(mL); screenGroup.add(mR);
         renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:"high-performance"});
         renderer.domElement.id = 'webgl-canvas'; renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio); document.body.appendChild(renderer.domElement);
-        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        videoTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
         effect = new StereoEffect(renderer, videoEl); effect.setSize(window.innerWidth, window.innerHeight);
         videoEl.play(); videoEl.addEventListener('timeupdate', updateProg);
         window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); if(effect) effect.setSize(window.innerWidth, window.innerHeight); });
@@ -422,7 +436,6 @@
 </html>`;
     }
 
-    // --- WEBXR SOURCE ---
     function getWebXRSource() {
         return `<!DOCTYPE html>
 <html lang="en">
@@ -433,16 +446,12 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
-        
-        /* GUI STYLES (MATCHING WEBGL) */
         #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
         .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 25px; border-radius: 16px; border: 1px solid #333; text-align: center; }
         .file-btn { display: block; background: #252525; padding: 20px; text-align: center; border-radius: 12px; cursor: pointer; border: 2px dashed #444; transition: 0.2s; }
         #fileInput { display: none; }
         #startBtn { width: 100%; padding: 16px; margin-top: 20px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; opacity: 0.5; pointer-events: none; }
         #startBtn.ready { opacity: 1; pointer-events: auto; }
-        
-        /* OVERLAY STYLES */
         #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; justify-content: center; padding: 10px 0; transition: opacity 0.3s; }
         #overlay.visible { display: flex; opacity: 1; }
         .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
@@ -479,10 +488,10 @@
     import { VRButton } from 'three/addons/webxr/VRButton.js';
 
     let scene, camera, renderer, controls;
-    let video, screenGroup, mesh2D, meshLeft, meshRight;
+    let video, videoTexture, screenGroup, mesh2D, meshLeft, meshRight;
     let currentDistance = 6.0;
     let currentScale = 1.0;
-    let viewMode = 'vr-2d'; // 'full', 'vr-2d', 'vr-3d'
+    let viewMode = 'vr-2d';
     let hideTimer = null;
     let vrBtn;
 
@@ -518,7 +527,6 @@
         video.loop = true;
         video.play();
         video.addEventListener('timeupdate', updateProg);
-        // Important: Recalculate aspect ratio when metadata loads
         video.addEventListener('loadedmetadata', updateScreenTransform);
 
         scene = new THREE.Scene();
@@ -533,7 +541,7 @@
         document.body.appendChild(renderer.domElement);
 
         vrBtn = VRButton.createButton(renderer);
-        vrBtn.id = "VRButton"; // ID for clicking
+        vrBtn.id = "VRButton";
         vrBtn.style.display = 'none';
         document.body.appendChild(vrBtn);
 
@@ -557,7 +565,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // GUI Interaction
         document.addEventListener('click', (e) => { 
             if(e.target.closest('#overlay')) { resetTimer(); return; } 
             if(els.overlay.classList.contains('visible')) hideOverlay(); 
@@ -571,26 +578,39 @@
     }
 
     function createCinemaScreen() {
-        const texture = new THREE.VideoTexture(video);
-        texture.minFilter = THREE.LinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.colorSpace = THREE.SRGBColorSpace;
+        videoTexture = new THREE.Texture(video);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.colorSpace = THREE.SRGBColorSpace;
+        videoTexture.generateMipmaps = false;
+
+        if ('requestVideoFrameCallback' in video) {
+            function onVideoFrame() {
+                videoTexture.needsUpdate = true;
+                video.requestVideoFrameCallback(onVideoFrame);
+            }
+            video.requestVideoFrameCallback(onVideoFrame);
+        } else {
+            videoTexture = new THREE.VideoTexture(video);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+            videoTexture.colorSpace = THREE.SRGBColorSpace;
+        }
 
         screenGroup = new THREE.Group();
         updateScreenTransform();
         scene.add(screenGroup);
 
-        // Standard 1x1 geometry to allow dynamic scaling
         const geo = new THREE.PlaneGeometry(1, 1);
 
-        mesh2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        mesh2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide }));
         mesh2D.layers.enable(1); mesh2D.layers.enable(2);
         screenGroup.add(mesh2D);
 
         const geoL = geo.clone();
         const uvL = geoL.attributes.uv;
         for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i) * 0.5);
-        meshLeft = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        meshLeft = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide }));
         meshLeft.layers.set(1); 
         meshLeft.visible = false;
         screenGroup.add(meshLeft);
@@ -598,13 +618,12 @@
         const geoR = geo.clone();
         const uvR = geoR.attributes.uv;
         for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
-        meshRight = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        meshRight = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide }));
         meshRight.layers.set(2);
         meshRight.visible = false;
         screenGroup.add(meshRight);
     }
 
-    // --- NEW GUI LOGIC FOR WEBXR (NO IPD) ---
     function updateOverlay() {
         resetTimer();
         const is2D = (viewMode === 'vr-2d' || viewMode === 'full');
@@ -654,49 +673,42 @@
         if(!t) return;
         const cl = t.classList;
 
-        // Playback
         if(cl.contains('pp')) { video.paused ? video.play() : video.pause(); }
         if(cl.contains('rw')) { video.currentTime -= 10; }
         if(cl.contains('fw')) { video.currentTime += 10; }
         
-        // Mode
         if(cl.contains('m-2d')) { 
             viewMode = 'vr-2d';
             mesh2D.visible = true; meshLeft.visible = false; meshRight.visible = false;
             updateOverlay();
-            updateScreenTransform(); // Re-calc Aspect Ratio
+            updateScreenTransform();
         }
         if(cl.contains('m-3d')) { 
             viewMode = 'vr-3d';
             mesh2D.visible = false; meshLeft.visible = true; meshRight.visible = true; 
-            meshLeft.layers.enable(0); // Preview on phone
+            meshLeft.layers.enable(0);
             updateOverlay();
-            updateScreenTransform(); // Re-calc Aspect Ratio
+            updateScreenTransform();
         }
 
-        // Zoom (Scale)
         if(cl.contains('zin')) { currentScale += 0.1; }
         if(cl.contains('zout')) { currentScale -= 0.1; }
         if(cl.contains('zrst')) { currentScale = 1.0; }
 
-        // Distance
         if(cl.contains('dinc')) { currentDistance += 0.5; }
         if(cl.contains('ddec')) { currentDistance -= 0.5; }
         if(cl.contains('drst')) { currentDistance = 6.0; }
 
-        // Update Transforms
         if(cl.contains('zin') || cl.contains('zout') || cl.contains('zrst') || 
            cl.contains('dinc') || cl.contains('ddec') || cl.contains('drst')) {
             updateScreenTransform();
         }
 
-        // Progress Bar
         if(cl.contains('prog-track')) {
             const r = t.getBoundingClientRect();
             video.currentTime = ((e.clientX - r.left)/r.width) * video.duration;
         }
 
-        // ENTER VR
         if(cl.contains('enter-vr')) {
             if(vrBtn) vrBtn.click();
             t.textContent = "CHECK HEADSET";
@@ -709,24 +721,17 @@
         if(currentScale < 0.2) currentScale = 0.2;
         if(currentScale > 3.0) currentScale = 3.0;
 
-        // Calculate aspect ratio from video metadata
-        // If metadata not ready, default to 16:9
         let vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.777;
 
-        // ASPECT RATIO CORRECTION FOR 3D SIDE-BY-SIDE
-        // If 3D, the texture is effectively split in half width-wise per eye.
         if (viewMode === 'vr-3d') {
             vidAspect = vidAspect / 2.0;
         }
 
-        // Determine base dimensions (Arbitrary baseline width = 8 meters)
-        // If currentScale is 1.0, width is 8.
         const baseWidth = 8 * currentScale;
         const baseHeight = baseWidth / vidAspect;
 
         if(screenGroup) {
             screenGroup.position.set(0, 0, -currentDistance);
-            // Apply dimensions to the 1x1 geometry via scaling
             screenGroup.scale.set(baseWidth, baseHeight, 1);
         }
 
