@@ -331,16 +331,26 @@
         videoTexture.magFilter = THREE.LinearFilter;
         videoTexture.generateMipmaps = false;
         
+        // r128 VideoTexture lacks requestVideoFrameCallback - manual implementation
         if ('requestVideoFrameCallback' in videoEl) {
-            function onVideoFrame() {
+            const updateFrame = () => {
                 videoTexture.needsUpdate = true;
-                videoEl.requestVideoFrameCallback(onVideoFrame);
-            }
-            videoEl.requestVideoFrameCallback(onVideoFrame);
+                videoEl.requestVideoFrameCallback(updateFrame);
+            };
+            // Register callback only when video is ready to present frames
+            const startFrameSync = () => videoEl.requestVideoFrameCallback(updateFrame);
+            videoEl.addEventListener('playing', startFrameSync, { once: true });
+            // Handle already-playing case (e.g., autoplay succeeded)
+            if (!videoEl.paused && videoEl.readyState >= 2) startFrameSync();
         } else {
-            videoTexture = new THREE.VideoTexture(videoEl);
-            videoTexture.minFilter = THREE.LinearFilter;
-            videoTexture.magFilter = THREE.LinearFilter;
+            // Fallback: update every render frame
+            const fallbackUpdate = () => {
+                if (videoEl.readyState >= videoEl.HAVE_CURRENT_FRAME) {
+                    videoTexture.needsUpdate = true;
+                }
+                requestAnimationFrame(fallbackUpdate);
+            };
+            fallbackUpdate();
         }
         
         const geo = new THREE.PlaneGeometry(6, 6); 
@@ -578,24 +588,12 @@
     }
 
     function createCinemaScreen() {
-        videoTexture = new THREE.Texture(video);
+        // THREE.VideoTexture (r160) already implements requestVideoFrameCallback
+        // internally with proper readyState fallbacks - no manual setup needed
+        videoTexture = new THREE.VideoTexture(video);
         videoTexture.minFilter = THREE.LinearFilter;
         videoTexture.magFilter = THREE.LinearFilter;
         videoTexture.colorSpace = THREE.SRGBColorSpace;
-        videoTexture.generateMipmaps = false;
-
-        if ('requestVideoFrameCallback' in video) {
-            function onVideoFrame() {
-                videoTexture.needsUpdate = true;
-                video.requestVideoFrameCallback(onVideoFrame);
-            }
-            video.requestVideoFrameCallback(onVideoFrame);
-        } else {
-            videoTexture = new THREE.VideoTexture(video);
-            videoTexture.minFilter = THREE.LinearFilter;
-            videoTexture.magFilter = THREE.LinearFilter;
-            videoTexture.colorSpace = THREE.SRGBColorSpace;
-        }
 
         screenGroup = new THREE.Group();
         updateScreenTransform();
