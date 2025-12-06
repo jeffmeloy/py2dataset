@@ -518,6 +518,8 @@
         video.loop = true;
         video.play();
         video.addEventListener('timeupdate', updateProg);
+        // Important: Recalculate aspect ratio when metadata loads
+        video.addEventListener('loadedmetadata', updateScreenTransform);
 
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
@@ -578,10 +580,8 @@
         updateScreenTransform();
         scene.add(screenGroup);
 
-        const aspect = 16/9;
-        const width = 8; 
-        const height = width / aspect;
-        const geo = new THREE.PlaneGeometry(width, height);
+        // Standard 1x1 geometry to allow dynamic scaling
+        const geo = new THREE.PlaneGeometry(1, 1);
 
         mesh2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
         mesh2D.layers.enable(1); mesh2D.layers.enable(2);
@@ -602,13 +602,6 @@
         meshRight.layers.set(2);
         meshRight.visible = false;
         screenGroup.add(meshRight);
-
-        video.addEventListener('loadedmetadata', () => {
-            if(!video.videoWidth) return;
-            const vidAspect = video.videoWidth / video.videoHeight;
-            const scaleY = (16/9) / vidAspect; 
-            screenGroup.scale.set(1, scaleY, 1);
-        });
     }
 
     // --- NEW GUI LOGIC FOR WEBXR (NO IPD) ---
@@ -643,7 +636,7 @@
                 <button class="btn-icon dinc">+</button>
             </div>
             
-            <div style="height: 15px;"></div>
+            <div style="height: 25px;"></div>
             
             <button class="btn-wide enter-vr">ENTER VR</button>
         \`;
@@ -709,19 +702,25 @@
     }
 
     function updateScreenTransform() {
-        // Enforce limits
         if(currentDistance < 2.0) currentDistance = 2.0;
         if(currentDistance > 20.0) currentDistance = 20.0;
         if(currentScale < 0.2) currentScale = 0.2;
         if(currentScale > 3.0) currentScale = 3.0;
 
+        // Calculate aspect ratio from video metadata
+        // If metadata not ready, default to 16:9
+        const vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.777;
+
+        // Determine base dimensions (Arbitrary baseline width = 8 meters)
+        // If currentScale is 1.0, width is 8.
+        const baseWidth = 8 * currentScale;
+        const baseHeight = baseWidth / vidAspect;
+
         if(screenGroup) {
             screenGroup.position.set(0, 0, -currentDistance);
+            // Apply dimensions to the 1x1 geometry via scaling
+            screenGroup.scale.set(baseWidth, baseHeight, 1);
         }
-        
-        const vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.77;
-        const aspectScaleY = (16/9) / vidAspect;
-        if(screenGroup) screenGroup.scale.set(currentScale, currentScale * aspectScaleY, currentScale);
 
         if(controls) {
             controls.target.set(0, 0, -currentDistance);
