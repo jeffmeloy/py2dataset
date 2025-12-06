@@ -5,25 +5,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <style>
-        /* --- LAUNCHER STYLES --- */
-        body { margin: 0; background: #eee; font-family: sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        /* --- LAUNCHER STYLES (DARK THEME) --- */
+        body { 
+            margin: 0; 
+            background: #121212; /* Dark background */
+            font-family: sans-serif; 
+            min-height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            color: #e0e0e0; 
+        }
         
         #launcher {
             width: 100%;
-            max-width: 800px;
-            background: white;
-            border: 4px solid black;
-            padding: 15px;
+            max-width: 850px;
+            background: #1e1e1e; /* Card background */
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px;
             display: flex;
-            flex-wrap: wrap; /* Allows stacking on portrait */
-            gap: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            flex-wrap: wrap; 
+            gap: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             box-sizing: border-box;
         }
 
         /* Left Column (Controls) */
         .controls-col {
-            flex: 1 1 250px; /* Grow, Shrink, Basis */
+            flex: 1 1 280px;
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -31,37 +41,61 @@
 
         /* Right Column (Preview) */
         .preview-col {
-            flex: 2 1 300px;
-            border: 4px solid black;
+            flex: 2 1 320px;
+            border: 1px solid #333;
+            border-radius: 8px;
             background: #000;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 250px; /* Ensure height on mobile */
+            min-height: 250px;
             aspect-ratio: 16/9;
             position: relative;
+            overflow: hidden;
         }
 
         /* Buttons */
         button.launch-btn {
             width: 100%;
             padding: 20px;
-            font-size: 22px;
+            font-size: 18px;
             font-weight: bold;
-            background: white;
-            border: 4px solid black;
+            color: white;
+            background: #2d2d2d;
+            border: 1px solid #444;
+            border-radius: 8px;
             cursor: pointer;
-            transition: transform 0.1s, background 0.1s;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
-            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
-        button.launch-btn:hover { background: #f0f0f0; }
+        button.launch-btn:hover { 
+            background: #3d3d3d; 
+            border-color: #555;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
         button.launch-btn:active { transform: translateY(2px); }
+        
         button.launch-btn:disabled { 
-            border-color: #aaa; color: #aaa; background: #fafafa; cursor: not-allowed; 
+            background: #1a1a1a; 
+            color: #555; 
+            border-color: #333; 
+            cursor: not-allowed; 
+            box-shadow: none;
+        }
+
+        /* Highlight the Enter VR button when active */
+        #btnEnter:not(:disabled) {
+            background: #007bff;
+            border-color: #0056b3;
+        }
+        #btnEnter:not(:disabled):hover {
+            background: #0056b3;
         }
 
         /* Radio Group */
@@ -70,22 +104,41 @@
             align-items: center;
             justify-content: space-around;
             padding: 15px;
-            border: 2px dashed #ccc;
+            background: #181818;
+            border: 1px solid #333;
             border-radius: 8px;
         }
         .radio-label {
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             cursor: pointer;
+            color: #ccc;
         }
-        input[type="radio"] { width: 24px; height: 24px; cursor: pointer; }
+        .radio-label:hover { color: white; }
+        input[type="radio"] { 
+            width: 20px; 
+            height: 20px; 
+            cursor: pointer; 
+            accent-color: #007bff; 
+        }
 
         /* Preview Elements */
-        #previewVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
-        .placeholder { color: white; font-weight: bold; text-align: center; padding: 20px; }
+        #previewVideo { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: contain; 
+            display: none; 
+        }
+        .placeholder { 
+            color: #666; 
+            font-weight: bold; 
+            text-align: center; 
+            padding: 20px; 
+            user-select: none;
+        }
 
         /* File Input */
         #fileInput { display: none; }
@@ -97,23 +150,24 @@
 <div id="launcher">
     <div class="controls-col">
         <button class="launch-btn" onclick="document.getElementById('fileInput').click()">
-            Select Video
+            Tap to Select Video
         </button>
         <input type="file" id="fileInput" accept="video/*">
         
+        <div class="radio-group">
+            <label class="radio-label"><input type="radio" name="mode" value="webgl" checked> WebGL (Cardboard)</label>
+            <label class="radio-label"><input type="radio" name="mode" value="webxr"> WebXR (Headset)</label>
+        </div>
+
         <button id="btnEnter" class="launch-btn" disabled>
             Enter VR
         </button>
-
-        <div class="radio-group">
-            <label class="radio-label"><input type="radio" name="mode" value="webgl" checked> WebGL</label>
-            <label class="radio-label"><input type="radio" name="mode" value="webxr"> WebXR</label>
-        </div>
     </div>
 
     <div class="preview-col">
-        <div class="placeholder" id="vidPlaceholder">(Video Preview Window)</div>
-        <video id="previewVideo" muted playsinline loop></video>
+        <div class="placeholder" id="vidPlaceholder">No Video Selected</div>
+        <!-- Video with controls enabled, mirroring webgl.html approach -->
+        <video id="previewVideo" controls playsinline></video>
     </div>
 </div>
 
@@ -130,18 +184,30 @@
         if (!file) return;
         selectedBlobUrl = URL.createObjectURL(file);
         
+        // Show video, hide placeholder
         previewVideo.src = selectedBlobUrl;
         previewVideo.style.display = 'block';
         placeholder.style.display = 'none';
-        previewVideo.play().catch(() => {});
+        
+        // Enable Start Button
         btnEnter.disabled = false;
+        btnEnter.textContent = "START " + (document.querySelector('input[name="mode"]:checked').value === 'webgl' ? "WebGL" : "WebXR");
+    });
+
+    // Update button text on radio change
+    document.querySelectorAll('input[name="mode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if(!btnEnter.disabled) {
+                btnEnter.textContent = "START " + (e.target.value === 'webgl' ? "WebGL" : "WebXR");
+            }
+        });
     });
 
     // --- 2. LAUNCH LOGIC ---
     btnEnter.addEventListener('click', () => {
         if (!selectedBlobUrl) return;
 
-        // A. Request Fullscreen immediately on user gesture to hide browser UI
+        // A. Request Fullscreen to hide browser UI (Address bar)
         const de = document.documentElement;
         if (de.requestFullscreen) de.requestFullscreen().catch(()=>{});
         else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen(); // Safari
@@ -151,7 +217,6 @@
         let finalHtml = (mode === 'webgl') ? getWebGLSource() : getWebXRSource();
 
         // C. Inject Auto-Start Logic
-        // We inject a script at the very end of the body to run after DOM is ready
         const injector = `
             <script>
                 // PRE-FILLED VIDEO URL FROM LAUNCHER
@@ -171,8 +236,7 @@
 
         finalHtml = finalHtml.replace('</body>', injector + '</body>');
 
-        // D. Replace the current document with the new application
-        // This maintains the fullscreen state in most modern browsers and handles module loading correctly
+        // D. Replace the current document
         document.open();
         document.write(finalHtml);
         document.close();
@@ -182,7 +246,7 @@
         return `
             // WebGL Auto-Start
             if(typeof initEngine === 'function') {
-                srcURL = _LAUNCH_URL; // Set global var from webGL.html
+                srcURL = _LAUNCH_URL; 
                 viewMode = 'full';
                 initEngine();
                 updateOverlay();
@@ -193,11 +257,7 @@
     function getWebXRBootstrapper() {
         return `
             // WebXR Auto-Start
-            // Set the global videoSrc that the module reads
             window.videoSrc = _LAUNCH_URL; 
-            
-            // We need to wait for the module to export 'init' or attach it to window
-            // In the WebXR string below, I will attach 'init' to window explicitly.
             const checkInit = setInterval(() => {
                 if(typeof window.initVR === 'function') {
                     clearInterval(checkInit);
@@ -208,10 +268,9 @@
         `;
     }
 
-    // --- 3. SOURCE CODE STORAGE ---
+    // --- 3. SOURCE CODE STORAGE (Exact copies of original files) ---
 
     function getWebGLSource() {
-        // This is the content of webGL.html
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
