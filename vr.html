@@ -8,7 +8,7 @@
         /* --- LAUNCHER STYLES (DARK THEME) --- */
         body { 
             margin: 0; 
-            background: #121212; /* Dark background */
+            background: #121212; 
             font-family: sans-serif; 
             min-height: 100vh; 
             display: flex; 
@@ -20,7 +20,7 @@
         #launcher {
             width: 100%;
             max-width: 850px;
-            background: #1e1e1e; /* Card background */
+            background: #1e1e1e;
             border: 1px solid #333;
             border-radius: 12px;
             padding: 20px;
@@ -31,7 +31,6 @@
             box-sizing: border-box;
         }
 
-        /* Left Column (Controls) */
         .controls-col {
             flex: 1 1 280px;
             display: flex;
@@ -39,7 +38,6 @@
             gap: 15px;
         }
 
-        /* Right Column (Preview) */
         .preview-col {
             flex: 2 1 320px;
             border: 1px solid #333;
@@ -54,7 +52,6 @@
             overflow: hidden;
         }
 
-        /* Buttons */
         button.launch-btn {
             width: 100%;
             padding: 20px;
@@ -73,32 +70,13 @@
             letter-spacing: 1px;
         }
         
-        button.launch-btn:hover { 
-            background: #3d3d3d; 
-            border-color: #555;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-        
+        button.launch-btn:hover { background: #3d3d3d; border-color: #555; }
         button.launch-btn:active { transform: translateY(2px); }
-        
-        button.launch-btn:disabled { 
-            background: #1a1a1a; 
-            color: #555; 
-            border-color: #333; 
-            cursor: not-allowed; 
-            box-shadow: none;
-        }
+        button.launch-btn:disabled { background: #1a1a1a; color: #555; border-color: #333; cursor: not-allowed; }
 
-        /* Highlight the Enter VR button when active */
-        #btnEnter:not(:disabled) {
-            background: #007bff;
-            border-color: #0056b3;
-        }
-        #btnEnter:not(:disabled):hover {
-            background: #0056b3;
-        }
+        #btnEnter:not(:disabled) { background: #007bff; border-color: #0056b3; }
+        #btnEnter:not(:disabled):hover { background: #0056b3; }
 
-        /* Radio Group */
         .radio-group {
             display: flex;
             align-items: center;
@@ -118,29 +96,10 @@
             color: #ccc;
         }
         .radio-label:hover { color: white; }
-        input[type="radio"] { 
-            width: 20px; 
-            height: 20px; 
-            cursor: pointer; 
-            accent-color: #007bff; 
-        }
+        input[type="radio"] { width: 20px; height: 20px; cursor: pointer; accent-color: #007bff; }
 
-        /* Preview Elements */
-        #previewVideo { 
-            width: 100%; 
-            height: 100%; 
-            object-fit: contain; 
-            display: none; 
-        }
-        .placeholder { 
-            color: #666; 
-            font-weight: bold; 
-            text-align: center; 
-            padding: 20px; 
-            user-select: none;
-        }
-
-        /* File Input */
+        #previewVideo { width: 100%; height: 100%; object-fit: contain; display: none; }
+        .placeholder { color: #666; font-weight: bold; text-align: center; padding: 20px; user-select: none; }
         #fileInput { display: none; }
     </style>
 </head>
@@ -159,14 +118,11 @@
             <label class="radio-label"><input type="radio" name="mode" value="webxr"> WebXR (Headset)</label>
         </div>
 
-        <button id="btnEnter" class="launch-btn" disabled>
-            Enter VR
-        </button>
+        <button id="btnEnter" class="launch-btn" disabled>Enter VR</button>
     </div>
 
     <div class="preview-col">
         <div class="placeholder" id="vidPlaceholder">No Video Selected</div>
-        <!-- Video with controls enabled, mirroring webgl.html approach -->
         <video id="previewVideo" controls playsinline></video>
     </div>
 </div>
@@ -178,23 +134,19 @@
     const placeholder = document.getElementById('vidPlaceholder');
     const btnEnter = document.getElementById('btnEnter');
 
-    // --- 1. FILE SELECTION ---
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
         selectedBlobUrl = URL.createObjectURL(file);
         
-        // Show video, hide placeholder
         previewVideo.src = selectedBlobUrl;
         previewVideo.style.display = 'block';
         placeholder.style.display = 'none';
         
-        // Enable Start Button
         btnEnter.disabled = false;
         btnEnter.textContent = "START " + (document.querySelector('input[name="mode"]:checked').value === 'webgl' ? "WebGL" : "WebXR");
     });
 
-    // Update button text on radio change
     document.querySelectorAll('input[name="mode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             if(!btnEnter.disabled) {
@@ -203,32 +155,24 @@
         });
     });
 
-    // --- 2. LAUNCH LOGIC ---
     btnEnter.addEventListener('click', () => {
         if (!selectedBlobUrl) return;
 
-        // A. Request Fullscreen to hide browser UI (Address bar)
         const de = document.documentElement;
         if (de.requestFullscreen) de.requestFullscreen().catch(()=>{});
-        else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen(); // Safari
+        else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen();
 
-        // B. Get the source code for the selected mode
         const mode = document.querySelector('input[name="mode"]:checked').value;
         let finalHtml = (mode === 'webgl') ? getWebGLSource() : getWebXRSource();
 
-        // C. Inject Auto-Start Logic
         const injector = `
             <script>
-                // PRE-FILLED VIDEO URL FROM LAUNCHER
                 const _LAUNCH_URL = "${selectedBlobUrl}";
-
                 window.addEventListener('DOMContentLoaded', () => {
-                    // 1. Hide the internal setup screens (CSS Override)
                     const style = document.createElement('style');
                     style.innerHTML = '#setup { display: none !important; }';
                     document.head.appendChild(style);
 
-                    // 2. Mode Specific Auto-Start
                     ${mode === 'webgl' ? getWebGLBootstrapper() : getWebXRBootstrapper()}
                 });
             <\/script>
@@ -236,7 +180,6 @@
 
         finalHtml = finalHtml.replace('</body>', injector + '</body>');
 
-        // D. Replace the current document
         document.open();
         document.write(finalHtml);
         document.close();
@@ -244,7 +187,6 @@
 
     function getWebGLBootstrapper() {
         return `
-            // WebGL Auto-Start
             if(typeof initEngine === 'function') {
                 srcURL = _LAUNCH_URL; 
                 viewMode = 'full';
@@ -256,20 +198,17 @@
 
     function getWebXRBootstrapper() {
         return `
-            // WebXR Auto-Start
             window.videoSrc = _LAUNCH_URL; 
             const checkInit = setInterval(() => {
                 if(typeof window.initVR === 'function') {
                     clearInterval(checkInit);
-                    document.getElementById('ui-bar').classList.add('visible');
                     window.initVR(); 
                 }
             }, 50);
         `;
     }
 
-    // --- 3. SOURCE CODE STORAGE (Exact copies of original files) ---
-
+    // --- WEBGL SOURCE ---
     function getWebGLSource() {
         return `<!DOCTYPE html>
 <html lang="en">
@@ -483,8 +422,8 @@
 </html>`;
     }
 
+    // --- WEBXR SOURCE ---
     function getWebXRSource() {
-        // This is the content of webXR.html, with 'window.initVR = init' added to expose the module function
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -494,35 +433,38 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+        
+        /* GUI STYLES (MATCHING WEBGL) */
         #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
         .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 25px; border-radius: 16px; border: 1px solid #333; text-align: center; }
         .file-btn { display: block; background: #252525; padding: 20px; text-align: center; border-radius: 12px; cursor: pointer; border: 2px dashed #444; transition: 0.2s; }
-        .file-btn:hover { border-color: #007bff; background: #2a2a2a; }
         #fileInput { display: none; }
-        #startBtn { width: 100%; padding: 16px; margin-top: 20px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; opacity: 0.5; pointer-events: none; transition: 0.3s; }
+        #startBtn { width: 100%; padding: 16px; margin-top: 20px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; opacity: 0.5; pointer-events: none; }
         #startBtn.ready { opacity: 1; pointer-events: auto; }
-        #ui-bar { 
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); 
-            z-index: 100; display: flex; align-items: center; gap: 8px; 
-            background: rgba(20,20,20,0.9); padding: 8px 12px; border-radius: 30px; 
-            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
-            transition: opacity 0.3s; opacity: 0; pointer-events: none;
-        }
-        #ui-bar.visible { opacity: 1; pointer-events: auto; }
-        .btn { background: #333; color: white; border: none; height: 40px; min-width: 40px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: bold; padding: 0 15px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
-        .btn:hover { background: #555; }
-        .btn.active { background: #007bff; }
-        .btn-icon { padding: 0; width: 40px; border-radius: 50%; font-size: 18px; }
-        #btnEnterVR { background: #007bff; }
-        #btnEnterVR:hover { background: #0056b3; }
-        .divider { width: 1px; height: 25px; background: #555; margin: 0 4px; }
-        .label { font-size: 10px; color: #aaa; text-transform: uppercase; margin-right: 5px; margin-left: 5px; font-weight: bold; }
+        
+        /* OVERLAY STYLES */
+        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; justify-content: center; padding: 10px 0; transition: opacity 0.3s; }
+        #overlay.visible { display: flex; opacity: 1; }
+        .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
+        .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
+        button { cursor: pointer; }
+        .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+        .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
+        .btn-pill.active { background: #007bff; color: white; }
+        .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
+        .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
+        .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
+        .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
+        
+        /* Disabled IPD for WebXR look */
+        .btn-icon.ipd-dummy { opacity: 0.3; cursor: default; }
     </style>
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
     <\/script>
 </head>
 <body>
+
 <div id="setup">
     <div class="setup-box">
         <h2>VR Cinema</h2>
@@ -531,75 +473,283 @@
         <button id="startBtn">LOAD PLAYER</button>
     </div>
 </div>
-<div id="ui-bar">
-    <button class="btn" id="btnEnterVR">ENTER VR</button>
-    <div class="divider"></div>
-    <span class="label">Mode</span>
-    <button class="btn btn-icon active" id="btn2D" title="2D Mode">2D</button>
-    <button class="btn btn-icon" id="btn3D" title="3D SBS Mode">3D</button>
-    <div class="divider"></div>
-    <span class="label">Size</span>
-    <button class="btn btn-icon" id="btnZoomOut" title="Smaller / Further">-</button>
-    <button class="btn btn-icon" id="btnZoomIn" title="Bigger / Closer">+</button>
-    <div class="divider"></div>
-    <button class="btn btn-icon" id="btnPlay" title="Play/Pause">⏯</button>
-</div>
+
+<div id="overlay"></div>
+
 <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { VRButton } from 'three/addons/webxr/VRButton.js';
+
     let scene, camera, renderer, controls;
     let video, screenGroup, mesh2D, meshLeft, meshRight;
     let currentDistance = 6.0;
-    const els = {
-        setup: document.getElementById('setup'), fileInput: document.getElementById('fileInput'), startBtn: document.getElementById('startBtn'),
-        label: document.getElementById('fileLabel'), ui: document.getElementById('ui-bar'), btnEnterVR: document.getElementById('btnEnterVR'),
-        btn2D: document.getElementById('btn2D'), btn3D: document.getElementById('btn3D'), btnZoomIn: document.getElementById('btnZoomIn'),
-        btnZoomOut: document.getElementById('btnZoomOut'), btnPlay: document.getElementById('btnPlay')
-    };
-    els.fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0]; if (!file) return;
-        window.videoSrc = URL.createObjectURL(file);
-        els.label.textContent = file.name; els.startBtn.classList.add('ready');
-    });
-    els.startBtn.addEventListener('click', () => { if (!window.videoSrc) return; els.setup.style.display = 'none'; els.ui.classList.add('visible'); init(); });
+    let currentScale = 1.0;
+    let viewMode = 'vr-2d'; // 'full', 'vr-2d', 'vr-3d'
+    let hideTimer = null;
+    let vrBtn;
 
-    // Expose init to global scope so bootstrapper can call it
+    const els = {
+        setup: document.getElementById('setup'),
+        fileInput: document.getElementById('fileInput'),
+        startBtn: document.getElementById('startBtn'),
+        label: document.getElementById('fileLabel'),
+        overlay: document.getElementById('overlay')
+    };
+
+    els.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        window.videoSrc = URL.createObjectURL(file);
+        els.label.textContent = file.name;
+        els.startBtn.classList.add('ready');
+    });
+
+    els.startBtn.addEventListener('click', () => {
+        if (!window.videoSrc) return;
+        els.setup.style.display = 'none';
+        init();
+    });
+
     window.initVR = function() { init(); };
 
     function init() {
-        video = document.createElement('video'); video.src = window.videoSrc; video.crossOrigin = "anonymous"; video.playsInline = true; video.loop = true; video.play();
-        scene = new THREE.Scene(); scene.background = new THREE.Color(0x050505);
+        video = document.createElement('video');
+        video.src = window.videoSrc;
+        video.crossOrigin = "anonymous";
+        video.playsInline = true;
+        video.loop = true;
+        video.play();
+        video.addEventListener('timeupdate', updateProg);
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
-        renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local'); document.body.appendChild(renderer.domElement);
-        const vrBtn = VRButton.createButton(renderer); vrBtn.style.display = 'none'; document.body.appendChild(vrBtn);
-        els.btnEnterVR.addEventListener('click', () => { vrBtn.click(); setTimeout(() => { if(renderer.xr.isPresenting) els.btnEnterVR.textContent = "EXIT VR"; else els.btnEnterVR.textContent = "ENTER VR"; }, 1000); });
-        controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 0, -currentDistance); controls.enableZoom = false; controls.enablePan = false; controls.rotateSpeed = -0.5; controls.update();
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        renderer.xr.setReferenceSpaceType('local');
+        document.body.appendChild(renderer.domElement);
+
+        vrBtn = VRButton.createButton(renderer);
+        vrBtn.id = "VRButton"; // ID for clicking
+        vrBtn.style.display = 'none';
+        document.body.appendChild(vrBtn);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, -currentDistance);
+        controls.enableZoom = false;
+        controls.enablePan = false;
+        controls.rotateSpeed = -0.5;
+        controls.update();
+
         createCinemaScreen();
-        renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
-        setupControls();
+
+        renderer.setAnimationLoop(() => {
+            controls.update();
+            renderer.render(scene, camera);
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // GUI Interaction
+        document.addEventListener('click', (e) => { 
+            if(e.target.closest('#overlay')) { resetTimer(); return; } 
+            if(els.overlay.classList.contains('visible')) hideOverlay(); 
+            else showOverlay(); 
+        });
+        
+        els.overlay.addEventListener('click', handleInput);
+        
+        updateOverlay();
+        showOverlay();
     }
+
     function createCinemaScreen() {
-        const texture = new THREE.VideoTexture(video); texture.minFilter = THREE.LinearFilter; texture.magFilter = THREE.LinearFilter; texture.colorSpace = THREE.SRGBColorSpace;
-        screenGroup = new THREE.Group(); updateScreenDistance(); scene.add(screenGroup);
-        const aspect = 16/9; const width = 8; const height = width / aspect; const geo = new THREE.PlaneGeometry(width, height);
-        mesh2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })); mesh2D.layers.enable(1); mesh2D.layers.enable(2); screenGroup.add(mesh2D);
-        const geoL = geo.clone(); const uvL = geoL.attributes.uv; for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i) * 0.5);
-        meshLeft = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })); meshLeft.layers.set(1); meshLeft.visible = false; screenGroup.add(meshLeft);
-        const geoR = geo.clone(); const uvR = geoR.attributes.uv; for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
-        meshRight = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })); meshRight.layers.set(2); meshRight.visible = false; screenGroup.add(meshRight);
-        video.addEventListener('loadedmetadata', () => { if(!video.videoWidth) return; const vidAspect = video.videoWidth / video.videoHeight; const scaleY = (16/9) / vidAspect; screenGroup.scale.set(1, scaleY, 1); });
+        const texture = new THREE.VideoTexture(video);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.colorSpace = THREE.SRGBColorSpace;
+
+        screenGroup = new THREE.Group();
+        updateScreenTransform();
+        scene.add(screenGroup);
+
+        const aspect = 16/9;
+        const width = 8; 
+        const height = width / aspect;
+        const geo = new THREE.PlaneGeometry(width, height);
+
+        mesh2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        mesh2D.layers.enable(1); mesh2D.layers.enable(2);
+        screenGroup.add(mesh2D);
+
+        const geoL = geo.clone();
+        const uvL = geoL.attributes.uv;
+        for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i) * 0.5);
+        meshLeft = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        meshLeft.layers.set(1); 
+        meshLeft.visible = false;
+        screenGroup.add(meshLeft);
+
+        const geoR = geo.clone();
+        const uvR = geoR.attributes.uv;
+        for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
+        meshRight = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
+        meshRight.layers.set(2);
+        meshRight.visible = false;
+        screenGroup.add(meshRight);
+
+        video.addEventListener('loadedmetadata', () => {
+            if(!video.videoWidth) return;
+            const vidAspect = video.videoWidth / video.videoHeight;
+            const scaleY = (16/9) / vidAspect; 
+            screenGroup.scale.set(1, scaleY, 1);
+        });
     }
-    function setupControls() {
-        els.btn2D.addEventListener('click', () => { els.btn2D.classList.add('active'); els.btn3D.classList.remove('active'); mesh2D.visible = true; meshLeft.visible = false; meshRight.visible = false; });
-        els.btn3D.addEventListener('click', () => { els.btn3D.classList.add('active'); els.btn2D.classList.remove('active'); mesh2D.visible = false; meshLeft.visible = true; meshRight.visible = true; meshLeft.layers.enable(0); });
-        els.btnZoomIn.addEventListener('click', () => { currentDistance -= 1.0; if(currentDistance < 2.0) currentDistance = 2.0; updateScreenDistance(); });
-        els.btnZoomOut.addEventListener('click', () => { currentDistance += 1.0; if(currentDistance > 15.0) currentDistance = 15.0; updateScreenDistance(); });
-        els.btnPlay.addEventListener('click', () => { if(video.paused) { video.play(); els.btnPlay.textContent = '⏸'; } else { video.pause(); els.btnPlay.textContent = '▶'; } });
+
+    // --- NEW GUI LOGIC FOR WEBXR ---
+    function updateOverlay() {
+        resetTimer();
+        const is2D = (viewMode === 'vr-2d' || viewMode === 'full');
+        
+        const controls = \`
+            <div class="row">
+                <div class="prog-track"><div class="prog-fill"></div></div>
+            </div>
+            <div class="row">
+                <button class="btn-icon rw">&laquo;</button>
+                <button class="btn-icon pp">▶</button>
+                <button class="btn-icon fw">&raquo;</button>
+            </div>
+            <div class="lbl">View Mode</div>
+            <div class="row">
+                <button class="btn-pill m-2d \${is2D ? 'active' : ''}">2D</button>
+                <button class="btn-pill m-3d \${!is2D ? 'active' : ''}">3D</button>
+            </div>
+            <div class="lbl">Zoom</div>
+            <div class="row">
+                <button class="btn-icon zout">-</button>
+                <button class="btn-pill zrst">RESET</button>
+                <button class="btn-icon zin">+</button>
+            </div>
+            <div class="lbl">Distance</div>
+            <div class="row">
+                <button class="btn-icon ddec">-</button>
+                <button class="btn-pill drst">RESET</button>
+                <button class="btn-icon dinc">+</button>
+            </div>
+            <div class="lbl">IPD (Hardware)</div>
+            <div class="row">
+                <button class="btn-icon ipd-dummy">-</button>
+                <button class="btn-pill ipd-dummy">AUTO</button>
+                <button class="btn-icon ipd-dummy">+</button>
+            </div>
+            <button class="btn-wide enter-vr">ENTER VR</button>
+        \`;
+        
+        // Single panel for WebXR "Magic Window" setup
+        els.overlay.innerHTML = \`<div class="ctrl-panel">\${controls}</div>\`;
     }
-    function updateScreenDistance() { if(screenGroup) screenGroup.position.set(0, 0, -currentDistance); if(controls) { controls.target.set(0, 0, -currentDistance); controls.update(); } }
+
+    function showOverlay() { els.overlay.classList.add('visible'); resetTimer(); }
+    function hideOverlay() { els.overlay.classList.remove('visible'); }
+    function resetTimer() { if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideOverlay, 4000); }
+
+    function handleInput(e) {
+        e.stopPropagation();
+        const t = e.target.closest('button, .prog-track');
+        if(!t) return;
+        const cl = t.classList;
+
+        // Playback
+        if(cl.contains('pp')) { video.paused ? video.play() : video.pause(); }
+        if(cl.contains('rw')) { video.currentTime -= 10; }
+        if(cl.contains('fw')) { video.currentTime += 10; }
+        
+        // Mode
+        if(cl.contains('m-2d')) { 
+            viewMode = 'vr-2d';
+            mesh2D.visible = true; meshLeft.visible = false; meshRight.visible = false;
+            updateOverlay();
+        }
+        if(cl.contains('m-3d')) { 
+            viewMode = 'vr-3d';
+            mesh2D.visible = false; meshLeft.visible = true; meshRight.visible = true; 
+            meshLeft.layers.enable(0); // Preview on phone
+            updateOverlay();
+        }
+
+        // Zoom (Scale)
+        if(cl.contains('zin')) { currentScale += 0.1; }
+        if(cl.contains('zout')) { currentScale -= 0.1; }
+        if(cl.contains('zrst')) { currentScale = 1.0; }
+
+        // Distance
+        if(cl.contains('dinc')) { currentDistance += 0.5; }
+        if(cl.contains('ddec')) { currentDistance -= 0.5; }
+        if(cl.contains('drst')) { currentDistance = 6.0; }
+
+        // Update Transforms
+        if(cl.contains('zin') || cl.contains('zout') || cl.contains('zrst') || 
+           cl.contains('dinc') || cl.contains('ddec') || cl.contains('drst')) {
+            updateScreenTransform();
+        }
+
+        // Progress Bar
+        if(cl.contains('prog-track')) {
+            const r = t.getBoundingClientRect();
+            video.currentTime = ((e.clientX - r.left)/r.width) * video.duration;
+        }
+
+        // ENTER VR
+        if(cl.contains('enter-vr')) {
+            if(vrBtn) vrBtn.click();
+            t.textContent = "CHECK HEADSET";
+        }
+    }
+
+    function updateScreenTransform() {
+        // Enforce limits
+        if(currentDistance < 2.0) currentDistance = 2.0;
+        if(currentDistance > 20.0) currentDistance = 20.0;
+        if(currentScale < 0.2) currentScale = 0.2;
+        if(currentScale > 3.0) currentScale = 3.0;
+
+        if(screenGroup) {
+            screenGroup.position.set(0, 0, -currentDistance);
+            // Apply scale (preserving aspect ratio corrections in loadedmetadata)
+            // We just set uniform scale on the group, let metadata handle the stretching
+            // Actually, metadata sets scale.y. Let's adjust scale.x/z or base geometry.
+            // Simplest: Just use distance for "size" relative to eye. 
+            // But we have zoom separate.
+            // Let's modify the group scale scalar.
+            // Note: loadedmetadata sets scale Y.
+        }
+        
+        // Re-apply scale cleanly
+        const vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.77;
+        const aspectScaleY = (16/9) / vidAspect;
+        if(screenGroup) screenGroup.scale.set(currentScale, currentScale * aspectScaleY, currentScale);
+
+        if(controls) {
+            controls.target.set(0, 0, -currentDistance);
+            controls.update();
+        }
+    }
+
+    function updateProg() { 
+        if(!video) return;
+        const p = (video.currentTime / video.duration) * 100; 
+        document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p + '%');
+        document.querySelectorAll('.pp').forEach(b => b.textContent = video.paused ? '▶' : '||');
+    }
 <\/script>
 </body>
 </html>`;
