@@ -455,9 +455,6 @@
         .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
         .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
         .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
-        
-        /* Disabled IPD for WebXR look */
-        .btn-icon.ipd-dummy { opacity: 0.3; cursor: default; }
     </style>
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -614,7 +611,7 @@
         });
     }
 
-    // --- NEW GUI LOGIC FOR WEBXR ---
+    // --- NEW GUI LOGIC FOR WEBXR (NO IPD) ---
     function updateOverlay() {
         resetTimer();
         const is2D = (viewMode === 'vr-2d' || viewMode === 'full');
@@ -645,16 +642,12 @@
                 <button class="btn-pill drst">RESET</button>
                 <button class="btn-icon dinc">+</button>
             </div>
-            <div class="lbl">IPD (Hardware)</div>
-            <div class="row">
-                <button class="btn-icon ipd-dummy">-</button>
-                <button class="btn-pill ipd-dummy">AUTO</button>
-                <button class="btn-icon ipd-dummy">+</button>
-            </div>
+            
+            <div style="height: 15px;"></div>
+            
             <button class="btn-wide enter-vr">ENTER VR</button>
         \`;
         
-        // Single panel for WebXR "Magic Window" setup
         els.overlay.innerHTML = \`<div class="ctrl-panel">\${controls}</div>\`;
     }
 
@@ -724,16 +717,8 @@
 
         if(screenGroup) {
             screenGroup.position.set(0, 0, -currentDistance);
-            // Apply scale (preserving aspect ratio corrections in loadedmetadata)
-            // We just set uniform scale on the group, let metadata handle the stretching
-            // Actually, metadata sets scale.y. Let's adjust scale.x/z or base geometry.
-            // Simplest: Just use distance for "size" relative to eye. 
-            // But we have zoom separate.
-            // Let's modify the group scale scalar.
-            // Note: loadedmetadata sets scale Y.
         }
         
-        // Re-apply scale cleanly
         const vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.77;
         const aspectScaleY = (16/9) / vidAspect;
         if(screenGroup) screenGroup.scale.set(currentScale, currentScale * aspectScaleY, currentScale);
