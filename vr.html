@@ -504,24 +504,11 @@
 
     els.startBtn.addEventListener('click', () => {
         if (!window.videoSrc) return;
-        
-        // Fullscreen to hide browser chrome
-        const de = document.documentElement;
-        if (de.requestFullscreen) de.requestFullscreen().catch(()=>{});
-        else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen();
-        
         els.setup.style.display = 'none';
         init();
     });
 
-    window.initVR = function() {
-        // Fullscreen to hide browser chrome
-        const de = document.documentElement;
-        if (de.requestFullscreen) de.requestFullscreen().catch(()=>{});
-        else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen();
-        
-        init();
-    };
+    window.initVR = function() { init(); };
 
     function init() {
         video = document.createElement('video');
