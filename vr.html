@@ -664,12 +664,14 @@
             viewMode = 'vr-2d';
             mesh2D.visible = true; meshLeft.visible = false; meshRight.visible = false;
             updateOverlay();
+            updateScreenTransform(); // Re-calc Aspect Ratio
         }
         if(cl.contains('m-3d')) { 
             viewMode = 'vr-3d';
             mesh2D.visible = false; meshLeft.visible = true; meshRight.visible = true; 
             meshLeft.layers.enable(0); // Preview on phone
             updateOverlay();
+            updateScreenTransform(); // Re-calc Aspect Ratio
         }
 
         // Zoom (Scale)
@@ -709,7 +711,13 @@
 
         // Calculate aspect ratio from video metadata
         // If metadata not ready, default to 16:9
-        const vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.777;
+        let vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.777;
+
+        // ASPECT RATIO CORRECTION FOR 3D SIDE-BY-SIDE
+        // If 3D, the texture is effectively split in half width-wise per eye.
+        if (viewMode === 'vr-3d') {
+            vidAspect = vidAspect / 2.0;
+        }
 
         // Determine base dimensions (Arbitrary baseline width = 8 meters)
         // If currentScale is 1.0, width is 8.
