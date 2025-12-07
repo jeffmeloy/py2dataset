@@ -452,164 +452,24 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
-
-        #setup {
-            position: fixed;
-            inset: 0;
-            background: #121212;
-            z-index: 10000;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .setup-box {
-            width: 100%;
-            max-width: 400px;
-            background: #1e1e1e;
-            padding: 25px;
-            border-radius: 16px;
-            border: 1px solid #333;
-            text-align: center;
-        }
-
-        .file-btn {
-            display: block;
-            background: #252525;
-            padding: 20px;
-            text-align: center;
-            border-radius: 12px;
-            cursor: pointer;
-            border: 2px dashed #444;
-            transition: 0.2s;
-        }
-
+        #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 25px; border-radius: 16px; border: 1px solid #333; text-align: center; }
+        .file-btn { display: block; background: #252525; padding: 20px; text-align: center; border-radius: 12px; cursor: pointer; border: 2px dashed #444; transition: 0.2s; }
         #fileInput { display: none; }
-
-        #startBtn {
-            width: 100%;
-            padding: 16px;
-            margin-top: 20px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            opacity: 0.5;
-            pointer-events: none;
-        }
-        #startBtn.ready {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        /* DOM overlay for non-VR view */
-        #overlay {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 9999;
-            display: none;
-            justify-content: center;
-            padding: 10px 0;
-            transition: opacity 0.3s;
-        }
-        #overlay.visible {
-            display: flex;
-            opacity: 1;
-        }
-
-        .ctrl-panel {
-            width: 320px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-            padding: 0 5px;
-        }
-
-        .row {
-            display: flex;
-            gap: 6px;
-            justify-content: center;
-            width: 100%;
-            align-items: center;
-        }
-
+        #startBtn { width: 100%; padding: 16px; margin-top: 20px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; opacity: 0.5; pointer-events: none; }
+        #startBtn.ready { opacity: 1; pointer-events: auto; }
+        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; justify-content: center; padding: 10px 0; transition: opacity 0.3s; }
+        #overlay.visible { display: flex; opacity: 1; }
+        .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
+        .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
         button { cursor: pointer; }
-
-        .btn-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #333;
-            color: white;
-            border: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .btn-pill {
-            padding: 6px 12px;
-            border-radius: 15px;
-            background: #333;
-            color: white;
-            border: none;
-            font-size: 11px;
-            font-weight: bold;
-            min-width: 50px;
-        }
-        .btn-pill.active {
-            background: #007bff;
-            color: white;
-        }
-
-        .btn-wide {
-            width: 90%;
-            padding: 10px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            margin-top: 4px;
-        }
-
-        .lbl {
-            font-size: 10px;
-            color: #ddd;
-            text-transform: uppercase;
-            margin-top: 5px;
-            font-weight: bold;
-            text-shadow: 0 1px 2px black;
-        }
-
-        .prog-track {
-            width: 100%;
-            height: 10px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 5px;
-            position: relative;
-            margin-bottom: 5px;
-            cursor: pointer;
-        }
-
-        .prog-fill {
-            height: 100%;
-            background: #007bff;
-            width: 0%;
-            border-radius: 5px;
-            pointer-events: none;
-        }
+        .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+        .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
+        .btn-pill.active { background: #007bff; color: white; }
+        .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
+        .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
+        .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
+        .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
     </style>
     <script type="importmap">
         {
@@ -643,17 +503,8 @@
     let currentDistance = 6.0;
     let currentScale = 1.0;
     let viewMode = 'vr-2d';
-    let hideTimer = null;   // DOM overlay timer
-    let hudHideTimer = null; // VR HUD timer
-    let inXR = false;
-
+    let hideTimer = null;
     let vrBtn;
-
-    // VR HUD: group + buttons + reticle
-    let hudGroup = null;
-    const hudButtons = [];
-    const raycaster = new THREE.Raycaster();
-    let reticle = null;
 
     const els = {
         setup: document.getElementById('setup'),
@@ -663,42 +514,7 @@
         overlay: document.getElementById('overlay')
     };
 
-    // History: back button -> return to start menu for this page
-    try {
-        if (!history.state || history.state.screen !== 'menu') {
-            history.replaceState({ screen: 'menu' }, '');
-        }
-        window.addEventListener('popstate', (e) => {
-            if (e.state && e.state.screen === 'menu') {
-                // Exit VR session if active and go back to setup menu
-                if (renderer && renderer.xr && renderer.xr.getSession()) {
-                    renderer.xr.getSession().end();
-                }
-                if (video) {
-                    video.pause();
-                    video.currentTime = 0;
-                }
-                if (hudGroup) {
-                    hudGroup.visible = false;
-                }
-                if (els.overlay) {
-                    els.overlay.classList.remove('visible');
-                }
-                if (els.setup) {
-                    els.setup.style.display = 'flex';
-                    // In case launcher injector hid it with !important
-                    const st = document.createElement('style');
-                    st.innerHTML = '#setup { display:flex !important; }';
-                    document.head.appendChild(st);
-                }
-            }
-        });
-    } catch (e) {
-        // ignore history errors
-    }
-
-    // Local file loader (standalone)
-    els.fileInput.addEventListener('change', (e) => {
+    els.fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
         window.videoSrc = URL.createObjectURL(file);
@@ -706,30 +522,27 @@
         els.startBtn.classList.add('ready');
     });
 
-    els.startBtn.addEventListener('click', () => {
+    els.startBtn.addEventListener('click', function() {
         if (!window.videoSrc) return;
         els.setup.style.display = 'none';
         init();
     });
 
-    // Called by outer launcher
     window.initVR = function() {
         els.setup.style.display = 'none';
         init();
     };
 
     function init() {
-        // Create video element
         video = document.createElement('video');
         video.src = window.videoSrc;
-        video.crossOrigin = "anonymous";
+        video.crossOrigin = 'anonymous';
         video.playsInline = true;
         video.loop = true;
         video.play();
         video.addEventListener('timeupdate', updateProg);
         video.addEventListener('loadedmetadata', updateScreenTransform);
 
-        // Scene / camera / renderer
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -741,13 +554,11 @@
         renderer.xr.setReferenceSpaceType('local');
         document.body.appendChild(renderer.domElement);
 
-        // Hidden WebXR button; triggered via overlay / HUD
         vrBtn = VRButton.createButton(renderer);
-        vrBtn.id = "VRButton";
+        vrBtn.id = 'VRButton';
         vrBtn.style.display = 'none';
         document.body.appendChild(vrBtn);
 
-        // Orbit controls for non-XR
         controls = new OrbitControls(camera, renderer.domElement);
         controls.target.set(0, 0, -currentDistance);
         controls.enableZoom = false;
@@ -756,23 +567,19 @@
         controls.update();
 
         createCinemaScreen();
-        createReticle();
-        setupXRSessionHooks();
 
-        renderer.setAnimationLoop(() => {
+        renderer.setAnimationLoop(function() {
             controls.update();
             renderer.render(scene, camera);
         });
 
-        window.addEventListener('resize', () => {
+        window.addEventListener('resize', function() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // DOM overlay toggle (non-VR only)
-        document.addEventListener('click', (e) => {
-            if (inXR) return; // when in XR, use HUD instead
+        document.addEventListener('click', function(e) {
             if (e.target.closest('#overlay')) {
                 resetTimer();
                 return;
@@ -783,27 +590,11 @@
 
         els.overlay.addEventListener('click', handleInput);
 
-        // Reticle selection tap for XR
-        renderer.domElement.addEventListener('click', (e) => {
-            if (!inXR) return;
-            e.stopPropagation();
-            showHud();
-            handleHudSelect();
-        });
-
         updateOverlay();
         showOverlay();
-
-        // Push "player" state so phone back key pops to menu
-        try {
-            if (!history.state || history.state.screen !== 'player') {
-                history.pushState({ screen: 'player' }, '');
-            }
-        } catch (e) {}
     }
 
     function createCinemaScreen() {
-        // THREE.VideoTexture handles frame updates internally
         videoTexture = new THREE.VideoTexture(video);
         videoTexture.minFilter = THREE.LinearFilter;
         videoTexture.magFilter = THREE.LinearFilter;
@@ -815,7 +606,6 @@
 
         const geo = new THREE.PlaneGeometry(1, 1);
 
-        // 2D mesh
         mesh2D = new THREE.Mesh(
             geo,
             new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide })
@@ -824,7 +614,6 @@
         mesh2D.layers.enable(2);
         screenGroup.add(mesh2D);
 
-        // Left-eye SBS mesh
         const geoL = geo.clone();
         const uvL = geoL.attributes.uv;
         for (let i = 0; i < uvL.count; i++) {
@@ -838,11 +627,10 @@
         meshLeft.visible = false;
         screenGroup.add(meshLeft);
 
-        // Right-eye SBS mesh
         const geoR = geo.clone();
         const uvR = geoR.attributes.uv;
-        for (let i = 0; i < uvR.count; i++) {
-            uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
+        for (let j = 0; j < uvR.count; j++) {
+            uvR.setX(j, (uvR.getX(j) * 0.5) + 0.5);
         }
         meshRight = new THREE.Mesh(
             geoR,
@@ -853,59 +641,54 @@
         screenGroup.add(meshRight);
     }
 
-    // ==== DOM overlay (non-VR HUD) ====
+    function buildOverlayHTML() {
+        const is3D = (viewMode === 'vr-3d');
+        let html = '';
+        html += '<div class="ctrl-panel">';
+        html += '<div class="row"><div class="prog-track"><div class="prog-fill"></div></div></div>';
+        html += '<div class="row">';
+        html += '<button class="btn-icon rw">&laquo;</button>';
+        html += '<button class="btn-icon pp">▶</button>';
+        html += '<button class="btn-icon fw">&raquo;</button>';
+        html += '</div>';
+        html += '<div class="lbl">View Mode</div>';
+        html += '<div class="row">';
+        html += '<button class="btn-pill m-2d' + (is3D ? '' : ' active') + '">2D</button>';
+        html += '<button class="btn-pill m-3d' + (is3D ? ' active' : '') + '">3D</button>';
+        html += '</div>';
+        html += '<div class="lbl">Zoom</div>';
+        html += '<div class="row">';
+        html += '<button class="btn-icon zout">-</button>';
+        html += '<button class="btn-pill zrst">RESET</button>';
+        html += '<button class="btn-icon zin">+</button>';
+        html += '</div>';
+        html += '<div class="lbl">Distance</div>';
+        html += '<div class="row">';
+        html += '<button class="btn-icon ddec">-</button>';
+        html += '<button class="btn-pill drst">RESET</button>';
+        html += '<button class="btn-icon dinc">+</button>';
+        html += '</div>';
+        html += '<div class="lbl">VR Session</div>';
+        html += '<div class="row"><button class="btn-wide enter-vr">ENTER VR</button></div>';
+        html += '</div>';
+        return html;
+    }
 
     function updateOverlay() {
         resetTimer();
-        const is3D = (viewMode === 'vr-3d');
-
-        const controlsHTML = `
-            <div class="row">
-                <div class="prog-track"><div class="prog-fill"></div></div>
-            </div>
-
-            <div class="row">
-                <button class="btn-icon rw">&laquo;</button>
-                <button class="btn-icon pp">${video && !video.paused ? '||' : '▶'}</button>
-                <button class="btn-icon fw">&raquo;</button>
-            </div>
-
-            <div class="lbl">View Mode</div>
-            <div class="row">
-                <button class="btn-pill m-2d ${!is3D ? 'active' : ''}">2D</button>
-                <button class="btn-pill m-3d ${is3D ? 'active' : ''}">3D</button>
-            </div>
-
-            <div class="lbl">Zoom</div>
-            <div class="row">
-                <button class="btn-icon zout">-</button>
-                <button class="btn-pill zrst">RESET</button>
-                <button class="btn-icon zin">+</button>
-            </div>
-
-            <div class="lbl">Distance</div>
-            <div class="row">
-                <button class="btn-icon ddec">-</button>
-                <button class="btn-pill drst">RESET</button>
-                <button class="btn-icon dinc">+</button>
-            </div>
-
-            <div class="lbl">VR Session</div>
-            <div class="row">
-                <button class="btn-wide enter-vr">ENTER VR</button>
-            </div>
-        `;
-
-        els.overlay.innerHTML = `<div class="ctrl-panel">${controlsHTML}</div>`;
+        els.overlay.innerHTML = buildOverlayHTML();
+        updateProg();
     }
 
     function showOverlay() {
         els.overlay.classList.add('visible');
         resetTimer();
     }
+
     function hideOverlay() {
         els.overlay.classList.remove('visible');
     }
+
     function resetTimer() {
         if (hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(hideOverlay, 3000);
@@ -932,7 +715,7 @@
         if (cl.contains('ddec')) performAction('ddec');
         if (cl.contains('drst')) performAction('drst');
 
-        if (cl.contains('enter-vr')) performAction('enter-vr', t);
+        if (cl.contains('enter-vr')) performAction('enter-vr');
 
         if (cl.contains('prog-track')) {
             const r = t.getBoundingClientRect();
@@ -940,10 +723,8 @@
         }
     }
 
-    // Shared action handler (DOM + VR HUD)
-    function performAction(action, targetEl) {
+    function performAction(action) {
         if (!video) return;
-
         switch (action) {
             case 'pp':
                 if (video.paused) video.play();
@@ -997,177 +778,17 @@
                 updateScreenTransform();
                 break;
             case 'enter-vr':
-                // auto "recenter" sizing on entry
-                currentScale = 1.0;
-                currentDistance = 6.0;
-                updateScreenTransform();
                 if (vrBtn) vrBtn.click();
                 break;
         }
     }
 
-    // ===== VR HUD (inside XR) =====
-
-    function setupXRSessionHooks() {
-        const xr = renderer.xr;
-        xr.addEventListener('sessionstart', () => {
-            inXR = true;
-            if (!hudGroup) createHud();
-            positionHud();
-            showHud();
-        });
-        xr.addEventListener('sessionend', () => {
-            inXR = false;
-            hideHud();
-        });
-    }
-
-    function createReticle() {
-        const mat = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.9
-        });
-        const hGeo = new THREE.PlaneGeometry(0.04, 0.008);
-        const vGeo = new THREE.PlaneGeometry(0.008, 0.04);
-        const h = new THREE.Mesh(hGeo, mat);
-        const v = new THREE.Mesh(vGeo, mat);
-        reticle = new THREE.Group();
-        reticle.add(h);
-        reticle.add(v);
-        camera.add(reticle);
-        reticle.position.set(0, 0, -0.8);
-    }
-
-    function createHud() {
-        hudGroup = new THREE.Group();
-
-        // Background panel
-        const panelGeo = new THREE.PlaneGeometry(1.0, 0.6);
-        const panelMat = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            transparent: true,
-            opacity: 0.5
-        });
-        const panel = new THREE.Mesh(panelGeo, panelMat);
-        panel.position.set(0, 0, 0);
-        hudGroup.add(panel);
-
-        // Helper to create a button with label
-        function createHudButton(label, action, x, y) {
-            const width = 0.22;
-            const height = 0.08;
-
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = 'rgba(0,0,0,0.6)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
-
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 48px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(label, canvas.width / 2, canvas.height / 2);
-
-            const tex = new THREE.CanvasTexture(canvas);
-            const mat = new THREE.MeshBasicMaterial({
-                map: tex,
-                transparent: true,
-                opacity: 0.9
-            });
-            const geo = new THREE.PlaneGeometry(width, height);
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x, y, 0.01);
-            mesh.userData.action = action;
-            hudGroup.add(mesh);
-            hudButtons.push(mesh);
-        }
-
-        // Layout rows (same basic controls as DOM, but no scrubbing / enter-vr)
-        // Row 1: RW, PP, FW
-        createHudButton('«10', 'rw', -0.3, 0.16);
-        createHudButton('▶/||', 'pp', 0.0, 0.16);
-        createHudButton('10»', 'fw', 0.3, 0.16);
-
-        // Row 2: 2D / 3D
-        createHudButton('2D', 'm-2d', -0.2, 0.02);
-        createHudButton('3D', 'm-3d', 0.2, 0.02);
-
-        // Row 3: Zoom -, Reset, +
-        createHudButton('Z-', 'zout', -0.3, -0.12);
-        createHudButton('Z0', 'zrst', 0.0, -0.12);
-        createHudButton('Z+', 'zin', 0.3, -0.12);
-
-        // Row 4: Dist -, Reset, +
-        createHudButton('D-', 'ddec', -0.3, -0.26);
-        createHudButton('D0', 'drst', 0.0, -0.26);
-        createHudButton('D+', 'dinc', 0.3, -0.26);
-
-        hudGroup.visible = false;
-        scene.add(hudGroup);
-    }
-
-    function positionHud() {
-        if (!hudGroup) return;
-        // Fixed in world; aligned in front at same depth as screen, slightly down
-        hudGroup.position.set(0, -0.7, -currentDistance);
-        // Keep orientation fixed in world (do not copy camera quaternion)
-    }
-
-    function showHud() {
-        if (!hudGroup) return;
-        hudGroup.visible = true;
-        resetHudTimer();
-    }
-
-    function hideHud() {
-        if (!hudGroup) return;
-        hudGroup.visible = false;
-        if (hudHideTimer) clearTimeout(hudHideTimer);
-    }
-
-    function resetHudTimer() {
-        if (hudHideTimer) clearTimeout(hudHideTimer);
-        hudHideTimer = setTimeout(() => {
-            if (inXR) hideHud();
-        }, 3000);
-    }
-
-    function handleHudSelect() {
-        if (!hudButtons.length) return;
-        const origin = new THREE.Vector3();
-        const dir = new THREE.Vector3();
-        camera.getWorldPosition(origin);
-        camera.getWorldDirection(dir);
-        raycaster.set(origin, dir);
-        const hits = raycaster.intersectObjects(hudButtons, true);
-        if (hits.length > 0) {
-            const obj = hits[0].object;
-            const action = obj.userData.action;
-            if (action) {
-                performAction(action);
-            }
-            resetHudTimer();
-        }
-    }
-
-    // ===== Screen geometry / progress =====
-
     function updateScreenTransform() {
         if (!video) return;
-
-        if (currentDistance < 2.0)  currentDistance = 2.0;
+        if (currentDistance < 2.0) currentDistance = 2.0;
         if (currentDistance > 20.0) currentDistance = 20.0;
-        if (currentScale < 0.2)     currentScale    = 0.2;
-        if (currentScale > 3.0)     currentScale    = 3.0;
+        if (currentScale < 0.2) currentScale = 0.2;
+        if (currentScale > 3.0) currentScale = 3.0;
 
         let vidAspect =
             (video.videoWidth && video.videoHeight)
@@ -1190,18 +811,13 @@
             controls.target.set(0, 0, -currentDistance);
             controls.update();
         }
-
-        // keep HUD at same depth as screen
-        positionHud();
     }
 
-    function updateProg() {
-        if (!video) return;
-        const p = (video.currentTime / video.duration) * 100;
+    function updateProg() { 
+        if(!video) return;
+        const p = (video.currentTime / video.duration) * 100; 
         document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p + '%');
-        document.querySelectorAll('.pp').forEach(b => {
-            b.textContent = video.paused ? '▶' : '||';
-        });
+        document.querySelectorAll('.pp').forEach(b => b.textContent = video.paused ? '▶' : '||');
     }
 <\/script>
 </body>
