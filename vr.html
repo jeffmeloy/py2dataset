@@ -161,11 +161,6 @@
         else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen();
 
         const mode = document.querySelector('input[name="mode"]:checked').value;
-        
-        // Stash WebGL source for potential fallback from WebXR
-        sessionStorage.setItem('_webgl_source', getWebGLSource());
-        sessionStorage.setItem('_video_url', selectedBlobUrl);
-        
         let finalHtml = (mode === 'webgl') ? getWebGLSource() : getWebXRSource();
 
         const injector = `
@@ -189,13 +184,17 @@
     });
 
     function getWebGLBootstrapper() {
+        // Updated to poll for window.initEngine because modules load asynchronously
         return `
-            if(typeof initEngine === 'function') {
-                srcURL = _LAUNCH_URL; 
-                viewMode = 'full';
-                initEngine();
-                updateOverlay();
-            }
+            window.srcURL = _LAUNCH_URL; 
+            const checkInit = setInterval(() => {
+                if(typeof window.initEngine === 'function') {
+                    clearInterval(checkInit);
+                    window.viewMode = 'full';
+                    window.initEngine();
+                    window.updateOverlay();
+                }
+            }, 50);
         `;
     }
 
@@ -246,7 +245,9 @@
         .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
         #webgl-canvas { position: absolute; top: 0; left: 0; }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    <\/script>
 </head>
 <body>
 <div id="setup">
@@ -289,30 +290,39 @@
         else gl_FragColor=textureLanczos(tDiffuse, uv, texSize);
     }
 <\/script>
-<script>
-    let viewMode = 'full', srcURL = null, hideTimer = null;
+<script type="module">
+    import * as THREE from 'three';
+
+    // Global variable binding for Bootstrapper compatibility
+    window.viewMode = 'full';
+    window.srcURL = null; 
+    window.hideTimer = null;
+    
     const defs = { z: 1.0, d: 3.0, i: 0.0 };
     let params = { ...defs };
     let videoAspect = 16/9;
     const els = { setup: document.getElementById('setup'), pVid: document.getElementById('pVideo'), enter: document.getElementById('startBtn'), lbl: document.getElementById('fileLabel'), overlay: document.getElementById('overlay') };
+    
     document.getElementById('fileInput').addEventListener('change', (e) => {
         const f = e.target.files[0]; if(!f) return;
-        srcURL = URL.createObjectURL(f); els.pVid.src = srcURL; els.pVid.style.display = 'block';
+        window.srcURL = URL.createObjectURL(f); els.pVid.src = window.srcURL; els.pVid.style.display = 'block';
         document.getElementById('placeholder').style.display = 'none'; els.lbl.textContent = f.name; els.enter.disabled = false;
     });
+
     els.enter.addEventListener('click', async () => {
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { try { await DeviceOrientationEvent.requestPermission(); } catch (e) {} }
         const de = document.documentElement; if(de.requestFullscreen) de.requestFullscreen();
         if(screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
-        els.setup.style.display = 'none'; viewMode = 'full'; initEngine(); updateOverlay();
+        els.setup.style.display = 'none'; window.viewMode = 'full'; initEngine(); updateOverlay();
     });
+
     function updateOverlay() {
-        const isFull = (viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; resetTimer();
+        const isFull = (window.viewMode === 'full'); els.overlay.className = isFull ? 'visible single' : 'visible split'; resetTimer();
         const controls = \`
             <div class="row"><div class="prog-track"><div class="prog-fill"></div></div></div>
             <div class="row"><button class="btn-icon rw">&laquo;</button><button class="btn-icon pp">▶</button><button class="btn-icon fw">&raquo;</button></div>
             <div class="lbl">View Mode</div>
-            <div class="row"><button class="btn-pill m-full \${viewMode==='full'?'active':''}">FULL</button><button class="btn-pill m-2d \${viewMode==='vr-2d'?'active':''}">2D</button><button class="btn-pill m-3d \${viewMode==='vr-3d'?'active':''}">3D</button></div>
+            <div class="row"><button class="btn-pill m-full \${window.viewMode==='full'?'active':''}">FULL</button><button class="btn-pill m-2d \${window.viewMode==='vr-2d'?'active':''}">2D</button><button class="btn-pill m-3d \${window.viewMode==='vr-3d'?'active':''}">3D</button></div>
             <div class="lbl">Zoom</div>
             <div class="row"><button class="btn-icon zout">-</button><button class="btn-pill zrst">RESET</button><button class="btn-icon zin">+</button></div>
             <div class="lbl">Distance</div>
@@ -323,12 +333,15 @@
         \`;
         els.overlay.innerHTML = isFull ? \`<div class="ctrl-panel">\${controls}</div>\` : \`<div class="ctrl-panel">\${controls}</div><div class="ctrl-panel">\${controls}</div>\`;
     }
+    window.updateOverlay = updateOverlay;
+
     let scene, camera, renderer, effect, videoEl, screenGroup, tracker, videoTexture;
+    
     function initEngine() {
         scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
         screenGroup = new THREE.Group(); scene.add(screenGroup); scene.add(camera);
         tracker = new Tracker(); tracker.connect();
-        videoEl = document.createElement('video'); videoEl.src = srcURL; videoEl.playsInline = true; videoEl.loop = false;
+        videoEl = document.createElement('video'); videoEl.src = window.srcURL; videoEl.playsInline = true; videoEl.loop = false;
         videoEl.addEventListener('loadedmetadata', () => { if(videoEl.videoHeight) videoAspect = videoEl.videoWidth / videoEl.videoHeight; });
         
         videoTexture = new THREE.Texture(videoEl);
@@ -372,24 +385,26 @@
         document.addEventListener('click', (e) => { if(e.target.closest('#overlay')) { resetTimer(); return; } if(els.overlay.classList.contains('visible')) hideOverlay(); else showOverlay(); });
         els.overlay.addEventListener('click', handleInput); animate();
     }
+    window.initEngine = initEngine;
+
     function showOverlay() { els.overlay.classList.add('visible'); resetTimer(); }
     function hideOverlay() { els.overlay.classList.remove('visible'); }
     function resetTimer() { if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideOverlay, 3000); }
     function animate() {
         requestAnimationFrame(animate); tracker.update(); camera.quaternion.copy(tracker.getQ());
-        let z = (viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
-        let s = ((viewMode === 'full') ? 0.6 : 1.0) * params.z;
-        let effectiveAspect = videoAspect; if(viewMode === 'vr-3d') effectiveAspect = videoAspect / 2.0;
+        let z = (window.viewMode === 'full') ? -1.8 * params.d / 3.0 : -params.d;
+        let s = ((window.viewMode === 'full') ? 0.6 : 1.0) * params.z;
+        let effectiveAspect = videoAspect; if(window.viewMode === 'vr-3d') effectiveAspect = videoAspect / 2.0;
         screenGroup.children.forEach(c => { c.position.z = z; c.scale.set(s, s / effectiveAspect, s); });
         const mStd = screenGroup.getObjectByName('screenStandard'); const mSBS = screenGroup.children.filter(c => c.name === 'screenSBS');
-        if(viewMode === 'vr-3d') { if(mStd) mStd.visible = false; mSBS.forEach(m => m.visible = true); } else { if(mStd) mStd.visible = true; mSBS.forEach(m => m.visible = false); }
-        if(viewMode === 'full') { renderer.setScissorTest(false); renderer.setViewport(0, 0, window.innerWidth, window.innerHeight); renderer.render(scene, camera); } else { effect.setUniforms(params.i, params.z); effect.render(scene, camera); }
+        if(window.viewMode === 'vr-3d') { if(mStd) mStd.visible = false; mSBS.forEach(m => m.visible = true); } else { if(mStd) mStd.visible = true; mSBS.forEach(m => m.visible = false); }
+        if(window.viewMode === 'full') { renderer.setScissorTest(false); renderer.setViewport(0, 0, window.innerWidth, window.innerHeight); renderer.render(scene, camera); } else { effect.setUniforms(params.i, params.z); effect.render(scene, camera); }
     }
     function handleInput(e) {
         e.stopPropagation(); const t = e.target.closest('button, .prog-track'); if(!t) return; const cl = t.classList;
-        if(cl.contains('m-full')) { viewMode='full'; params.z=1.0; params.d=3.0; updateOverlay(); }
-        if(cl.contains('m-2d')) { viewMode='vr-2d'; updateOverlay(); }
-        if(cl.contains('m-3d')) { viewMode='vr-3d'; updateOverlay(); }
+        if(cl.contains('m-full')) { window.viewMode='full'; params.z=1.0; params.d=3.0; updateOverlay(); }
+        if(cl.contains('m-2d')) { window.viewMode='vr-2d'; updateOverlay(); }
+        if(cl.contains('m-3d')) { window.viewMode='vr-3d'; updateOverlay(); }
         if(cl.contains('zin')) params.z += 0.1; if(cl.contains('zout')) params.z -= 0.1; if(cl.contains('zrst')) params.z = defs.z;
         if(cl.contains('dinc')) params.d += 0.5; if(cl.contains('ddec')) params.d -= 0.5; if(cl.contains('drst')) params.d = defs.d;
         if(cl.contains('iinc')) params.i += 0.005; if(cl.contains('idec')) params.i -= 0.005; if(cl.contains('irst')) params.i = defs.i;
@@ -406,7 +421,7 @@
         getQ() { return this.q; }
         update() {
             if(!this.e) return; const d = this.e;
-            const a = THREE.Math.degToRad(d.alpha || 0); const b = THREE.Math.degToRad(d.beta || 0); const g = THREE.Math.degToRad(d.gamma || 0);
+            const a = THREE.MathUtils.degToRad(d.alpha || 0); const b = THREE.MathUtils.degToRad(d.beta || 0); const g = THREE.MathUtils.degToRad(d.gamma || 0);
             const o = (screen.orientation ? screen.orientation.angle : window.orientation || 0) * Math.PI / 180;
             const q0 = new THREE.Quaternion(); const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
             this.q.setFromEuler(new THREE.Euler(b, a, -g, 'YXZ')).multiply(q1).multiply(q0.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -o));
@@ -432,9 +447,9 @@
         this.setUniforms = (i, z) => { _m.uniforms.ipd.value = i; _m.uniforms.zoom.value = z; };
         this.render = (s, c) => {
             s.updateMatrixWorld(); _s.update(c);
-            if(viewMode === 'vr-3d') _s.cameraL.layers.set(1); else _s.cameraL.layers.set(0);
+            if(window.viewMode === 'vr-3d') _s.cameraL.layers.set(1); else _s.cameraL.layers.set(0);
             r.setRenderTarget(_tL); r.clear(); r.render(s, _s.cameraL);
-            if(viewMode === 'vr-3d') _s.cameraR.layers.set(2); else _s.cameraR.layers.set(0);
+            if(window.viewMode === 'vr-3d') _s.cameraR.layers.set(2); else _s.cameraR.layers.set(0);
             r.setRenderTarget(_tR); r.clear(); r.render(s, _s.cameraR);
             r.setRenderTarget(null); const sw = window.innerWidth, sh = window.innerHeight; r.setScissorTest(true);
             r.setScissor(0, 0, sw/2, sh); r.setViewport(0, 0, sw/2, sh); _m.uniforms.tDiffuse.value = _tL.texture; _m.uniforms.ipd.value = params.i; r.render(_sc, _c);
@@ -565,8 +580,6 @@
 
         createCinemaScreen();
 
-        renderer.xr.addEventListener('sessionend', fallbackToWebGL);
-
         renderer.setAnimationLoop(() => {
             controls.update();
             renderer.render(scene, camera);
@@ -590,55 +603,9 @@
         showOverlay();
     }
 
-    function fallbackToWebGL() {
-        const webglSource = sessionStorage.getItem('_webgl_source');
-        const videoUrl = sessionStorage.getItem('_video_url');
-        if (!webglSource || !videoUrl) return;
-
-        const state = {
-            currentTime: video.currentTime,
-            paused: video.paused,
-            viewMode: viewMode,
-            scale: currentScale,
-            distance: currentDistance
-        };
-
-        const bootstrapper = \`
-            <script>
-                const _LAUNCH_URL = "\${videoUrl}";
-                const _RESTORE_STATE = \${JSON.stringify(state)};
-                window.addEventListener('DOMContentLoaded', () => {
-                    const style = document.createElement('style');
-                    style.innerHTML = '#setup { display: none !important; }';
-                    document.head.appendChild(style);
-
-                    srcURL = _LAUNCH_URL;
-                    viewMode = _RESTORE_STATE.viewMode;
-                    params.z = _RESTORE_STATE.scale;
-                    params.d = _RESTORE_STATE.distance;
-                    
-                    initEngine();
-                    
-                    const waitForVideo = setInterval(() => {
-                        if(videoEl && videoEl.readyState >= 1) {
-                            clearInterval(waitForVideo);
-                            videoEl.currentTime = _RESTORE_STATE.currentTime;
-                            if(_RESTORE_STATE.paused) videoEl.pause();
-                            updateOverlay();
-                        }
-                    }, 50);
-                });
-            <\\/script>
-        \`;
-
-        const finalHtml = webglSource.replace('</body>', bootstrapper + '</body>');
-
-        document.open();
-        document.write(finalHtml);
-        document.close();
-    }
-
     function createCinemaScreen() {
+        // THREE.VideoTexture (r160) already implements requestVideoFrameCallback
+        // internally with proper readyState fallbacks - no manual setup needed
         videoTexture = new THREE.VideoTexture(video);
         videoTexture.minFilter = THREE.LinearFilter;
         videoTexture.magFilter = THREE.LinearFilter;
