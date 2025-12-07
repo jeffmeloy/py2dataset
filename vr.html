@@ -530,6 +530,10 @@
     window.initVR = function() { init(); };
 
     function init() {
+        if (video && !video.paused) {
+            // already running
+        }
+
         video = document.createElement('video');
         video.src = window.videoSrc;
         video.crossOrigin = "anonymous";
@@ -624,40 +628,50 @@
 
     function updateOverlay() {
         resetTimer();
-        const is2D = (viewMode === 'vr-2d' || viewMode === 'full');
-        
+        const is3D = (viewMode === 'vr-3d');
+
         const controls = \`
             <div class="row">
                 <div class="prog-track"><div class="prog-fill"></div></div>
             </div>
+
             <div class="row">
                 <button class="btn-icon rw">&laquo;</button>
-                <button class="btn-icon pp">▶</button>
+                <button class="btn-icon pp">\${video && !video.paused ? '||' : '▶'}</button>
                 <button class="btn-icon fw">&raquo;</button>
             </div>
+
             <div class="lbl">View Mode</div>
             <div class="row">
-                <button class="btn-pill m-2d \${is2D ? 'active' : ''}">2D</button>
-                <button class="btn-pill m-3d \${!is2D ? 'active' : ''}">3D</button>
+                <button class="btn-pill m-2d \${!is3D ? 'active' : ''}">2D</button>
+                <button class="btn-pill m-3d \${is3D ? 'active' : ''}">3D</button>
             </div>
+
             <div class="lbl">Zoom</div>
             <div class="row">
                 <button class="btn-icon zout">-</button>
                 <button class="btn-pill zrst">RESET</button>
                 <button class="btn-icon zin">+</button>
             </div>
+
             <div class="lbl">Distance</div>
             <div class="row">
                 <button class="btn-icon ddec">-</button>
                 <button class="btn-pill drst">RESET</button>
                 <button class="btn-icon dinc">+</button>
             </div>
-            
-            <div style="height: 25px;"></div>
-            
-            <button class="btn-wide enter-vr">ENTER VR</button>
+
+            <div class="lbl">Screen</div>
+            <div class="row">
+                <button class="btn-wide rec">RE-CENTER</button>
+            </div>
+
+            <div class="lbl">VR Session</div>
+            <div class="row">
+                <button class="btn-wide enter-vr">ENTER VR</button>
+            </div>
         \`;
-        
+
         els.overlay.innerHTML = \`<div class="ctrl-panel">\${controls}</div>\`;
     }
 
@@ -671,42 +685,66 @@
         if(!t) return;
         const cl = t.classList;
 
-        if(cl.contains('pp')) { video.paused ? video.play() : video.pause(); }
+        // Playback
+        if(cl.contains('pp')) { 
+            video.paused ? video.play() : video.pause(); 
+            updateOverlay(); // keep the icon in sync
+        }
         if(cl.contains('rw')) { video.currentTime -= 10; }
         if(cl.contains('fw')) { video.currentTime += 10; }
         
+        // View mode
         if(cl.contains('m-2d')) { 
             viewMode = 'vr-2d';
-            mesh2D.visible = true; meshLeft.visible = false; meshRight.visible = false;
+            mesh2D.visible = true; 
+            meshLeft.visible = false; 
+            meshRight.visible = false;
             updateOverlay();
             updateScreenTransform();
         }
         if(cl.contains('m-3d')) { 
             viewMode = 'vr-3d';
-            mesh2D.visible = false; meshLeft.visible = true; meshRight.visible = true; 
-            meshLeft.layers.enable(0);
+            mesh2D.visible = false; 
+            meshLeft.visible = true; 
+            meshRight.visible = true; 
             updateOverlay();
             updateScreenTransform();
         }
 
+        // Zoom
         if(cl.contains('zin')) { currentScale += 0.1; }
         if(cl.contains('zout')) { currentScale -= 0.1; }
         if(cl.contains('zrst')) { currentScale = 1.0; }
 
+        // Distance
         if(cl.contains('dinc')) { currentDistance += 0.5; }
         if(cl.contains('ddec')) { currentDistance -= 0.5; }
         if(cl.contains('drst')) { currentDistance = 6.0; }
 
-        if(cl.contains('zin') || cl.contains('zout') || cl.contains('zrst') || 
-           cl.contains('dinc') || cl.contains('ddec') || cl.contains('drst')) {
+        // Re-center screen (reset size + distance, re-point controls)
+        if(cl.contains('rec')) {
+            currentScale = 1.0;
+            currentDistance = 6.0;
+            updateScreenTransform();
+            updateOverlay();
+            return;
+        }
+
+        // Apply zoom/distance changes
+        if(
+            cl.contains('zin') || cl.contains('zout') || cl.contains('zrst') ||
+            cl.contains('dinc') || cl.contains('ddec') || cl.contains('drst')
+        ) {
             updateScreenTransform();
         }
 
+        // Seek
         if(cl.contains('prog-track')) {
             const r = t.getBoundingClientRect();
             video.currentTime = ((e.clientX - r.left)/r.width) * video.duration;
         }
 
+        // Enter VR
         if(cl.contains('enter-vr')) {
             if(vrBtn) vrBtn.click();
             t.textContent = "CHECK HEADSET";
@@ -719,7 +757,7 @@
         if(currentScale < 0.2) currentScale = 0.2;
         if(currentScale > 3.0) currentScale = 3.0;
 
-        let vidAspect = (video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.777;
+        let vidAspect = (video && video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.777;
 
         if (viewMode === 'vr-3d') {
             vidAspect = vidAspect / 2.0;
