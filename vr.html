@@ -161,6 +161,11 @@
         else if (de.webkitRequestFullscreen) de.webkitRequestFullscreen();
 
         const mode = document.querySelector('input[name="mode"]:checked').value;
+        
+        // Stash WebGL source for potential fallback from WebXR
+        sessionStorage.setItem('_webgl_source', getWebGLSource());
+        sessionStorage.setItem('_video_url', selectedBlobUrl);
+        
         let finalHtml = (mode === 'webgl') ? getWebGLSource() : getWebXRSource();
 
         const injector = `
@@ -331,19 +336,15 @@
         videoTexture.magFilter = THREE.LinearFilter;
         videoTexture.generateMipmaps = false;
         
-        // r128 VideoTexture lacks requestVideoFrameCallback - manual implementation
         if ('requestVideoFrameCallback' in videoEl) {
             const updateFrame = () => {
                 videoTexture.needsUpdate = true;
                 videoEl.requestVideoFrameCallback(updateFrame);
             };
-            // Register callback only when video is ready to present frames
             const startFrameSync = () => videoEl.requestVideoFrameCallback(updateFrame);
             videoEl.addEventListener('playing', startFrameSync, { once: true });
-            // Handle already-playing case (e.g., autoplay succeeded)
             if (!videoEl.paused && videoEl.readyState >= 2) startFrameSync();
         } else {
-            // Fallback: update every render frame
             const fallbackUpdate = () => {
                 if (videoEl.readyState >= videoEl.HAVE_CURRENT_FRAME) {
                     videoTexture.needsUpdate = true;
@@ -564,6 +565,8 @@
 
         createCinemaScreen();
 
+        renderer.xr.addEventListener('sessionend', fallbackToWebGL);
+
         renderer.setAnimationLoop(() => {
             controls.update();
             renderer.render(scene, camera);
@@ -587,9 +590,55 @@
         showOverlay();
     }
 
+    function fallbackToWebGL() {
+        const webglSource = sessionStorage.getItem('_webgl_source');
+        const videoUrl = sessionStorage.getItem('_video_url');
+        if (!webglSource || !videoUrl) return;
+
+        const state = {
+            currentTime: video.currentTime,
+            paused: video.paused,
+            viewMode: viewMode,
+            scale: currentScale,
+            distance: currentDistance
+        };
+
+        const bootstrapper = \`
+            <script>
+                const _LAUNCH_URL = "\${videoUrl}";
+                const _RESTORE_STATE = \${JSON.stringify(state)};
+                window.addEventListener('DOMContentLoaded', () => {
+                    const style = document.createElement('style');
+                    style.innerHTML = '#setup { display: none !important; }';
+                    document.head.appendChild(style);
+
+                    srcURL = _LAUNCH_URL;
+                    viewMode = _RESTORE_STATE.viewMode;
+                    params.z = _RESTORE_STATE.scale;
+                    params.d = _RESTORE_STATE.distance;
+                    
+                    initEngine();
+                    
+                    const waitForVideo = setInterval(() => {
+                        if(videoEl && videoEl.readyState >= 1) {
+                            clearInterval(waitForVideo);
+                            videoEl.currentTime = _RESTORE_STATE.currentTime;
+                            if(_RESTORE_STATE.paused) videoEl.pause();
+                            updateOverlay();
+                        }
+                    }, 50);
+                });
+            <\\/script>
+        \`;
+
+        const finalHtml = webglSource.replace('</body>', bootstrapper + '</body>');
+
+        document.open();
+        document.write(finalHtml);
+        document.close();
+    }
+
     function createCinemaScreen() {
-        // THREE.VideoTexture (r160) already implements requestVideoFrameCallback
-        // internally with proper readyState fallbacks - no manual setup needed
         videoTexture = new THREE.VideoTexture(video);
         videoTexture.minFilter = THREE.LinearFilter;
         videoTexture.magFilter = THREE.LinearFilter;
