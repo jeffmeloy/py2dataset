@@ -337,13 +337,10 @@
                 videoTexture.needsUpdate = true;
                 videoEl.requestVideoFrameCallback(updateFrame);
             };
-            // Register callback only when video is ready to present frames
             const startFrameSync = () => videoEl.requestVideoFrameCallback(updateFrame);
             videoEl.addEventListener('playing', startFrameSync, { once: true });
-            // Handle already-playing case (e.g., autoplay succeeded)
             if (!videoEl.paused && videoEl.readyState >= 2) startFrameSync();
         } else {
-            // Fallback: update every render frame
             const fallbackUpdate = () => {
                 if (videoEl.readyState >= videoEl.HAVE_CURRENT_FRAME) {
                     videoTexture.needsUpdate = true;
@@ -832,11 +829,6 @@
                 <button class="btn-icon dinc">+</button>
             </div>
 
-            <div class="lbl">Screen</div>
-            <div class="row">
-                <button class="btn-wide rec">RE-CENTER</button>
-            </div>
-
             <div class="lbl">VR Session</div>
             <div class="row">
                 <button class="btn-wide enter-vr">ENTER VR</button>
@@ -901,15 +893,6 @@
         if (cl.contains('ddec')) currentDistance -= 0.5;
         if (cl.contains('drst')) currentDistance  = 6.0;
 
-        // Re-center screen: reset size + distance
-        if (cl.contains('rec')) {
-            currentScale    = 1.0;
-            currentDistance = 6.0;
-            updateScreenTransform();
-            updateOverlay();
-            return;
-        }
-
         // Apply zoom/distance if they changed
         if (
             cl.contains('zin') || cl.contains('zout') || cl.contains('zrst') ||
@@ -924,10 +907,12 @@
             video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
         }
 
-        // Enter VR
+        // Enter VR – auto "recenter" by resetting scale & distance
         if (cl.contains('enter-vr')) {
+            currentScale    = 1.0;
+            currentDistance = 6.0;
+            updateScreenTransform();
             if (vrBtn) vrBtn.click();
-            t.textContent = "CHECK HEADSET";
         }
     }
 
