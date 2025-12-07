@@ -456,27 +456,171 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: white; }
         canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
-        #setup { position: fixed; inset: 0; background: #121212; z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-        .setup-box { width: 100%; max-width: 400px; background: #1e1e1e; padding: 25px; border-radius: 16px; border: 1px solid #333; text-align: center; }
-        .file-btn { display: block; background: #252525; padding: 20px; text-align: center; border-radius: 12px; cursor: pointer; border: 2px dashed #444; transition: 0.2s; }
+
+        #setup {
+            position: fixed;
+            inset: 0;
+            background: #121212;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .setup-box {
+            width: 100%;
+            max-width: 400px;
+            background: #1e1e1e;
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid #333;
+            text-align: center;
+        }
+
+        .file-btn {
+            display: block;
+            background: #252525;
+            padding: 20px;
+            text-align: center;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 2px dashed #444;
+            transition: 0.2s;
+        }
+
         #fileInput { display: none; }
-        #startBtn { width: 100%; padding: 16px; margin-top: 20px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; opacity: 0.5; pointer-events: none; }
-        #startBtn.ready { opacity: 1; pointer-events: auto; }
-        #overlay { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; justify-content: center; padding: 10px 0; transition: opacity 0.3s; }
-        #overlay.visible { display: flex; opacity: 1; }
-        .ctrl-panel { width: 320px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 5px; }
-        .row { display: flex; gap: 6px; justify-content: center; width: 100%; align-items: center; }
+
+        #startBtn {
+            width: 100%;
+            padding: 16px;
+            margin-top: 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        #startBtn.ready {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #overlay {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            display: none;
+            justify-content: center;
+            padding: 10px 0;
+            transition: opacity 0.3s;
+        }
+        #overlay.visible {
+            display: flex;
+            opacity: 1;
+        }
+
+        .ctrl-panel {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 0 5px;
+        }
+
+        .row {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            width: 100%;
+            align-items: center;
+        }
+
         button { cursor: pointer; }
-        .btn-icon { width: 32px; height: 32px; border-radius: 50%; background: #333; color: white; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
-        .btn-pill { padding: 6px 12px; border-radius: 15px; background: #333; color: white; border: none; font-size: 11px; font-weight: bold; min-width: 50px; }
-        .btn-pill.active { background: #007bff; color: white; }
-        .btn-wide { width: 90%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: bold; margin-top: 4px; }
-        .lbl { font-size: 10px; color: #ddd; text-transform: uppercase; margin-top: 5px; font-weight: bold; text-shadow: 0 1px 2px black; }
-        .prog-track { width: 100%; height: 10px; background: rgba(255,255,255,0.2); border-radius: 5px; position: relative; margin-bottom: 5px; cursor: pointer; }
-        .prog-fill { height: 100%; background: #007bff; width: 0%; border-radius: 5px; pointer-events: none; }
+
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #333;
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .btn-pill {
+            padding: 6px 12px;
+            border-radius: 15px;
+            background: #333;
+            color: white;
+            border: none;
+            font-size: 11px;
+            font-weight: bold;
+            min-width: 50px;
+        }
+        .btn-pill.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-wide {
+            width: 90%;
+            padding: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        .lbl {
+            font-size: 10px;
+            color: #ddd;
+            text-transform: uppercase;
+            margin-top: 5px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px black;
+        }
+
+        .prog-track {
+            width: 100%;
+            height: 10px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            position: relative;
+            margin-bottom: 5px;
+            cursor: pointer;
+        }
+
+        .prog-fill {
+            height: 100%;
+            background: #007bff;
+            width: 0%;
+            border-radius: 5px;
+            pointer-events: none;
+        }
     </style>
     <script type="importmap">
-        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
     <\/script>
 </head>
 <body>
@@ -513,6 +657,7 @@
         overlay: document.getElementById('overlay')
     };
 
+    // Local file loader (standalone mode)
     els.fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -527,13 +672,14 @@
         init();
     });
 
-    window.initVR = function() { init(); };
+    // Called by outer launcher
+    window.initVR = function() {
+        els.setup.style.display = 'none';
+        init();
+    };
 
     function init() {
-        if (video && !video.paused) {
-            // already running
-        }
-
+        // Create video element
         video = document.createElement('video');
         video.src = window.videoSrc;
         video.crossOrigin = "anonymous";
@@ -543,6 +689,7 @@
         video.addEventListener('timeupdate', updateProg);
         video.addEventListener('loadedmetadata', updateScreenTransform);
 
+        // Scene / camera / renderer
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -554,11 +701,13 @@
         renderer.xr.setReferenceSpaceType('local');
         document.body.appendChild(renderer.domElement);
 
+        // Hidden WebXR button; triggered via overlay
         vrBtn = VRButton.createButton(renderer);
         vrBtn.id = "VRButton";
         vrBtn.style.display = 'none';
         document.body.appendChild(vrBtn);
 
+        // Orbit controls for non-XR
         controls = new OrbitControls(camera, renderer.domElement);
         controls.target.set(0, 0, -currentDistance);
         controls.enableZoom = false;
@@ -579,21 +728,24 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        document.addEventListener('click', (e) => { 
-            if(e.target.closest('#overlay')) { resetTimer(); return; } 
-            if(els.overlay.classList.contains('visible')) hideOverlay(); 
-            else showOverlay(); 
+        // Toggle overlay on click
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('#overlay')) {
+                resetTimer();
+                return;
+            }
+            if (els.overlay.classList.contains('visible')) hideOverlay();
+            else showOverlay();
         });
-        
+
         els.overlay.addEventListener('click', handleInput);
-        
+
         updateOverlay();
         showOverlay();
     }
 
     function createCinemaScreen() {
-        // THREE.VideoTexture (r160) already implements requestVideoFrameCallback
-        // internally with proper readyState fallbacks - no manual setup needed
+        // THREE.VideoTexture handles frame updates internally
         videoTexture = new THREE.VideoTexture(video);
         videoTexture.minFilter = THREE.LinearFilter;
         videoTexture.magFilter = THREE.LinearFilter;
@@ -605,26 +757,45 @@
 
         const geo = new THREE.PlaneGeometry(1, 1);
 
-        mesh2D = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide }));
-        mesh2D.layers.enable(1); mesh2D.layers.enable(2);
+        // 2D mesh
+        mesh2D = new THREE.Mesh(
+            geo,
+            new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide })
+        );
+        mesh2D.layers.enable(1);
+        mesh2D.layers.enable(2);
         screenGroup.add(mesh2D);
 
+        // Left-eye SBS mesh
         const geoL = geo.clone();
         const uvL = geoL.attributes.uv;
-        for(let i=0; i<uvL.count; i++) uvL.setX(i, uvL.getX(i) * 0.5);
-        meshLeft = new THREE.Mesh(geoL, new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide }));
-        meshLeft.layers.set(1); 
+        for (let i = 0; i < uvL.count; i++) {
+            uvL.setX(i, uvL.getX(i) * 0.5);
+        }
+        meshLeft = new THREE.Mesh(
+            geoL,
+            new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide })
+        );
+        meshLeft.layers.set(1);
         meshLeft.visible = false;
         screenGroup.add(meshLeft);
 
+        // Right-eye SBS mesh
         const geoR = geo.clone();
         const uvR = geoR.attributes.uv;
-        for(let i=0; i<uvR.count; i++) uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
-        meshRight = new THREE.Mesh(geoR, new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide }));
+        for (let i = 0; i < uvR.count; i++) {
+            uvR.setX(i, (uvR.getX(i) * 0.5) + 0.5);
+        }
+        meshRight = new THREE.Mesh(
+            geoR,
+            new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide })
+        );
         meshRight.layers.set(2);
         meshRight.visible = false;
         screenGroup.add(meshRight);
     }
+
+    // ===== Overlay / GUI =====
 
     function updateOverlay() {
         resetTimer();
@@ -675,63 +846,72 @@
         els.overlay.innerHTML = \`<div class="ctrl-panel">\${controls}</div>\`;
     }
 
-    function showOverlay() { els.overlay.classList.add('visible'); resetTimer(); }
-    function hideOverlay() { els.overlay.classList.remove('visible'); }
-    function resetTimer() { if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideOverlay, 4000); }
+    function showOverlay() {
+        els.overlay.classList.add('visible');
+        resetTimer();
+    }
+    function hideOverlay() {
+        els.overlay.classList.remove('visible');
+    }
+    function resetTimer() {
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(hideOverlay, 4000);
+    }
 
     function handleInput(e) {
         e.stopPropagation();
         const t = e.target.closest('button, .prog-track');
-        if(!t) return;
+        if (!t) return;
         const cl = t.classList;
 
         // Playback
-        if(cl.contains('pp')) { 
-            video.paused ? video.play() : video.pause(); 
-            updateOverlay(); // keep the icon in sync
+        if (cl.contains('pp')) {
+            if (video.paused) video.play();
+            else video.pause();
+            updateOverlay();
         }
-        if(cl.contains('rw')) { video.currentTime -= 10; }
-        if(cl.contains('fw')) { video.currentTime += 10; }
-        
+        if (cl.contains('rw')) { video.currentTime -= 10; }
+        if (cl.contains('fw')) { video.currentTime += 10; }
+
         // View mode
-        if(cl.contains('m-2d')) { 
+        if (cl.contains('m-2d')) {
             viewMode = 'vr-2d';
-            mesh2D.visible = true; 
-            meshLeft.visible = false; 
-            meshRight.visible = false;
-            updateOverlay();
+            mesh2D.visible   = true;
+            meshLeft.visible = false;
+            meshRight.visible= false;
             updateScreenTransform();
+            updateOverlay();
         }
-        if(cl.contains('m-3d')) { 
+        if (cl.contains('m-3d')) {
             viewMode = 'vr-3d';
-            mesh2D.visible = false; 
-            meshLeft.visible = true; 
-            meshRight.visible = true; 
-            updateOverlay();
+            mesh2D.visible   = false;
+            meshLeft.visible = true;
+            meshRight.visible= true;
             updateScreenTransform();
+            updateOverlay();
         }
 
         // Zoom
-        if(cl.contains('zin')) { currentScale += 0.1; }
-        if(cl.contains('zout')) { currentScale -= 0.1; }
-        if(cl.contains('zrst')) { currentScale = 1.0; }
+        if (cl.contains('zin'))  currentScale += 0.1;
+        if (cl.contains('zout')) currentScale -= 0.1;
+        if (cl.contains('zrst')) currentScale  = 1.0;
 
         // Distance
-        if(cl.contains('dinc')) { currentDistance += 0.5; }
-        if(cl.contains('ddec')) { currentDistance -= 0.5; }
-        if(cl.contains('drst')) { currentDistance = 6.0; }
+        if (cl.contains('dinc')) currentDistance += 0.5;
+        if (cl.contains('ddec')) currentDistance -= 0.5;
+        if (cl.contains('drst')) currentDistance  = 6.0;
 
-        // Re-center screen (reset size + distance, re-point controls)
-        if(cl.contains('rec')) {
-            currentScale = 1.0;
+        // Re-center screen: reset size + distance
+        if (cl.contains('rec')) {
+            currentScale    = 1.0;
             currentDistance = 6.0;
             updateScreenTransform();
             updateOverlay();
             return;
         }
 
-        // Apply zoom/distance changes
-        if(
+        // Apply zoom/distance if they changed
+        if (
             cl.contains('zin') || cl.contains('zout') || cl.contains('zrst') ||
             cl.contains('dinc') || cl.contains('ddec') || cl.contains('drst')
         ) {
@@ -739,49 +919,58 @@
         }
 
         // Seek
-        if(cl.contains('prog-track')) {
+        if (cl.contains('prog-track')) {
             const r = t.getBoundingClientRect();
-            video.currentTime = ((e.clientX - r.left)/r.width) * video.duration;
+            video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
         }
 
         // Enter VR
-        if(cl.contains('enter-vr')) {
-            if(vrBtn) vrBtn.click();
+        if (cl.contains('enter-vr')) {
+            if (vrBtn) vrBtn.click();
             t.textContent = "CHECK HEADSET";
         }
     }
 
-    function updateScreenTransform() {
-        if(currentDistance < 2.0) currentDistance = 2.0;
-        if(currentDistance > 20.0) currentDistance = 20.0;
-        if(currentScale < 0.2) currentScale = 0.2;
-        if(currentScale > 3.0) currentScale = 3.0;
+    // ===== Screen geometry =====
 
-        let vidAspect = (video && video.videoWidth && video.videoHeight) ? video.videoWidth / video.videoHeight : 1.777;
+    function updateScreenTransform() {
+        if (!video) return;
+
+        if (currentDistance < 2.0)  currentDistance = 2.0;
+        if (currentDistance > 20.0) currentDistance = 20.0;
+        if (currentScale < 0.2)     currentScale    = 0.2;
+        if (currentScale > 3.0)     currentScale    = 3.0;
+
+        let vidAspect =
+            (video.videoWidth && video.videoHeight)
+                ? video.videoWidth / video.videoHeight
+                : 1.777;
 
         if (viewMode === 'vr-3d') {
             vidAspect = vidAspect / 2.0;
         }
 
-        const baseWidth = 8 * currentScale;
+        const baseWidth  = 8 * currentScale;
         const baseHeight = baseWidth / vidAspect;
 
-        if(screenGroup) {
+        if (screenGroup) {
             screenGroup.position.set(0, 0, -currentDistance);
             screenGroup.scale.set(baseWidth, baseHeight, 1);
         }
 
-        if(controls) {
+        if (controls) {
             controls.target.set(0, 0, -currentDistance);
             controls.update();
         }
     }
 
-    function updateProg() { 
-        if(!video) return;
-        const p = (video.currentTime / video.duration) * 100; 
+    function updateProg() {
+        if (!video) return;
+        const p = (video.currentTime / video.duration) * 100;
         document.querySelectorAll('.prog-fill').forEach(f => f.style.width = p + '%');
-        document.querySelectorAll('.pp').forEach(b => b.textContent = video.paused ? '▶' : '||');
+        document.querySelectorAll('.pp').forEach(b => {
+            b.textContent = video.paused ? '▶' : '||';
+        });
     }
 <\/script>
 </body>
