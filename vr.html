@@ -331,7 +331,6 @@
         videoTexture.magFilter = THREE.LinearFilter;
         videoTexture.generateMipmaps = false;
         
-        // r128 VideoTexture lacks requestVideoFrameCallback - manual implementation
         if ('requestVideoFrameCallback' in videoEl) {
             const updateFrame = () => {
                 videoTexture.needsUpdate = true;
@@ -508,6 +507,7 @@
             pointer-events: auto;
         }
 
+        /* DOM overlay for non-VR view */
         #overlay {
             position: fixed;
             bottom: 0;
@@ -643,8 +643,17 @@
     let currentDistance = 6.0;
     let currentScale = 1.0;
     let viewMode = 'vr-2d';
-    let hideTimer = null;
+    let hideTimer = null;   // DOM overlay timer
+    let hudHideTimer = null; // VR HUD timer
+    let inXR = false;
+
     let vrBtn;
+
+    // VR HUD: group + buttons + reticle
+    let hudGroup = null;
+    const hudButtons = [];
+    const raycaster = new THREE.Raycaster();
+    let reticle = null;
 
     const els = {
         setup: document.getElementById('setup'),
@@ -654,7 +663,41 @@
         overlay: document.getElementById('overlay')
     };
 
-    // Local file loader (standalone mode)
+    // History: back button -> return to start menu for this page
+    try {
+        if (!history.state || history.state.screen !== 'menu') {
+            history.replaceState({ screen: 'menu' }, '');
+        }
+        window.addEventListener('popstate', (e) => {
+            if (e.state && e.state.screen === 'menu') {
+                // Exit VR session if active and go back to setup menu
+                if (renderer && renderer.xr && renderer.xr.getSession()) {
+                    renderer.xr.getSession().end();
+                }
+                if (video) {
+                    video.pause();
+                    video.currentTime = 0;
+                }
+                if (hudGroup) {
+                    hudGroup.visible = false;
+                }
+                if (els.overlay) {
+                    els.overlay.classList.remove('visible');
+                }
+                if (els.setup) {
+                    els.setup.style.display = 'flex';
+                    // In case launcher injector hid it with !important
+                    const st = document.createElement('style');
+                    st.innerHTML = '#setup { display:flex !important; }';
+                    document.head.appendChild(st);
+                }
+            }
+        });
+    } catch (e) {
+        // ignore history errors
+    }
+
+    // Local file loader (standalone)
     els.fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -698,7 +741,7 @@
         renderer.xr.setReferenceSpaceType('local');
         document.body.appendChild(renderer.domElement);
 
-        // Hidden WebXR button; triggered via overlay
+        // Hidden WebXR button; triggered via overlay / HUD
         vrBtn = VRButton.createButton(renderer);
         vrBtn.id = "VRButton";
         vrBtn.style.display = 'none';
@@ -713,6 +756,8 @@
         controls.update();
 
         createCinemaScreen();
+        createReticle();
+        setupXRSessionHooks();
 
         renderer.setAnimationLoop(() => {
             controls.update();
@@ -725,8 +770,9 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Toggle overlay on click
+        // DOM overlay toggle (non-VR only)
         document.addEventListener('click', (e) => {
+            if (inXR) return; // when in XR, use HUD instead
             if (e.target.closest('#overlay')) {
                 resetTimer();
                 return;
@@ -737,8 +783,23 @@
 
         els.overlay.addEventListener('click', handleInput);
 
+        // Reticle selection tap for XR
+        renderer.domElement.addEventListener('click', (e) => {
+            if (!inXR) return;
+            e.stopPropagation();
+            showHud();
+            handleHudSelect();
+        });
+
         updateOverlay();
         showOverlay();
+
+        // Push "player" state so phone back key pops to menu
+        try {
+            if (!history.state || history.state.screen !== 'player') {
+                history.pushState({ screen: 'player' }, '');
+            }
+        } catch (e) {}
     }
 
     function createCinemaScreen() {
@@ -792,27 +853,27 @@
         screenGroup.add(meshRight);
     }
 
-    // ===== Overlay / GUI =====
+    // ==== DOM overlay (non-VR HUD) ====
 
     function updateOverlay() {
         resetTimer();
         const is3D = (viewMode === 'vr-3d');
 
-        const controls = \`
+        const controlsHTML = `
             <div class="row">
                 <div class="prog-track"><div class="prog-fill"></div></div>
             </div>
 
             <div class="row">
                 <button class="btn-icon rw">&laquo;</button>
-                <button class="btn-icon pp">\${video && !video.paused ? '||' : '▶'}</button>
+                <button class="btn-icon pp">${video && !video.paused ? '||' : '▶'}</button>
                 <button class="btn-icon fw">&raquo;</button>
             </div>
 
             <div class="lbl">View Mode</div>
             <div class="row">
-                <button class="btn-pill m-2d \${!is3D ? 'active' : ''}">2D</button>
-                <button class="btn-pill m-3d \${is3D ? 'active' : ''}">3D</button>
+                <button class="btn-pill m-2d ${!is3D ? 'active' : ''}">2D</button>
+                <button class="btn-pill m-3d ${is3D ? 'active' : ''}">3D</button>
             </div>
 
             <div class="lbl">Zoom</div>
@@ -833,9 +894,9 @@
             <div class="row">
                 <button class="btn-wide enter-vr">ENTER VR</button>
             </div>
-        \`;
+        `;
 
-        els.overlay.innerHTML = \`<div class="ctrl-panel">\${controls}</div>\`;
+        els.overlay.innerHTML = `<div class="ctrl-panel">${controlsHTML}</div>`;
     }
 
     function showOverlay() {
@@ -847,7 +908,7 @@
     }
     function resetTimer() {
         if (hideTimer) clearTimeout(hideTimer);
-        hideTimer = setTimeout(hideOverlay, 4000);
+        hideTimer = setTimeout(hideOverlay, 3000);
     }
 
     function handleInput(e) {
@@ -856,67 +917,249 @@
         if (!t) return;
         const cl = t.classList;
 
-        // Playback
-        if (cl.contains('pp')) {
-            if (video.paused) video.play();
-            else video.pause();
-            updateOverlay();
-        }
-        if (cl.contains('rw')) { video.currentTime -= 10; }
-        if (cl.contains('fw')) { video.currentTime += 10; }
+        if (cl.contains('pp')) performAction('pp');
+        if (cl.contains('rw')) performAction('rw');
+        if (cl.contains('fw')) performAction('fw');
 
-        // View mode
-        if (cl.contains('m-2d')) {
-            viewMode = 'vr-2d';
-            mesh2D.visible   = true;
-            meshLeft.visible = false;
-            meshRight.visible= false;
-            updateScreenTransform();
-            updateOverlay();
-        }
-        if (cl.contains('m-3d')) {
-            viewMode = 'vr-3d';
-            mesh2D.visible   = false;
-            meshLeft.visible = true;
-            meshRight.visible= true;
-            updateScreenTransform();
-            updateOverlay();
-        }
+        if (cl.contains('m-2d')) performAction('m-2d');
+        if (cl.contains('m-3d')) performAction('m-3d');
 
-        // Zoom
-        if (cl.contains('zin'))  currentScale += 0.1;
-        if (cl.contains('zout')) currentScale -= 0.1;
-        if (cl.contains('zrst')) currentScale  = 1.0;
+        if (cl.contains('zin'))  performAction('zin');
+        if (cl.contains('zout')) performAction('zout');
+        if (cl.contains('zrst')) performAction('zrst');
 
-        // Distance
-        if (cl.contains('dinc')) currentDistance += 0.5;
-        if (cl.contains('ddec')) currentDistance -= 0.5;
-        if (cl.contains('drst')) currentDistance  = 6.0;
+        if (cl.contains('dinc')) performAction('dinc');
+        if (cl.contains('ddec')) performAction('ddec');
+        if (cl.contains('drst')) performAction('drst');
 
-        // Apply zoom/distance if they changed
-        if (
-            cl.contains('zin') || cl.contains('zout') || cl.contains('zrst') ||
-            cl.contains('dinc') || cl.contains('ddec') || cl.contains('drst')
-        ) {
-            updateScreenTransform();
-        }
+        if (cl.contains('enter-vr')) performAction('enter-vr', t);
 
-        // Seek
         if (cl.contains('prog-track')) {
             const r = t.getBoundingClientRect();
             video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
         }
+    }
 
-        // Enter VR – auto "recenter" by resetting scale & distance
-        if (cl.contains('enter-vr')) {
-            currentScale    = 1.0;
-            currentDistance = 6.0;
-            updateScreenTransform();
-            if (vrBtn) vrBtn.click();
+    // Shared action handler (DOM + VR HUD)
+    function performAction(action, targetEl) {
+        if (!video) return;
+
+        switch (action) {
+            case 'pp':
+                if (video.paused) video.play();
+                else video.pause();
+                updateOverlay();
+                break;
+            case 'rw':
+                video.currentTime -= 10;
+                break;
+            case 'fw':
+                video.currentTime += 10;
+                break;
+            case 'm-2d':
+                viewMode = 'vr-2d';
+                mesh2D.visible   = true;
+                meshLeft.visible = false;
+                meshRight.visible= false;
+                updateScreenTransform();
+                updateOverlay();
+                break;
+            case 'm-3d':
+                viewMode = 'vr-3d';
+                mesh2D.visible   = false;
+                meshLeft.visible = true;
+                meshRight.visible= true;
+                updateScreenTransform();
+                updateOverlay();
+                break;
+            case 'zin':
+                currentScale += 0.1;
+                updateScreenTransform();
+                break;
+            case 'zout':
+                currentScale -= 0.1;
+                updateScreenTransform();
+                break;
+            case 'zrst':
+                currentScale = 1.0;
+                updateScreenTransform();
+                break;
+            case 'dinc':
+                currentDistance += 0.5;
+                updateScreenTransform();
+                break;
+            case 'ddec':
+                currentDistance -= 0.5;
+                updateScreenTransform();
+                break;
+            case 'drst':
+                currentDistance = 6.0;
+                updateScreenTransform();
+                break;
+            case 'enter-vr':
+                // auto "recenter" sizing on entry
+                currentScale = 1.0;
+                currentDistance = 6.0;
+                updateScreenTransform();
+                if (vrBtn) vrBtn.click();
+                break;
         }
     }
 
-    // ===== Screen geometry =====
+    // ===== VR HUD (inside XR) =====
+
+    function setupXRSessionHooks() {
+        const xr = renderer.xr;
+        xr.addEventListener('sessionstart', () => {
+            inXR = true;
+            if (!hudGroup) createHud();
+            positionHud();
+            showHud();
+        });
+        xr.addEventListener('sessionend', () => {
+            inXR = false;
+            hideHud();
+        });
+    }
+
+    function createReticle() {
+        const mat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.9
+        });
+        const hGeo = new THREE.PlaneGeometry(0.04, 0.008);
+        const vGeo = new THREE.PlaneGeometry(0.008, 0.04);
+        const h = new THREE.Mesh(hGeo, mat);
+        const v = new THREE.Mesh(vGeo, mat);
+        reticle = new THREE.Group();
+        reticle.add(h);
+        reticle.add(v);
+        camera.add(reticle);
+        reticle.position.set(0, 0, -0.8);
+    }
+
+    function createHud() {
+        hudGroup = new THREE.Group();
+
+        // Background panel
+        const panelGeo = new THREE.PlaneGeometry(1.0, 0.6);
+        const panelMat = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            transparent: true,
+            opacity: 0.5
+        });
+        const panel = new THREE.Mesh(panelGeo, panelMat);
+        panel.position.set(0, 0, 0);
+        hudGroup.add(panel);
+
+        // Helper to create a button with label
+        function createHudButton(label, action, x, y) {
+            const width = 0.22;
+            const height = 0.08;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 48px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, canvas.width / 2, canvas.height / 2);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.MeshBasicMaterial({
+                map: tex,
+                transparent: true,
+                opacity: 0.9
+            });
+            const geo = new THREE.PlaneGeometry(width, height);
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, 0.01);
+            mesh.userData.action = action;
+            hudGroup.add(mesh);
+            hudButtons.push(mesh);
+        }
+
+        // Layout rows (same basic controls as DOM, but no scrubbing / enter-vr)
+        // Row 1: RW, PP, FW
+        createHudButton('«10', 'rw', -0.3, 0.16);
+        createHudButton('▶/||', 'pp', 0.0, 0.16);
+        createHudButton('10»', 'fw', 0.3, 0.16);
+
+        // Row 2: 2D / 3D
+        createHudButton('2D', 'm-2d', -0.2, 0.02);
+        createHudButton('3D', 'm-3d', 0.2, 0.02);
+
+        // Row 3: Zoom -, Reset, +
+        createHudButton('Z-', 'zout', -0.3, -0.12);
+        createHudButton('Z0', 'zrst', 0.0, -0.12);
+        createHudButton('Z+', 'zin', 0.3, -0.12);
+
+        // Row 4: Dist -, Reset, +
+        createHudButton('D-', 'ddec', -0.3, -0.26);
+        createHudButton('D0', 'drst', 0.0, -0.26);
+        createHudButton('D+', 'dinc', 0.3, -0.26);
+
+        hudGroup.visible = false;
+        scene.add(hudGroup);
+    }
+
+    function positionHud() {
+        if (!hudGroup) return;
+        // Fixed in world; aligned in front at same depth as screen, slightly down
+        hudGroup.position.set(0, -0.7, -currentDistance);
+        // Keep orientation fixed in world (do not copy camera quaternion)
+    }
+
+    function showHud() {
+        if (!hudGroup) return;
+        hudGroup.visible = true;
+        resetHudTimer();
+    }
+
+    function hideHud() {
+        if (!hudGroup) return;
+        hudGroup.visible = false;
+        if (hudHideTimer) clearTimeout(hudHideTimer);
+    }
+
+    function resetHudTimer() {
+        if (hudHideTimer) clearTimeout(hudHideTimer);
+        hudHideTimer = setTimeout(() => {
+            if (inXR) hideHud();
+        }, 3000);
+    }
+
+    function handleHudSelect() {
+        if (!hudButtons.length) return;
+        const origin = new THREE.Vector3();
+        const dir = new THREE.Vector3();
+        camera.getWorldPosition(origin);
+        camera.getWorldDirection(dir);
+        raycaster.set(origin, dir);
+        const hits = raycaster.intersectObjects(hudButtons, true);
+        if (hits.length > 0) {
+            const obj = hits[0].object;
+            const action = obj.userData.action;
+            if (action) {
+                performAction(action);
+            }
+            resetHudTimer();
+        }
+    }
+
+    // ===== Screen geometry / progress =====
 
     function updateScreenTransform() {
         if (!video) return;
@@ -947,6 +1190,9 @@
             controls.target.set(0, 0, -currentDistance);
             controls.update();
         }
+
+        // keep HUD at same depth as screen
+        positionHud();
     }
 
     function updateProg() {
